@@ -16,6 +16,8 @@
 #   TIE98=".../STAR WARS Tie Fighter/remastered"
 #   TIE_TEST_TIE95=1            also pass the TIE95 collectors CD folder
 #   TIE_XWA_COCKPITS            XWA FlightModels folder (cockpit OPTs)
+#   TIE_TEST_CONFIG_APPEND      a YAML file appended to the fresh user config.yaml (e.g. an
+#                               input: section with saved controller models)
 #   XWA_HANGAR_PROMPT=0         no VR launch hold before a mission ("wait flying" would
 #                               never finish under TIE_TEST_XR=1); 1 tests the hold
 #
@@ -24,7 +26,7 @@
 # outside, 124 wall timeout).
 set -eu
 if [ $# -lt 3 ]; then
-	sed -n '2,24p' "$0"
+	sed -n '2,26p' "$0"
 	exit 2
 fi
 BUILD=$(cd "$1" && pwd)
@@ -67,6 +69,10 @@ render:
     quality: 0
 EOF
 fi
+if [ -n "${TIE_TEST_CONFIG_APPEND:-}" ]; then
+	mkdir -p "$RUN_HOME/.local/share/TotallyOpen/OpenTIE"
+	cat "$TIE_TEST_CONFIG_APPEND" >> "$RUN_HOME/.local/share/TotallyOpen/OpenTIE/config.yaml"
+fi
 
 export HOME="$RUN_HOME"
 export XDG_DATA_HOME="$RUN_HOME/.local/share"
@@ -92,6 +98,8 @@ fi
 status=0
 cd "$BUILD"
 timeout -s TERM -k 30 "${TIE_TEST_TIMEOUT:-1800}" ${TIE_TEST_WRAPPER:-} ./OpenTIE "$@" > "$OUT/run.log" 2>&1 || status=$?
+# The user config as the run left it (saved controller models, settings).
+cp "$RUN_HOME/.local/share/TotallyOpen/OpenTIE/config.yaml" "$OUT/config.yaml" 2>/dev/null || true
 grep -E '^\[tie-test\]|FATAL|ERROR' "$OUT/run.log" | tail -n "${TIE_TEST_SUMMARY_LINES:-25}" || true
 echo "run.sh: status $status, log $OUT/run.log, $(ls "$OUT" | grep -c '\.png$') PNG(s) in $OUT"
 exit $status

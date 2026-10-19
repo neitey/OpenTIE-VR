@@ -258,6 +258,32 @@ static void TieVrControls_MenuButton(AeronXrButton button, bool flight_scene) {
 
 bool TieVrControls_InFlight(void) { return g_vr.flight; }
 
+/* Every 5 s in VR flight: the stick chain from the XR pad to TIE's joystick
+ * globals (joystickx/y/roll are the last feinput_getrawinput's), so a
+ * headset log shows where steering stops. */
+static void TieVrControls_LogInput(bool flight, bool settings_open, bool host_paused,
+								   const TieSnapshot* snapshot) {
+	static uint64_t next_ms;
+	const uint64_t now = SDL_GetTicks();
+	if (now < next_ms)
+		return;
+	next_ms = now + 5000;
+	TieControllerXrDebug d;
+	TieControllerMapping_XrDebug(&d);
+	const CraftData* craft = pstate.player_craft;
+	Aeron_LogInfo("tie.input",
+				  "VR flight input: pad slot %d%s, xr_flight %d (settings %d, host pause %d, screen %d, "
+				  "game pause %d, launch hold %d), raw LEFTX %d LEFTY %d RIGHTX %d lever %d, models %u "
+				  "owned axes 0x%x xr axes 0x%x, logical %d %d %d, joystickflag %d joystick x %d y %d roll %d, "
+				  "craft heading 0x%04x pitch 0x%04x",
+				  d.slot, d.claimed ? " (configured model)" : "", flight ? 1 : 0, settings_open ? 1 : 0,
+				  host_paused ? 1 : 0, snapshot ? (int)snapshot->flight_screen : -1,
+				  TieFlightPause_IsActive() ? 1 : 0, TieFlightLaunch_HoldActive() ? 1 : 0, d.leftx, d.lefty,
+				  d.rightx, d.lever, (unsigned)d.models, d.owned_axes, d.xr_axes, d.axes[0], d.axes[1],
+				  d.axes[2], joystickflag, joystickx, joysticky, joystickroll,
+				  craft ? craft->orient_heading : 0u, craft ? craft->orient_pitch : 0u);
+}
+
 uint32_t TieVrControls_Frame(bool settings_open, bool host_paused) {
 	uint32_t requests = 0;
 	if (!Aeron_XrIsPresenting()) {
@@ -322,5 +348,7 @@ uint32_t TieVrControls_Frame(bool settings_open, bool host_paused) {
 
 	TieVrControls_SyncThrottleLever(flight);
 	TieVrControls_UpdateHaptics(flight);
+	if (flight_scene)
+		TieVrControls_LogInput(flight, settings_open, host_paused, snapshot);
 	return requests;
 }
