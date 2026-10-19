@@ -1,0 +1,106 @@
+OpenTIE-VR @VERSION@ - TIE Fighter in standalone VR
+======================================================
+
+Play your own copy of Star Wars: TIE Fighter on Meta Quest 3 / 3S, with
+3D cockpits. Pico and Steam Frame are supported but not tested yet.
+
+You need:
+- TIE Fighter Special Edition (Steam or GOG) installed on a Windows PC.
+  OpenTIE-VR uses its 1998 edition and/or its Collector's CD (1995).
+- Optional: X-Wing Alliance (Steam or GOG) on the same PC. OpenTIE-VR then
+  uses its three TIE cockpit models (FlightModels\TIECOCKPIT.OPT,
+  TIEBOMBERCOCKPIT.OPT and COMBATSIMCOCKPIT.OPT) for the 3D cockpits.
+  Without X-Wing Alliance the game still runs, with TIE Fighter's own 2D
+  cockpits.
+No game files are included in this download.
+
+
+Before you start (once)
+-----------------------
+1. Turn on Developer Mode for the headset:
+   Meta Horizon phone app -> Devices -> your headset -> Headset settings ->
+   Developer Mode (needs a free Meta developer account).
+2. Have a USB-C cable that carries data (not a charge-only cable).
+
+
+Install (and update)
+--------------------
+1. Unzip this folder anywhere on the PC.
+2. Connect the headset to the PC with the USB cable.
+3. Double-click OpenTIE-VR-Launcher.exe and follow the steps in the window.
+   It finds TIE Fighter (and X-Wing Alliance, if installed), installs the
+   app on the headset, copies the game files (about 1.1 GB, a few minutes),
+   checks every file arrived and asks whether to bring your PC pilots
+   (*.TFR) along.
+   Put on the headset when it asks you to allow USB debugging (tick
+   "Always allow from this computer").
+4. Put on the headset: Library -> filter "Unknown sources" -> OpenTIE-VR.
+
+After you have allowed USB debugging once, the headset can stay on the desk
+(switched on, cable connected) while the launcher copies: the OpenTIE-VR
+app receives and unpacks the files itself, without starting the game.
+
+On the headset the files go to Android/data/org.opentie.quest/files:
+TIE98 (1998 edition), TIE95 (Collector's CD, including its CD image
+game.fil) and XWA/FlightModels (the three cockpit models).
+
+OpenTIE-VR is a separate app from OpenXWA-VR; both can be installed.
+
+Steam Frame: turn on Developer Mode, start "Lepton Development" from your
+Steam Library and keep it running; the launcher then connects to it over
+the USB cable (or Wi-Fi). OpenTIE-VR appears in the Lepton window's
+Android home screen. Not tested on a Steam Frame yet.
+
+Windows may say "Windows protected your PC": the launcher is not
+code-signed yet. Click "More info", then "Run anyway".
+
+The launcher needs Google's adb tool. If it can't find one (SideQuest and
+Meta Quest Developer Hub bring their own), it offers to download it from
+Google; you accept Google's licence terms yourself.
+
+Updating: download the new release and run its launcher. It updates the
+app and copies only missing or changed files; your pilots and settings
+stay. The launcher also tells you when a new version is out.
+
+If the game was found somewhere unusual: drag the TIE Fighter folder onto
+OpenTIE-VR-Launcher.exe, or paste its path when the launcher asks. On
+Steam that is "STAR WARS Tie Fighter" (with the remastered and
+collectors_cd folders inside).
+
+
+Problems?
+---------
+Run the launcher and choose "Collect logs" at the end (or start it with
+--logs): it copies the game's log files (opentie.log, opentie-prev.log,
+opentie-crash.txt) and its VR settings (opentie-quest.cfg) into a folder
+next to the launcher. Please send those along with your report.
+
+Uninstalling the app (Settings or adb uninstall) also deletes the copied
+game files and your pilots on the headset.
+
+
+Manual install without the launcher
+-----------------------------------
+Files copied with "adb push" belong to the wrong user on Quest, so the game
+cannot read them. Let the app unpack a zip instead:
+  adb install -r OpenTIE-VR-@VERSION@.apk
+  Zip the CONTENTS of the TIE Fighter 1998 edition folder (on Steam:
+  remastered) into tie98.zip (select everything inside the folder -> Send
+  to -> Compressed (zipped) folder), so STRINGS.DAT sits at the top of the
+  zip. Then:
+  adb shell content call --uri content://org.opentie.quest.setup --method mkdirs --arg TIE98
+  adb push tie98.zip /sdcard/Android/obb/org.opentie.quest/openxwa-import.zip
+  adb shell content call --uri content://org.opentie.quest.setup --method unzip --arg TIE98
+The last command prints the number of files unpacked; the app deletes the
+zip afterwards. The same works for the Collector's CD (collectors_cd,
+without its DOSBOX folder) with TIE95 instead of TIE98, and for the three
+cockpit models with XWA/FlightModels.
+
+
+Licence
+-------
+OpenTIE-VR is free software under the GNU GPL version 3 (LICENSE.txt).
+Source: https://github.com/neitey/OpenTIE-VR
+Third-party components and their licences: THIRD-PARTY-NOTICES.txt.
+Star Wars, TIE Fighter and X-Wing Alliance are trademarks of their owners;
+this is an unofficial fan project and contains no game data.

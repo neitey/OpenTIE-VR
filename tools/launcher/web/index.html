@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenTIE-VR Launcher</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23081226'/%3E%3Cpath d='M7 8l18 16M25 8L7 24' stroke='%2338d8ff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #060c19;
+  --bg2: #0a1428;
+  --panel: rgba(13, 26, 52, 0.86);
+  --panel-solid: #0d1a34;
+  --line: #1c3560;
+  --line-soft: rgba(56, 216, 255, 0.14);
+  --cyan: #38d8ff;
+  --cyan-soft: #8fe9ff;
+  --cyan-dim: #1d6f8e;
+  --text: #dce8f7;
+  --muted: #8399b8;
+  --faint: #4d6488;
+  --red: #ff5d6c;
+  --red-bg: rgba(255, 93, 108, 0.08);
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SFMono-Regular", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background:
+    radial-gradient(1200px 500px at 85% -10%, rgba(56, 216, 255, 0.10), transparent 60%),
+    radial-gradient(800px 400px at -10% 110%, rgba(56, 120, 255, 0.10), transparent 60%),
+    linear-gradient(var(--bg2), var(--bg));
+  color: var(--text);
+  font: 14px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow: hidden;
+}
+body::before { /* faint targeting grid */
+  content: ""; position: fixed; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 40px 40px;
+  -webkit-mask-image: radial-gradient(ellipse at 70% 30%, rgba(0,0,0,0.35), transparent 75%);
+  mask-image: radial-gradient(ellipse at 70% 30%, rgba(0,0,0,0.35), transparent 75%);
+}
+.app { position: relative; display: grid; grid-template-rows: auto 1fr; height: 100%; }
+header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(90deg, rgba(56,216,255,0.08), transparent 60%);
+}
+.mark { width: 26px; height: 26px; flex: none; }
+.brand { font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; font-size: 13px; }
+.brand b { color: var(--cyan); font-weight: 700; }
+.ver { color: var(--muted); font-size: 12px; letter-spacing: 0.06em; margin-left: auto; font-family: var(--mono); }
+.main { display: grid; grid-template-columns: 210px 1fr; min-height: 0; }
+nav { border-right: 1px solid var(--line); padding: 18px 14px; overflow: auto; }
+nav h2 { margin: 0 0 12px 6px; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+.steps { list-style: none; margin: 0; padding: 0; }
+.steps li { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-radius: 6px; color: var(--muted); font-size: 13px; position: relative; }
+.steps li + li::before { content: ""; position: absolute; left: 16px; top: -7px; height: 14px; border-left: 1px dashed var(--line); }
+.dot { width: 22px; height: 22px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700;
+  border: 1.5px solid var(--faint); color: var(--faint); background: var(--bg); }
+.steps li.done { color: var(--text); }
+.steps li.done .dot { background: var(--cyan); border-color: var(--cyan); color: #04202b; }
+.steps li.current { color: var(--cyan-soft); background: rgba(56, 216, 255, 0.07); }
+.steps li.current .dot { border-color: var(--cyan); color: var(--cyan); animation: pulse 1.6s infinite; }
+.steps li.error { color: var(--red); background: var(--red-bg); }
+.steps li.error .dot { background: var(--red); border-color: var(--red); color: #2b0408; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(56,216,255,0.55); } 70% { box-shadow: 0 0 0 8px rgba(56,216,255,0); } 100% { box-shadow: 0 0 0 0 rgba(56,216,255,0); } }
+section.content { padding: 20px 24px 12px; overflow: auto; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.kicker { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--cyan); font-weight: 600; margin-bottom: 2px; }
+h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: 0.01em; }
+.recent { margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
+.recent li { white-space: pre-wrap; padding: 1px 0; }
+.recent li:last-child { color: var(--text); }
+.recent.waiting li:last-child::after { content: ""; display: inline-block; width: 10px; height: 10px; margin-left: 8px; border: 2px solid var(--cyan); border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.card { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; }
+.card::before, .card::after { /* panel corner brackets */
+  content: ""; position: absolute; width: 14px; height: 14px; border-color: var(--cyan); border-style: solid; opacity: 0.85; }
+.card::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; border-top-left-radius: 8px; }
+.card::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; border-bottom-right-radius: 8px; }
+.card h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.card .text { white-space: pre-wrap; color: var(--text); }
+.card.error { border-color: rgba(255, 93, 108, 0.55); background: linear-gradient(var(--red-bg), var(--red-bg)), var(--panel-solid); }
+.card.error::before, .card.error::after { border-color: var(--red); }
+.card.error h3 { color: var(--red); }
+.card.offer { border-style: dashed; }
+.notes { margin-top: 10px; max-height: 150px; overflow: auto; padding: 10px 12px; background: rgba(0,0,0,0.25); border: 1px solid var(--line); border-radius: 6px; white-space: pre-wrap; font-size: 13px; color: var(--muted); }
+.list { margin: 10px 0 0; padding: 8px 12px; max-height: 120px; overflow: auto; background: rgba(0,0,0,0.25); border-radius: 6px; font-family: var(--mono); font-size: 12px; color: var(--muted); list-style: none; }
+.problem { margin-top: 10px; color: var(--red); white-space: pre-wrap; font-size: 13px; }
+.link { display: inline-block; margin-top: 6px; color: var(--cyan); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.field { display: flex; gap: 8px; margin-top: 12px; }
+input[type=text] { flex: 1; min-width: 0; background: rgba(0,0,0,0.35); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 9px 11px; font: 13px var(--mono); }
+input[type=text]:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(56,216,255,0.15); }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.buttons.choices { flex-direction: column; align-items: stretch; }
+.buttons.choices button { text-align: left; font-family: var(--mono); font-size: 12px; font-weight: 500; }
+button { font: inherit; font-weight: 600; cursor: pointer; border-radius: 6px; padding: 8px 16px; border: 1px solid var(--cyan-dim); background: transparent; color: var(--cyan-soft); transition: background 0.15s, border-color 0.15s, transform 0.05s; }
+button:hover { background: rgba(56,216,255,0.10); border-color: var(--cyan); }
+button:active { transform: translateY(1px); }
+button:focus-visible { outline: 2px solid var(--cyan-soft); outline-offset: 2px; }
+button.primary { background: var(--cyan); border-color: var(--cyan); color: #03202b; box-shadow: 0 0 18px rgba(56,216,255,0.25); }
+button.primary:hover { background: var(--cyan-soft); }
+button.danger { border-color: var(--red); color: var(--red); }
+button:disabled { opacity: 0.45; cursor: default; }
+.progress { display: none; }
+.progress.on { display: block; }
+.bar { position: relative; height: 18px; border-radius: 9px; background: rgba(0,0,0,0.4); border: 1px solid var(--line); overflow: hidden; }
+.fill { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: linear-gradient(90deg, #1aa3d4, var(--cyan)); box-shadow: 0 0 16px rgba(56,216,255,0.45); transition: width 0.25s ease-out; }
+.bar.busy::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(-45deg, rgba(255,255,255,0.12) 0 10px, transparent 10px 20px); background-size: 28px 28px; animation: stripes 0.9s linear infinite; }
+@keyframes stripes { to { background-position: 28px 0; } }
+.pmeta { display: flex; justify-content: space-between; gap: 12px; margin-top: 7px; font-size: 13px; }
+.pmeta .ptext { color: var(--text); font-variant-numeric: tabular-nums; }
+.pmeta .pct { color: var(--cyan); font-weight: 700; font-variant-numeric: tabular-nums; }
+.pfolder { color: var(--muted); font-family: var(--mono); font-size: 12px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+details { margin-top: auto; border-top: 1px solid var(--line); padding-top: 8px; }
+summary { cursor: pointer; color: var(--muted); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; user-select: none; }
+summary:hover { color: var(--cyan); }
+pre.log { margin: 8px 0 0; height: 150px; overflow: auto; background: rgba(0,0,0,0.35); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: 11.5px/1.5 var(--mono); color: var(--muted); white-space: pre-wrap; }
+.overlay { position: fixed; inset: 0; display: none; place-items: center; background: rgba(4, 9, 20, 0.82); z-index: 10; }
+.overlay.on { display: grid; }
+.overlay .card { max-width: 420px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="#1d6f8e" stroke-width="1.5"/><path d="M8 9l16 14M24 9L8 23" stroke="#38d8ff" stroke-width="2.6" stroke-linecap="round"/><circle cx="16" cy="16" r="3" fill="#060c19" stroke="#38d8ff" stroke-width="1.5"/></svg>
+    <div class="brand"><b>OpenTIE-VR</b> Launcher</div>
+    <div class="ver" id="ver"></div>
+  </header>
+  <div class="main">
+    <nav>
+      <h2>Setup</h2>
+      <ol class="steps" id="steps"></ol>
+    </nav>
+    <section class="content">
+      <div>
+        <div class="kicker" id="kicker">Getting ready</div>
+        <h1 id="headline">OpenTIE-VR Launcher</h1>
+      </div>
+      <ul class="recent" id="recent"></ul>
+      <div id="offer"></div>
+      <div id="question"></div>
+      <div class="progress" id="progress">
+        <div class="bar" id="bar"><div class="fill" id="fill"></div></div>
+        <div class="pmeta"><span class="ptext" id="ptext"></span><span class="pct" id="pct"></span></div>
+        <div class="pfolder" id="pfolder"></div>
+      </div>
+      <details id="details">
+        <summary>Details</summary>
+        <pre class="log" id="log"></pre>
+      </details>
+    </section>
+  </div>
+</div>
+<div class="overlay" id="overlay"><div class="card"><h3 id="ovTitle"></h3><div class="text" id="ovText"></div></div></div>
+<script>
+"use strict";
+const token = new URLSearchParams(location.search).get("token") || "";
+const H = { "X-Token": token };
+const $ = (id) => document.getElementById(id);
+let logNext = 0, qShown = 0, offerShown = 0, failures = 0, finished = false, stepsKey = "", canBrowse = false;
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined && text !== null) e.textContent = text;
+  return e;
+}
+
+function post(path, body) {
+  return fetch(path, { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, H), body: JSON.stringify(body || {}) });
+}
+
+function renderSteps(s) {
+  const key = JSON.stringify(s.steps) + "|" + s.current + "|" + s.finished;
+  if (key === stepsKey) return;
+  stepsKey = key;
+  const ol = $("steps");
+  ol.textContent = "";
+  (s.steps || []).forEach((st, i) => {
+    const li = el("li", st.state);
+    const mark = st.state === "done" ? "✓" : st.state === "error" ? "!" : String(i + 1);
+    li.append(el("span", "dot", mark), el("span", "", st.title));
+    ol.append(li);
+  });
+  const n = s.steps ? s.steps.length : 0;
+  $("kicker").textContent = s.current > 0 ? "Step " + s.current + " of " + n : "Getting ready";
+}
+
+function card(q, isOffer) {
+  const c = el("div", "card" + (q.error ? " error" : "") + (isOffer ? " offer" : ""));
+  c.id = isOffer ? "offerCard" : "questionCard";
+  if (q.title) c.append(el("h3", "", q.title));
+  if (q.text) c.append(el("div", "text", q.text));
+  if (q.link) {
+    const a = el("a", "link", q.link);
+    a.href = "#";
+    a.addEventListener("click", (ev) => { ev.preventDefault(); post("/api/open", {}); });
+    c.append(a);
+  }
+  if (q.notes) c.append(el("div", "notes", q.notes));
+  if (q.list && q.list.length) {
+    const ul = el("ul", "list");
+    q.list.forEach((l) => ul.append(el("li", "", l)));
+    c.append(ul);
+  }
+  if (q.problem) c.append(el("div", "problem", q.problem));
+  let input = null;
+  if (q.kind === "text") {
+    const f = el("div", "field");
+    input = el("input");
+    input.type = "text";
+    input.value = q.value || "";
+    input.placeholder = q.placeholder || "";
+    input.spellcheck = false;
+    input.id = "answerText";
+    f.append(input);
+    if (q.browse && canBrowse) {
+      const b = el("button", "", "Browse…");
+      b.type = "button";
+      b.id = "browse";
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        try {
+          const r = await post("/api/browse", { initial: input.value });
+          if (r.ok) { const j = await r.json(); if (j.ok && j.path) input.value = j.path; }
+        } catch (e) { /* ignore */ }
+        b.disabled = false;
+        input.focus();
+      });
+      f.append(b);
+    }
+    c.append(f);
+  }
+  const opts = q.options || [];
+  const choices = q.kind !== "text" && opts.some((o) => o.label.length > 40);
+  const row = el("div", "buttons" + (choices ? " choices" : ""));
+  opts.forEach((o) => {
+    const b = el("button", o.style || "", o.label);
+    b.type = "button";
+    b.dataset.option = o.id;
+    b.addEventListener("click", () => answer(c, q, o.id, input ? input.value : ""));
+    row.append(b);
+  });
+  c.append(row);
+  if (input) {
+    input.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && opts.length) answer(c, q, opts[0].id, input.value); });
+    setTimeout(() => input.focus(), 0);
+  }
+  return c;
+}
+
+async function answer(c, q, option, text) {
+  c.querySelectorAll("button").forEach((b) => (b.disabled = true));
+  try { await post("/api/answer", { id: q.id, option: option, text: text }); }
+  catch (e) { c.querySelectorAll("button").forEach((b) => (b.disabled = false)); }
+}
+
+// A card is rebuilt only when a new question arrives, so typing is never lost.
+function renderQuestion(box, q, shown, isOffer) {
+  const id = q ? q.id : 0;
+  if (id === shown) return shown;
+  box.textContent = "";
+  if (q) box.append(card(q, isOffer));
+  return id;
+}
+
+function render(s) {
+  $("ver").textContent = "v" + s.version;
+  document.title = "OpenTIE-VR Launcher " + s.version;
+  canBrowse = !!s.canBrowse;
+  renderSteps(s);
+  $("headline").textContent = s.headline || "OpenTIE-VR Launcher";
+  const rec = $("recent");
+  const recKey = JSON.stringify(s.recent || []);
+  if (rec.dataset.key !== recKey) {
+    rec.dataset.key = recKey;
+    rec.textContent = "";
+    (s.recent || []).forEach((l) => rec.append(el("li", "", l)));
+  }
+  rec.classList.toggle("waiting", !s.question && !s.progress && !s.finished);
+  offerShown = renderQuestion($("offer"), s.offer, offerShown, true);
+  qShown = renderQuestion($("question"), s.question, qShown, false);
+
+  const p = s.progress;
+  $("progress").classList.toggle("on", !!p);
+  if (p) {
+    const known = p.frac >= 0;
+    $("fill").style.width = (known ? Math.min(100, p.frac * 100) : 100) + "%";
+    $("bar").classList.toggle("busy", p.busy || !known);
+    $("ptext").textContent = p.label + ": " + p.text;
+    $("pct").textContent = known ? Math.floor(p.frac * 100) + "%" : "";
+    $("pfolder").textContent = p.folder ? "Folder: " + p.folder : "";
+  }
+  if (s.log && s.log.length) {
+    const log = $("log");
+    const atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
+    log.append(document.createTextNode(s.log.join("\n") + "\n"));
+    if (atEnd) log.scrollTop = log.scrollHeight;
+  }
+  logNext = s.logNext;
+  if (s.finished && !finished) {
+    finished = true;
+    showOverlay(s.code === 0 ? "Finished" : "Stopped", "The launcher has finished. You can close this window.");
+    setTimeout(() => window.close(), 1500);
+  }
+}
+
+function showOverlay(title, text) {
+  $("ovTitle").textContent = title;
+  $("ovText").textContent = text;
+  $("overlay").classList.add("on");
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/api/state?log=" + logNext, { headers: H, cache: "no-store" });
+    if (r.status === 403) { showOverlay("Not allowed", "This page must be opened by the OpenTIE-VR Launcher."); return; }
+    if (!r.ok) throw new Error(String(r.status));
+    render(await r.json());
+    failures = 0;
+  } catch (e) {
+    failures++;
+    if (failures > 8) {
+      showOverlay("The launcher has closed", "You can close this window.");
+      if (finished) { window.close(); return; }
+    }
+  }
+  setTimeout(poll, failures > 8 ? 2000 : 250);
+}
+
+// Keep one request open while this window exists, so the launcher notices
+// when the window is closed even if timers are slowed in the background.
+async function alive() {
+  try {
+    const r = await fetch("/api/alive", { headers: H, cache: "no-store" });
+    if (r.body) { const rd = r.body.getReader(); for (;;) { const x = await rd.read(); if (x.done) break; } }
+  } catch (e) { /* retried below */ }
+  if (!finished) setTimeout(alive, 1000);
+}
+
+// Enter outside a text field presses the highlighted button.
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter" || ev.target.tagName === "INPUT" || ev.target.tagName === "BUTTON" || ev.target.tagName === "SUMMARY") return;
+  const b = document.querySelector("#questionCard button.primary:not(:disabled)");
+  if (b) b.click();
+});
+
+poll();
+alive();
+</script>
+</body>
+</html>
