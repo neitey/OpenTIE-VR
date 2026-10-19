@@ -445,6 +445,8 @@ set(TIE_RUNTIME_SOURCES
     src/tie_runtime/input/controller_mapping.h
     src/tie_runtime/input/vr_buttons.c
     src/tie_runtime/input/vr_buttons.h
+    src/tie_runtime/input/vr_text.c
+    src/tie_runtime/input/vr_text.h
     src/tie_runtime/input/vr_controls.c
     src/tie_runtime/input/vr_controls.h
     src/tie_runtime/input/transform.c
@@ -714,6 +716,14 @@ if(NOT ANDROID)
             TieSnapshot_Current TieFlightPause_IsActive)
         target_link_options(tie_vr_controls_test PRIVATE "LINKER:--wrap=${TIE_VR_TEST_WRAP}")
     endforeach()
+endif()
+
+# VR key-name rewriting of game text (vr_text.c), host only:
+#   ninja tie_vr_text_test && ./tie_vr_text_test
+if(NOT ANDROID)
+    add_executable(tie_vr_text_test EXCLUDE_FROM_ALL tests/vr_text_test.c)
+    target_include_directories(tie_vr_text_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(tie_vr_text_test PRIVATE tie_core tie_remaster)
 endif()
 
 if(TIE_BUILD_TOOLS)

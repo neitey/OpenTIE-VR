@@ -1,6 +1,7 @@
 #ifndef TIE_REMASTER_FLIGHT_RENDER_MATH_H
 #define TIE_REMASTER_FLIGHT_RENDER_MATH_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "aeron/scene/scene3d.h"
@@ -93,6 +94,9 @@ typedef struct TieFlightCamera {
 	float flight_vp_x, flight_vp_y, flight_vp_w, flight_vp_h;
 	float fit_x, fit_y, fit_w, fit_h;
 	int rt_w, rt_h;
+	/* An OpenXR eye (or both-eye) camera: head-tracked orientation, the
+	 * headset's projection (no classic yAspect squeeze for sky layers). */
+	bool xr;
 } TieFlightCamera;
 
 /* Build a full-output `TieFlightCamera` while preserving the classic 3D

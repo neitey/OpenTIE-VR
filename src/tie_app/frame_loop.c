@@ -15,6 +15,7 @@
 #include "tie_app/settings/flight_options.h"
 #include "tie_app/settings/settings.h"
 #include "tie_remaster/remaster.h"
+#include "tie_remaster/vr/vr_hands.h"
 #include "tie_runtime/display/classic_display.h"
 #include "tie_runtime/display/classic_framebuffer.h"
 #include "tie_runtime/flight_assets/service.h"
@@ -27,6 +28,7 @@
 #include "tie_runtime/runtime/runtime.h"
 #include "tie_runtime/snapshot/snapshot.h"
 #include "tie_app/quest/vr_voice.h"
+#include "tie_app/vr_keyboard.h"
 
 static uint64_t TieFrameLoop_PresentationIntervalUs(void) {
 	const double rate = Aeron_PresentationRate();
@@ -110,6 +112,10 @@ static void TieFrameLoop_SubmitGameLayers(TieClassicOutputKind* previous_output_
 		TieClassicLayer_Submit(corrected_vga);
 	TieRemaster_Frame(snapshot, delta_us, paused);
 	TieFlightMarker_Submit(snapshot);
+	/* The VR flight stick was moved by hand: keep its spot. */
+	char stick_pos[64];
+	if (TieVrHands_TakeStickPlacement(stick_pos, (int)sizeof stick_pos))
+		TieQuest_SaveSetting("XWA_XR_STICK_POS", stick_pos);
 }
 
 static void TieFrameLoop_DiscoverControllers(const AeronInputSnapshot* input) {
@@ -181,6 +187,8 @@ void TieFrameLoop_Run(void) {
 		if (Aeron_FatalErrorRequested())
 			break;
 		TieInput_UpdateKeyboard(input, menu_open || hotkey_frame.paused || focus_paused);
+		/* VR keyboard for text fields: types into the key queue, owns its clicks. */
+		TieVrKeyboard_BeginFrame(input, delta_us, menu_open || hotkey_frame.paused || focus_paused);
 		TieVrVoice_Update(menu_open || hotkey_frame.paused || focus_paused);
 		if (!menu_open)
 			TieInput_BeginFrame(delta_us);
@@ -206,6 +214,7 @@ void TieFrameLoop_Run(void) {
 		const TieSnapshot* snapshot = TieSnapshot_Current();
 		TieFrameLoop_SubmitGameLayers(&previous_output_kind, snapshot, &flight_options, delta_us,
 									  hotkey_frame.paused || menu_open);
+		TieVrKeyboard_Submit();
 		/* Do not let the input edge that opened the menu close it again. */
 		if (!settings_opened_this_frame)
 			TieSettings_Frame(input, (float)delta_us * 1e-6f);

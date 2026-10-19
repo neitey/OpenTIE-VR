@@ -267,6 +267,7 @@ uint16_t replay_savereplay(void) {
 	}
 	if (continuation->phase == REPLAY_SAVE_PHASE_CONFIRM_REPLACE) {
 		int key;
+		TieInput_MarkTextEntry(); /* "Replace file? (Y/N)": the VR keyboard has Y */
 		if (!TieInput_KeyPending()) {
 			continuation->waiting = true;
 			return TIE_REPLAY_SAVE_PENDING;
@@ -1691,6 +1692,8 @@ void replay_editstring(int16_t x, int16_t y, uint8_t limit, uint8_t* text, uint8
 		}
 		return;
 	}
+	/* The film name takes typed keys: the VR keyboard shows while it is live. */
+	TieInput_MarkTextEntry();
 	if (!TieInput_KeyPending()) {
 		continuation->waiting = true;
 		return;

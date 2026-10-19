@@ -121,10 +121,10 @@ bool TieFlightBackdrop_Submit(TieFlightBackdrop* b, AeronScene3D* scene, AeronCo
 	/* backdrp2_backdrawbitmap projects tile centers without yAspect, while
 	 * the scene's projection includes it. Dividing eye Y by yAspect places
 	 * each center where the classic renderer does; sprites keep native size. */
-	const float y_aspect = snap->camera.y_aspect;
+	const float y_aspect = fcam->xr ? 1.0f : snap->camera.y_aspect; /* XR: the headset's projection */
 	const bool sky_center = y_aspect > 0.0f && y_aspect != 1.0f;
 	float world_to_eye[9];
-	TieRenderMath_QuaternionToMat3(snap->camera.ori, world_to_eye);
+	TieRenderMath_QuaternionToMat3(fcam->camera.ori, world_to_eye);
 
 	int submitted = 0;
 	int slot = 0;

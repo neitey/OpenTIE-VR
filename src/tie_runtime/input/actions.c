@@ -5,6 +5,8 @@
 
 #include "tie_runtime/input/input.h"
 
+#include "aeron/aeron.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -329,6 +331,12 @@ uint16_t TieInputActions_VirtualButtons;
 static void TieActions_ApplyAction(TieInputAction action, bool pressed) {
 	const TieInputActionDef* definition;
 	if (action <= TIE_INPUT_ACTION_NONE || action >= TIE_INPUT_ACTION_COUNT)
+		return;
+	/* OpenTIE-VR: in a headset the head is the look-around. The numpad views
+	 * would leave the forward view, where TIE stops updating its panel (the 3D
+	 * cockpit's instruments would freeze). */
+	if (action >= TIE_INPUT_ACTION_VIEW_LEFT_SHOULDER && action <= TIE_INPUT_ACTION_VIEW_RIGHT_FORWARD &&
+		action != TIE_INPUT_ACTION_VIEW_FORWARD && Aeron_XrIsPresenting())
 		return;
 	definition = &g_action_defs[action];
 	switch (definition->kind) {
