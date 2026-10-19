@@ -68,7 +68,7 @@ static const TieVrOptionRow k_rows[] = {
 	  "What your hands are in flight: the controllers, or flight gloves." },
 	{ "XWA_XR_CONTROLLER_LABELS", "Controller Labels", k_off_on, k_0_1, 2, 1, false,
 	  "Look at a controller, buttons towards you: labels show what each button does." },
-	{ "XWA_XR_FLIGHT_STICK", "Flight Stick", k_off_on, k_0_1, 2, 1, false,
+	{ "XWA_XR_FLIGHT_STICK", "Flight Stick", k_off_on, k_0_1, 2, 0, false,
 	  "A stick right of the seat: grab it with the right grip and fly with it (the thumbstick still works). "
 	  "The left grip moves it." },
 	{ "XWA_XR_AUTO_PAUSE", "Pause When Headset Is Off", k_off_on, k_0_1, 2, 1, false, NULL },

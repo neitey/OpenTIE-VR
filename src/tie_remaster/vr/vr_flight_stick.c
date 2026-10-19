@@ -138,8 +138,10 @@ static float st_env(const char* name, float fallback) {
 }
 
 int TieVrStick_Enabled(void) {
+	/* Off by default (as OpenXWA-VR's recommended settings): a right hand
+	 * resting near it would take the right grip from "target in sights". */
 	const char* env = getenv("XWA_XR_FLIGHT_STICK");
-	return !(env && env[0] == '0');
+	return env && env[0] == '1';
 }
 
 /* The pivot from XWA_XR_STICK_POS (read every frame, so the VR options'
