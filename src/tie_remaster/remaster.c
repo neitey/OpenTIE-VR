@@ -1220,10 +1220,6 @@ bool TieRemaster_Frame(const TieSnapshot* snapshot, int32_t delta_us, bool pause
 	bool scene2d_is_active = TieRemaster_Scene2dActive();
 	bool flight_is_active =
 		TieRemaster_FlightActive(snapshot) && !TieRemaster_FlightRequiresClassicScreen(snapshot);
-	/* VR: the right controller is the mouse on the virtual screen except in
-	 * flight proper, where its trigger fires. */
-	Aeron_XrSetPointerEnabled(!(snapshot && snapshot->scene_kind == TIE_SCENE_FLIGHT &&
-								!TieRemaster_FlightRequiresClassicScreen(snapshot)));
 	Aeron_BlendRampAdvance(&g_remaster.blend, delta_us, g_remaster.blend.target);
 	float alpha = (scene2d_is_active || flight_is_active) ? g_remaster.blend.alpha : 0.0f;
 
