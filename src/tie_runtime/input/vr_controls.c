@@ -218,7 +218,14 @@ static void TieVrControls_FlightButton(AeronXrButton button, bool shifted, bool 
 		}
 		return;
 	}
-	TieVrControls_Dispatch(TieVrButtons_Action(button, shifted));
+	const TieInputAction action = TieVrButtons_Action(button, shifted);
+	TieVrControls_Dispatch(action);
+	if (action != TIE_INPUT_ACTION_NONE && TieVrControls_HapticsEnabled()) {
+		/* A short tick on the controller that pressed it. */
+		const bool right = button == AERON_XR_BUTTON_A || button == AERON_XR_BUTTON_B ||
+						   button == AERON_XR_BUTTON_RIGHT_STICK || button == AERON_XR_BUTTON_RIGHT_GRIP;
+		Aeron_XrHapticPulse(TieVrControls_PhysicalHand(right ? 1 : 0), 0.15f, 15);
+	}
 }
 
 static void TieVrControls_MenuButton(AeronXrButton button, bool flight_scene) {
