@@ -10,6 +10,7 @@
 #include "aeron/compat/host.h"
 #include "tie_app/hotkeys.h"
 #include "tie_app/quest/quest_app.h"
+#include "tie_app/test/test_harness.h"
 #include <SDL3/SDL_stdinc.h>
 #include "tie_app/settings/flight_options.h"
 #include "tie_app/settings/settings.h"
@@ -155,6 +156,8 @@ void TieFrameLoop_Run(void) {
 
 		TieQuest_Frame();
 		const AeronInputSnapshot* input = Aeron_InputSnapshot();
+		if (TieTest_Active())
+			TieTest_ApplyInput((AeronInputSnapshot*)input);
 		TieFrameLoop_DiscoverControllers(input);
 		const bool focus_paused = TieFrameLoop_UpdateFocus(input, &ever_had_focus);
 		TieFrameLoop_UpdatePresentation(input, delta_us);
@@ -203,10 +206,14 @@ void TieFrameLoop_Run(void) {
 
 		if (Aeron_FatalErrorRequested())
 			break;
+		if (TieTest_Active())
+			TieTest_BeforePresent();
 		if (!Aeron_Present()) {
 			Aeron_RequestFatalRendererError("frame presentation");
 			break;
 		}
+		if (TieTest_Active() && TieTest_AfterPresent())
+			TieRuntime_RequestExit();
 
 		uint64_t wake_delay_us = TieFrameLoop_PresentationIntervalUs();
 		if (!pause_requested) {
