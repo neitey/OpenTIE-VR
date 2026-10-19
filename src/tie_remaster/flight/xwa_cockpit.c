@@ -68,7 +68,7 @@ static const TieXwaCockpitSpec k_cockpits[] = {
 		{
 			[TIE_COCKPIT_PANEL_SENSOR_FWD] = { true, { -0.234f, -0.747f, -0.612f }, 81.0f, 0.0f, 0.0f, 0.16f },
 			[TIE_COCKPIT_PANEL_SENSOR_REAR] = { true, { 0.231f, -0.747f, -0.612f }, 81.0f, 0.0f, 0.0f, 0.16f },
-			[TIE_COCKPIT_PANEL_CMD] = { true, { 0.0f, -0.62f, -0.545f }, 0.0f, 0.0f, 0.0f, 0.18f },
+			[TIE_COCKPIT_PANEL_CMD] = { true, { 0.0f, -0.60f, -0.525f }, 0.0f, 0.0f, 0.0f, 0.17f },
 			[TIE_COCKPIT_PANEL_GAUGES_L] = { true, { -0.40f, -0.52f, -0.652f }, 81.0f, 0.0f, 0.0f, 0.20f },
 			[TIE_COCKPIT_PANEL_GAUGES_R] = { true, { 0.40f, -0.52f, -0.652f }, 81.0f, 0.0f, 0.0f, 0.20f },
 		},
@@ -80,7 +80,7 @@ static const TieXwaCockpitSpec k_cockpits[] = {
 		{
 			[TIE_COCKPIT_PANEL_SENSOR_FWD] = { true, { 1.611f, -0.737f, -0.612f }, 81.0f, 0.0f, 0.0f, 0.16f },
 			[TIE_COCKPIT_PANEL_SENSOR_REAR] = { true, { 2.076f, -0.737f, -0.612f }, 81.0f, 0.0f, 0.0f, 0.16f },
-			[TIE_COCKPIT_PANEL_CMD] = { true, { 1.845f, -0.61f, -0.545f }, 0.0f, 0.0f, 0.0f, 0.18f },
+			[TIE_COCKPIT_PANEL_CMD] = { true, { 1.845f, -0.59f, -0.525f }, 0.0f, 0.0f, 0.0f, 0.17f },
 			[TIE_COCKPIT_PANEL_GAUGES_L] = { true, { 1.445f, -0.51f, -0.652f }, 81.0f, 0.0f, 0.0f, 0.20f },
 			[TIE_COCKPIT_PANEL_GAUGES_R] = { true, { 2.245f, -0.51f, -0.652f }, 81.0f, 0.0f, 0.0f, 0.20f },
 		},
@@ -93,8 +93,8 @@ static const TieXwaCockpitSpec k_cockpits[] = {
 			[TIE_COCKPIT_PANEL_SENSOR_FWD] = { true, { -0.28f, -0.60f, -0.28f }, 10.0f, 15.0f, 0.0f, 0.15f },
 			[TIE_COCKPIT_PANEL_SENSOR_REAR] = { true, { 0.28f, -0.60f, -0.28f }, 10.0f, -15.0f, 0.0f, 0.15f },
 			[TIE_COCKPIT_PANEL_CMD] = { true, { 0.02f, -0.565f, -0.30f }, 0.0f, 0.0f, 0.0f, 0.16f },
-			[TIE_COCKPIT_PANEL_GAUGES_L] = { true, { -0.30f, -0.55f, -0.47f }, 40.0f, 15.0f, 0.0f, 0.15f },
-			[TIE_COCKPIT_PANEL_GAUGES_R] = { true, { 0.30f, -0.55f, -0.47f }, 40.0f, -15.0f, 0.0f, 0.15f },
+			[TIE_COCKPIT_PANEL_GAUGES_L] = { true, { -0.28f, -0.61f, -0.43f }, 25.0f, 15.0f, 0.0f, 0.13f },
+			[TIE_COCKPIT_PANEL_GAUGES_R] = { true, { 0.28f, -0.61f, -0.43f }, 25.0f, -15.0f, 0.0f, 0.13f },
 		},
 	},
 };
