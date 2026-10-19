@@ -331,6 +331,11 @@ struct TieFlightRenderer {
 	 * the right eye. */
 	AeronRenderTarget* xr_bloom_right;
 	struct AeronDrawList2D* xr_bloom_blit;
+	/* XWA_XR_DIRECT_OUTPUT: this stereo frame's eyes render straight into
+	 * the headset images (no HDR target, tonemap pass or bloom); the eye
+	 * the direct-output hook draws the hands' alpha for. */
+	bool xr_direct;
+	int xr_direct_eye;
 
 	/* Shared spatial post settings, initialized from the canonical Aeron
 	 * profile and mutable through the debug inspectors. */

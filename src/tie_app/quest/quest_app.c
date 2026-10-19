@@ -88,6 +88,13 @@ static const char k_settings_template[] =
 	"#TIE_XR_PIP_EVERY=2\n"
 	"# 1 = laser and explosion lights (costly on the headset GPU):\n"
 	"#TIE_XR_POINT_LIGHTS=0\n"
+	"# 1 = the eyes render straight into the headset images (no HDR target,\n"
+	"# tonemap pass or bloom; saves ~3 ms GPU per frame):\n"
+	"#XWA_XR_DIRECT_OUTPUT=0\n"
+	"# 0 = classic draw order (sky first; more overdraw, same image):\n"
+	"#XWA_XR_DRAW_ORDER=1\n"
+	"# Bloom in VR: 1 one for both eyes, eye = per eye, 0 = none:\n"
+	"#XWA_XR_BLOOM=1\n"
 	"# 0 = no per-pass GPU timing in the log; no CPU frame breakdown:\n"
 	"#XWA_XR_GPU_TIMING=1\n"
 	"#TIE_XR_PROFILE=1\n";

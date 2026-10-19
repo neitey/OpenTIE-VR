@@ -8,6 +8,11 @@
 
 #include "aeron/log.h"
 #include "aeron/render.h"
+#include "aeron/scene/billboard.h"
+#include "aeron/scene/scene3d.h"
+#include "tie_remaster/flight/render_math.h"
+
+#include <math.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -48,6 +53,7 @@ struct TieFlightStars {
 	TieFlightStarfieldStyle cached_style;
 	TieFlightStarfieldStyle pending_style;
 	bool cache_valid;
+	AeronTexture* dot; /* VR star sprites (TieFlightStars_SubmitSprites) */
 };
 
 typedef struct TieFlightTie98StarRng {
@@ -199,6 +205,8 @@ void TieFlightStars_Destroy(TieFlightStars* stars) {
 		Aeron_DestroyShader(stars->ps);
 	if (stars->instances)
 		Aeron_DestroyBuffer(stars->instances);
+	if (stars->dot)
+		Aeron_DestroyTexture(stars->dot);
 	free(stars);
 }
 
@@ -336,4 +344,109 @@ void TieFlightStars_DrawCustom(TieFlightStars* stars, AeronCommandBuffer* cmd, A
 	Aeron_BindUniformData(pass, AERON_SHADER_STAGE_VERTEX, 0, &uniforms, sizeof uniforms);
 	Aeron_DrawInstanced(pass, 6, stars->pending_count, 0);
 	TIE_GPU_POP(cmd);
+}
+
+/* A round dot, coverage in rgb and alpha (premultiplied white), linear. */
+static AeronTexture* TieFlightStars_DotTexture(TieFlightStars* stars, AeronCommandBuffer* cmd) {
+	if (stars->dot)
+		return stars->dot;
+	enum { N = 16 };
+	uint8_t px[N * N * 4];
+	for (int j = 0; j < N; ++j) {
+		for (int i = 0; i < N; ++i) {
+			const float x = ((float)i + 0.5f) / (float)N * 2.0f - 1.0f;
+			const float y = ((float)j + 0.5f) / (float)N * 2.0f - 1.0f;
+			const float r = sqrtf(x * x + y * y);
+			float c = r < 0.75f ? 1.0f : r < 1.0f ? (1.0f - r) / 0.25f : 0.0f;
+			const uint8_t v = (uint8_t)(c * 255.0f + 0.5f);
+			uint8_t* p = &px[(j * N + i) * 4];
+			p[0] = p[1] = p[2] = p[3] = v;
+		}
+	}
+	AeronTexture* tex = Aeron_CreateTexture(&(AeronTextureDesc) {
+		.width = N,
+		.height = N,
+		.mip_count = 1,
+		.format = AERON_TEXTURE_FORMAT_RGBA8_UNORM,
+		.usage = AERON_TEXTURE_USAGE_SAMPLED | AERON_TEXTURE_USAGE_TRANSFER_DST,
+		.debug_name = "tie.flight.star_dot",
+	});
+	if (tex && !Aeron_UploadTextureDataCmd(cmd, &(AeronTextureUploadDesc) {
+													.texture = tex,
+													.width = N,
+													.height = N,
+													.raw_data = px,
+													.raw_size = (uint32_t)sizeof px,
+												})) {
+		Aeron_DestroyTexture(tex);
+		tex = NULL;
+	}
+	stars->dot = tex;
+	return tex;
+}
+
+int TieFlightStars_SubmitSprites(TieFlightStars* stars, AeronScene3D* scene, AeronCommandBuffer* cmd,
+								 const TieSnapshot* snapshot, const float camera_ori[4], float half_tan,
+								 int max_sprites) {
+	if (!stars || !scene || !cmd || !snapshot || !camera_ori || stars->pending_count == 0 || max_sprites <= 0)
+		return 0;
+	AeronTexture* dot = TieFlightStars_DotTexture(stars, cmd);
+	if (!dot)
+		return 0;
+	float colors[4][3];
+	for (int slot = 0; slot < 4; ++slot)
+		TieScene2dSrgb_PalToLinearRgb(snapshot->palette[252 + slot], &colors[slot][0], &colors[slot][1],
+									  &colors[slot][2]);
+	float m[9];
+	TieRenderMath_QuaternionToMat3(camera_ori, m);
+	const float right[3] = { m[0], m[1], m[2] };
+	const float up[3] = { m[3], m[4], m[5] };
+	const float fwd[3] = { m[6], m[7], m[8] };
+	const bool tie98 = stars->pending_style == TIE_FLIGHT_STARFIELD_STYLE_TIE98;
+	const float far_dist = 65536.0f;
+	static const float sgx[4] = { -1.0f, -1.0f, +1.0f, +1.0f };
+	static const float sgy[4] = { +1.0f, -1.0f, -1.0f, +1.0f };
+	static const float cuv[4][2] = { { 0, 0 }, { 0, 1 }, { 1, 1 }, { 1, 0 } };
+	int submitted = 0;
+	for (uint16_t i = 0; i < stars->pending_count && submitted < max_sprites; ++i) {
+		const float* a = stars->cached[i].axis_and_value;
+		float n[3] = { a[0], a[1], a[2] };
+		const float len = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+		if (len < 1e-6f)
+			continue;
+		float facing = (n[0] * fwd[0] + n[1] * fwd[1] + n[2] * fwd[2]) / len;
+		/* The classic renderer shows a direction behind the eye at its
+		 * antipode (the shader negates negative-depth clip positions). */
+		const float sign = facing < 0.0f ? -1.0f : 1.0f;
+		facing *= sign;
+		if (facing < 0.17f) /* outside both eyes' view (~80 deg off axis) */
+			continue;
+		for (int k = 0; k < 3; ++k)
+			n[k] *= sign / len;
+		float rgb[3];
+		if (tie98) {
+			rgb[0] = rgb[1] = rgb[2] = a[3];
+		} else {
+			const int slot = (int)(a[3] + 0.5f) & 3;
+			memcpy(rgb, colors[slot], sizeof rgb);
+		}
+		AeronSceneBillboardDesc d;
+		memset(&d, 0, sizeof d);
+		d.texture = dot;
+		d.blend = AERON_SCENE_BILLBOARD_BLEND_ADDITIVE;
+		d.stage = AERON_SCENE_BILLBOARD_STAGE_SKY;
+		for (int c = 0; c < 4; ++c) {
+			for (int k = 0; k < 3; ++k)
+				d.corners[c][k] = far_dist * (n[k] + (right[k] * sgx[c] + up[k] * sgy[c]) * half_tan);
+			d.uv[c][0] = cuv[c][0];
+			d.uv[c][1] = cuv[c][1];
+			d.colors[c][0] = rgb[0];
+			d.colors[c][1] = rgb[1];
+			d.colors[c][2] = rgb[2];
+			d.colors[c][3] = 1.0f;
+		}
+		AeronScene_AddBillboard(scene, &d);
+		++submitted;
+	}
+	return submitted;
 }

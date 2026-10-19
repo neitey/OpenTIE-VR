@@ -408,6 +408,28 @@ static bool TieFlightRenderer_PrepareClassicMeshTables(TieFlightRenderer* g, Aer
 									 g->classic_mesh_tables.count * sizeof(AeronSceneMeshTable)) != 0;
 }
 
+/* XWA_XR_DIRECT_OUTPUT (VR flight, OpenXWA-VR's switch): 1 = the eyes'
+ * forward passes write tonemapped colour straight into the headset images
+ * (no HDR intermediate, no tonemap pass, no bloom; needs MSAA); 0 (default)
+ * = HDR path. A desktop mirror then shows no flight image. */
+static bool TieFlightRenderer_XrDirectWanted(void) {
+	const char* env = getenv("XWA_XR_DIRECT_OUTPUT");
+	return env && env[0] == '1';
+}
+
+/* Direct output: the hands' alpha for the eye overlay, drawn at the end of
+ * the eye's forward pass (what XrOutputEye does after its tonemap). */
+static void TieFlightRenderer_XrDirectHandsHook(AeronCommandBuffer* cmd, AeronRenderPass* pass, int rt_w, int rt_h,
+												void* user) {
+	(void)rt_w;
+	(void)rt_h;
+	TieFlightRenderer* g = (TieFlightRenderer*)user;
+	const int eye = g->xr_direct_eye;
+	AeronDrawList2D* hands_alpha = TieVrHands_EyeAlpha(eye);
+	if (hands_alpha && g->xr_frame.eye_targets[eye])
+		AeronDrawList_RenderIntoPass(hands_alpha, cmd, pass, g->xr_frame.eye_targets[eye]);
+}
+
 /* OpenTIE-VR stereo: the CMD PIP is seen only with a target on a working CMD
  * (TieCockpitRenderer_Draw3dcrt), and it changes at the sim rate, not with
  * the head. So in stereo it renders for a new sim frame / target, at most
@@ -948,12 +970,39 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 	g->frame.hyperstars_ready = hyperstars_ready;
 	g->frame.hd_full = hd_full;
 	g->frame.ssao_on = ssao_on;
-	AeronScene_SetPassHook(g->scene, AERON_SCENE_HOOK_BEFORE_OPAQUE, TieFlightRenderer_SceneHookBeforeOpaque,
-						   g);
-	AeronScene_SetPassHook(g->scene, AERON_SCENE_HOOK_AFTER_OPAQUE, TieFlightRenderer_SceneHookAfterOpaque,
-						   g);
-	AeronScene_SetPassHook(g->scene, AERON_SCENE_HOOK_AFTER_UPSCALE, TieFlightRenderer_SceneHookAfterUpscale,
-						   g);
+	/* VR direct output (XWA_XR_DIRECT_OUTPUT=1): the engine takes it only
+	 * without pass hooks, so the stars go in as SKY billboards (before the
+	 * backdrops, which cover them) and the other hooks stay off (cockpit 2D:
+	 * not drawn in stereo; hyperspace streaks: that frame goes the HDR way). */
+	g->xr_direct = xr && hd_full && TieFlightRenderer_XrDirectWanted() && !hyperstars_ready && !ssao_on;
+	if (g->xr_direct) {
+		AeronScene_SetPassHook(g->scene, AERON_SCENE_HOOK_BEFORE_OPAQUE, NULL, NULL);
+		AeronScene_SetPassHook(g->scene, AERON_SCENE_HOOK_AFTER_OPAQUE, NULL, NULL);
+		AeronScene_SetPassHook(g->scene, AERON_SCENE_HOOK_AFTER_UPSCALE, NULL, NULL);
+		if (stars_ready) {
+			const float tan_h = tanf(curr->camera.fov_h_half_rad > 0.0f ? curr->camera.fov_h_half_rad : 0.5586f);
+			const float ref_w = curr->legacy_render_convention == TIE_FLIGHT_LEGACY_RENDER_TIE95 && curr->classic_w
+									? (float)curr->classic_w
+									: 640.0f;
+			TieFlightStars_SubmitSprites(g->stars, g->scene, cmd, curr, cull_cam->camera.ori, tan_h / ref_w, 2048);
+		}
+	} else {
+		AeronScene_SetPassHook(g->scene, AERON_SCENE_HOOK_BEFORE_OPAQUE, TieFlightRenderer_SceneHookBeforeOpaque,
+							   g);
+		AeronScene_SetPassHook(g->scene, AERON_SCENE_HOOK_AFTER_OPAQUE, TieFlightRenderer_SceneHookAfterOpaque,
+							   g);
+		AeronScene_SetPassHook(g->scene, AERON_SCENE_HOOK_AFTER_UPSCALE,
+							   TieFlightRenderer_SceneHookAfterUpscale, g);
+	}
+	/* VR overdraw control (XWA_XR_DRAW_ORDER=0 off, as OpenXWA-VR): opaque
+	 * meshes nearest first (the cockpit hides most of the view), then the
+	 * sky cube, the stars (at the far plane, depth-tested) and the SKY
+	 * billboards behind them. Same image. Not with the classic draws. */
+	{
+		const char* order = getenv("XWA_XR_DRAW_ORDER");
+		const bool reorder = xr && hd_full && !(order && order[0] == '0');
+		AeronScene_SetOpaqueOrder(g->scene, reorder, reorder);
+	}
 
 	/* Backdrop planets and billboard sprites are submitted in every render
 	 * style through the scene's SKY and OVERLAY stages. */
@@ -1198,8 +1247,13 @@ bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cm
 	if (shift_near)
 		TieFlightRenderer_XrShiftNear(g, g->xr_near_shift[0]);
 	TIE_GPU_PUSH(cmd, "Flight scene, left eye");
+	if (g->xr_direct) {
+		g->xr_direct_eye = 0;
+		AeronScene_SetDirectOutput(g->scene, g->xr_frame.eye_targets[0], g->xr_frame.format, NULL);
+		AeronScene_SetDirectOutputHook(g->scene, TieFlightRenderer_XrDirectHandsHook, g);
+	}
 	bool ok = AeronScene_Render(g->scene, cmd) != 0 &&
-			  TieFlightRenderer_XrOutputEye(g, cmd, 0);
+			  (AeronScene_DirectOutputUsed(g->scene) || TieFlightRenderer_XrOutputEye(g, cmd, 0));
 	TIE_GPU_POP(cmd);
 	if (ok) {
 		/* Same submissions, right eye camera; the right eye reuses the left
@@ -1214,10 +1268,16 @@ bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cm
 										g->xr_near_shift[1][2] - g->xr_near_shift[0][2] };
 			TieFlightRenderer_XrShiftNear(g, to_right);
 		}
+		if (g->xr_direct) {
+			g->xr_direct_eye = 1;
+			AeronScene_SetDirectOutput(g->scene, g->xr_frame.eye_targets[1], g->xr_frame.format, NULL);
+		}
 		ok = AeronScene_SetCamera(g->scene, &g->xr_eyes[1].camera) && AeronScene_Render(g->scene, cmd) &&
-			 TieFlightRenderer_XrOutputEye(g, cmd, 1);
+			 (AeronScene_DirectOutputUsed(g->scene) || TieFlightRenderer_XrOutputEye(g, cmd, 1));
 		TIE_GPU_POP(cmd);
 	}
+	AeronScene_SetDirectOutputHook(g->scene, NULL, NULL);
+	AeronScene_SetOpaqueOrder(g->scene, 0, 0);
 	if (ok)
 		TieFlightPointLights_CaptureSceneStats(g->scene);
 	g->frame.curr = NULL; /* hooks must not outlive the snapshot */
