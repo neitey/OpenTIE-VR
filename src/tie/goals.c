@@ -8,6 +8,7 @@
 #include "tie/frontend_display_tie98.h"
 
 #ifdef TIE_MODERN
+#include "tie_runtime/input/vr_text.h"
 #include "tie_runtime/storage/string_table.h"
 #endif
 #include "tie/create.h" /* diffmask, fgdiffmask, genusconvert, familyconvert */
@@ -182,7 +183,13 @@ int32_t goals_missiongoalsroom(void) {
 
 		/* ----- Optional "[ESC]" banner when mission has already ended --- */
 		if (mission.end_flag) {
-			const uint16_t esc_w = (uint16_t)sys2_calclength((const uint8_t*)goalescapestr);
+#ifdef TIE_MODERN
+			/* VR: "Press SPACEBAR" -> the button that sends Space here (X). */
+			const char* escape_text = TieVrText_MenuHint((const char*)goalescapestr);
+#else
+			const char* escape_text = (const char*)goalescapestr;
+#endif
+			const uint16_t esc_w = (uint16_t)sys2_calclength((const uint8_t*)escape_text);
 			const uint32_t esc_y_base =
 				(((screenYRes - goalsBottom)) / 2) + (uint32_t)goalsBottom - (((uint32_t)(fontheight)) / 2);
 			const int16_t esc_x = (int16_t)((screenXRes - (fontheight + (uint32_t)esc_w)) / 2);
@@ -196,7 +203,7 @@ int32_t goals_missiongoalsroom(void) {
 			festring_setdropcolor(0x41);
 			festring_setcursor((int16_t)(esc_x + fontheight / 2), (int16_t)(esc_y_base + 1));
 			festring_settextcolor(0x4E);
-			festring_outstring((const uint8_t*)goalescapestr);
+			festring_outstring((const uint8_t*)escape_text);
 			festring_setdropcolor(0x40);
 		}
 
