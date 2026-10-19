@@ -13,6 +13,8 @@
 #   MANIFEST base binary AndroidManifest.xml    ($SP/q21/base/AndroidManifest.xml)
 #   VKSHIM   libopenxwa_vkshim.so (shared)     (/root/build-android/libopenxwa_vkshim.so)
 #   ASSETS   folder with icon/, vr_splash.png   ($SP/tieassets)
+#   VOICE    speech model for voice commands    ($SP/vrassets/voice: encoder/decoder/joiner.onnx,
+#            tokens.txt; never in the repo; skipped when absent)
 #   KEY/CERT signing key and certificate (never in the repo)
 set -e
 CODE=$1
@@ -24,6 +26,7 @@ BASE=${BASE:-/root/out/OpenXWA-quest-0.0.17-quest27.apk}
 MANIFEST=${MANIFEST:-$SP/q21/base/AndroidManifest.xml}
 VKSHIM=${VKSHIM:-$(find /root/build-android -name libopenxwa_vkshim.so | head -1)}
 ASSETS=${ASSETS:-$SP/tieassets}
+VOICE=${VOICE:-$SP/vrassets/voice}
 KEY=${KEY:-/root/android/signing/openxwa-quest-key.pem}
 CERT=${CERT:-/root/android/signing/openxwa-quest-cert.der}
 OUT=${OUT:-/root/out/OpenTIE-VR-$VER.apk}
@@ -77,6 +80,12 @@ EXTRA="$EXTRA assets/THIRD-PARTY-NOTICES.txt=stage/THIRD-PARTY-NOTICES.txt"
 if [ -f "$ASSETS/vr_splash.png" ]; then EXTRA="$EXTRA assets/vr_splash.png=$ASSETS/vr_splash.png"; fi
 if [ -d "$ASSETS/icon" ]; then
   for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do EXTRA="$EXTRA res/mipmap-$d/ic_launcher.png=$ASSETS/icon/ic_launcher_$d.png"; done
+fi
+# Voice commands: the speech model (vr_voice.c copies it out on first use).
+if [ -f "$VOICE/encoder.onnx" ]; then
+  for f in encoder.onnx decoder.onnx joiner.onnx tokens.txt; do EXTRA="$EXTRA assets/voice/$f=$VOICE/$f"; done
+else
+  echo "warning: no speech model in $VOICE: voice commands will be off" >&2
 fi
 if [ -d "$ASSETS/vr" ]; then
   for f in "$ASSETS"/vr/*; do EXTRA="$EXTRA assets/vr/$(basename "$f")=$f"; done

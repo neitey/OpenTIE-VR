@@ -46,6 +46,8 @@ static const char* const k_refresh_labels[] = { "Headset Default", "72 Hz", "90 
 static const char* const k_refresh_values[] = { "0", "72", "90", "120" };
 static const char* const k_fov_labels[] = { "Off", "Low", "Medium", "High" };
 static const char* const k_fov_values[] = { "0", "low", "medium", "high" };
+static const char* const k_voice_labels[] = { "Off", "Double-Tap Thumb Rest", "Hold Thumb Rest" };
+static const char* const k_voice_values[] = { "0", "doubletap", "hold" };
 static const char* const k_screen_labels[] = { "2.5 m", "3.2 m", "4 m" };
 static const char* const k_screen_values[] = { "2.5", "3.2", "4.0" };
 
@@ -63,6 +65,9 @@ static const TieVrOptionRow k_rows[] = {
 	{ "XWA_XR_AUTO_PAUSE", "Pause When Headset Is Off", k_off_on, k_0_1, 2, 1, false, NULL },
 	{ "AERON_XR_INVERT_PITCH", "Invert Pitch", k_off_on, k_0_1, 2, 0, false, NULL },
 	{ "AERON_XR_LEFT_HANDED", "Left-Handed Controls", k_off_on, k_0_1, 2, 0, false, NULL },
+	{ "XWA_XR_VOICE", "Voice Commands", k_voice_labels, k_voice_values, 3, 1, false,
+	  "In flight: double-tap a thumb rest (or hold it), then speak, e.g. \"attack my target\", \"next target\", "
+	  "\"full throttle\", \"lasers to shields\", \"cover me\"." },
 	{ "AERON_XR_RESOLUTION_SCALE", "Resolution", k_res_labels, k_res_values, 4, 2, true, NULL },
 	{ "AERON_XR_REFRESH_RATE", "Refresh Rate", k_refresh_labels, k_refresh_values, 4, 0, true, NULL },
 	{ "XWA_XR_FOVEATION", "Foveation", k_fov_labels, k_fov_values, 4, 1, true,
@@ -71,6 +76,8 @@ static const TieVrOptionRow k_rows[] = {
 };
 
 enum { TIE_VR_ROW_COUNT = (int)(sizeof k_rows / sizeof k_rows[0]) };
+/* Rows from here on apply after a restart (AERON_XR_RESOLUTION_SCALE ...). */
+enum { TIE_VR_FIRST_HEADSET_ROW = 10 };
 
 static bool s_restart_needed;
 
@@ -122,14 +129,14 @@ void TieVrOptions_Draw(AeronUiContext* ui) {
 	AeronUi_Header(ui, "Virtual Reality");
 	for (int i = 0; i < TIE_VR_ROW_COUNT; ++i) {
 		const TieVrOptionRow* row = &k_rows[i];
-		if (i == 9) {
+		if (i == TIE_VR_FIRST_HEADSET_ROW) {
 			AeronUi_Spacer(ui, 8.0f);
 			AeronUi_Header(ui, "Headset (restart to apply)");
 		}
 		int index = TieVrOptions_Current(row);
 		if (AeronUi_Selector(ui, row->label, &index, row->labels, row->count))
 			TieVrOptions_Set(row, index);
-		if (row->help && i < 9)
+		if (row->help && i < TIE_VR_FIRST_HEADSET_ROW)
 			AeronUi_Help(ui, row->help);
 	}
 	AeronUi_Spacer(ui, 8.0f);

@@ -10,6 +10,7 @@
 #include "aeron/compat/host.h"
 #include "tie_app/hotkeys.h"
 #include "tie_app/quest/quest_app.h"
+#include "tie_app/quest/vr_voice.h"
 #include <SDL3/SDL_stdinc.h>
 #include "tie_app/settings/flight_options.h"
 #include "tie_app/settings/settings.h"
@@ -170,6 +171,7 @@ void TieFrameLoop_Run(void) {
 		if (Aeron_FatalErrorRequested())
 			break;
 		TieInput_UpdateKeyboard(input, menu_open || hotkey_frame.paused || focus_paused);
+		TieVrVoice_Update(menu_open || hotkey_frame.paused || focus_paused);
 		if (!menu_open)
 			TieInput_BeginFrame(delta_us);
 		if (!hotkey_frame.paused && !menu_open && !focus_paused)
@@ -214,5 +216,6 @@ void TieFrameLoop_Run(void) {
 		}
 		Aeron_WaitForNextFrame(wake_delay_us);
 	}
+	TieVrVoice_Shutdown();
 	TieClassicLayer_Shutdown();
 }

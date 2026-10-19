@@ -26,7 +26,13 @@ set(TIE_APP_SOURCES
     setup/installation_ui.c
     setup/setup.c
     quest/quest_app.c
-    quest/quest_app.h)
+    quest/quest_app.h
+    quest/voice_commands.c
+    quest/voice_commands.h
+    quest/voice_core.c
+    quest/voice_core.h
+    quest/vr_voice.c
+    quest/vr_voice.h)
 if(ANDROID)
     list(APPEND TIE_APP_SOURCES quest/xr_tier.c quest/crash_report.c)
 endif()
@@ -58,9 +64,12 @@ endif()
 
 target_include_directories(tie PRIVATE
     ${CMAKE_SOURCE_DIR}/src)
+# third_party/sherpa-onnx/c-api.h (voice commands; the library is dlopen'ed).
+set_source_files_properties(quest/voice_core.c PROPERTIES INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}")
 target_link_libraries(tie PRIVATE
     tie_core
-    tie_remaster)
+    tie_remaster
+    ${CMAKE_DL_LIBS})
 target_compile_definitions(tie PRIVATE
     TIE_SHADER_RELATIVE_DIR="${TIE_SHADER_RELATIVE_DIR}"
     TIE_VERSION_STRING="${TIE_DISPLAY_VERSION}")
@@ -176,4 +185,13 @@ if(WIN32)
     configure_file("${CMAKE_SOURCE_DIR}/cmake/windows/tie.rc.in"
                    "${CMAKE_CURRENT_BINARY_DIR}/tie.rc" @ONLY)
     target_sources(tie PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/tie.rc")
+endif()
+
+# Voice command matcher test (host): ninja tie_voice_test && ./tie_voice_test
+if(NOT ANDROID)
+    add_executable(tie_voice_test EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tests/voice_commands_test.c
+        quest/voice_commands.c)
+    target_include_directories(tie_voice_test PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/aeron/include)
+    set_target_properties(tie_voice_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
