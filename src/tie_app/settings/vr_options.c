@@ -85,6 +85,13 @@ static const TieVrOptionRow k_rows[] = {
 	  "What surrounds the menu screen: a Star Destroyer and TIE fighters in space, or just stars." },
 	{ "XWA_XR_ENV_BRIGHTNESS", "Menu Scene Brightness", k_env_bright_labels, k_env_bright_values, 3, 1, false,
 	  NULL },
+	{ "XWA_XR_CONSOLE", "Lap Console", k_off_on, k_0_1, 2, 1, false,
+	  "A touch panel over your lap (look down): energy, targeting, wingmen, ship. Touch a button or point at it "
+	  "and pull the trigger; squeeze a grip at its end to move it." },
+	{ "XWA_XR_WHEEL", "Radial Menu", k_off_on, k_0_1, 2, 1, false,
+	  "Hold the left grip still for a moment (no button with it), point at a command, pull the left trigger." },
+	{ "XWA_XR_SIDE_PANEL", "Side Panel", k_off_on, k_0_1, 2, 1, false,
+	  "On your right: tactical map, voice commands, button mapping." },
 	{ "AERON_XR_RESOLUTION_SCALE", "Resolution", k_res_labels, k_res_values, 4, 2, true, NULL },
 	{ "AERON_XR_REFRESH_RATE", "Refresh Rate", k_refresh_labels, k_refresh_values, 4, 0, true, NULL },
 	{ "XWA_XR_FOVEATION", "Foveation", k_fov_labels, k_fov_values, 4, 1, true,
@@ -93,8 +100,6 @@ static const TieVrOptionRow k_rows[] = {
 };
 
 enum { TIE_VR_ROW_COUNT = (int)(sizeof k_rows / sizeof k_rows[0]) };
-/* Rows from here on apply after a restart (AERON_XR_RESOLUTION_SCALE ...). */
-enum { TIE_VR_FIRST_HEADSET_ROW = 15 };
 
 static bool s_restart_needed;
 
@@ -146,20 +151,31 @@ void TieVrOptions_Draw(AeronUiContext* ui) {
 	AeronUi_Header(ui, "Virtual Reality");
 	for (int i = 0; i < TIE_VR_ROW_COUNT; ++i) {
 		const TieVrOptionRow* row = &k_rows[i];
-		if (i == TIE_VR_FIRST_HEADSET_ROW) {
+		/* The rows that apply after a restart come last, under their own
+		 * header. */
+		if (row->restart && (i == 0 || !k_rows[i - 1].restart)) {
 			AeronUi_Spacer(ui, 8.0f);
 			AeronUi_Header(ui, "Headset (restart to apply)");
 		}
 		int index = TieVrOptions_Current(row);
 		if (AeronUi_Selector(ui, row->label, &index, row->labels, row->count))
 			TieVrOptions_Set(row, index);
-		if (row->help && i < TIE_VR_FIRST_HEADSET_ROW)
+		if (row->help && !row->restart)
 			AeronUi_Help(ui, row->help);
+		if (strcmp(row->key, "XWA_XR_CONSOLE") == 0) {
+			const char* pose = SDL_getenv("XWA_XR_CONSOLE_POSE");
+			if (AeronUi_ButtonEnabled(ui, "Reset Console Position", pose && pose[0])) {
+				SDL_setenv_unsafe("XWA_XR_CONSOLE_POSE", "", 1);
+				TieQuest_SaveSetting("XWA_XR_CONSOLE_POSE", "");
+			}
+		}
 	}
 	AeronUi_Spacer(ui, 8.0f);
 	if (AeronUi_Button(ui, "Restore VR Defaults")) {
 		for (int i = 0; i < TIE_VR_ROW_COUNT; ++i)
 			TieVrOptions_Set(&k_rows[i], k_rows[i].default_index);
+		SDL_setenv_unsafe("XWA_XR_CONSOLE_POSE", "", 1);
+		TieQuest_SaveSetting("XWA_XR_CONSOLE_POSE", "");
 		/* The flight stick back to its own spot. */
 		SDL_unsetenv_unsafe("XWA_XR_STICK_POS");
 		TieQuest_SaveSetting("XWA_XR_STICK_POS", "");

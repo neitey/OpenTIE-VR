@@ -64,8 +64,15 @@ void TieVrHands_RenderLayers(AeronCommandBuffer* cmd, const AeronXrStereoFrame* 
 void TieVrHands_CommitLayers(const AeronXrHudQuad* hud, const AeronXrHudQuad* hud_world,
 							 const AeronXrStereoFrame* frame);
 
+/* After CommitLayers: another committed quad (a VR panel: lap console,
+ * side panel, quick wheel) the hands are shown in front of next frame. */
+void TieVrHands_AddPanelLayer(const AeronXrPanel* quad);
+
 /* A VR panel owns hand 0/1's grip this frame (the game does not see it). */
 void TieVrHands_CaptureGrip(int hand);
+/* Whether something (the flight stick, a panel) took hand 0/1's grip so far
+ * this frame. */
+int TieVrHands_GripCaptured(int hand);
 
 void TieVrHands_EndFrame(void);
 

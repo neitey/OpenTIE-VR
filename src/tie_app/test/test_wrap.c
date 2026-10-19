@@ -298,6 +298,7 @@ static struct {
 	int vstick_active;
 	float vstick[3];
 	int grip_captured[2];
+	int trigger_captured[2]; /* Aeron_XrCaptureTrigger, logged when it changes */
 } s_xr = { .pointer = -1, .menu_keys = -1, .flight_buttons = -1 };
 
 void TieTestXr_Enable(int eye_width, int eye_height) {
@@ -805,6 +806,17 @@ void __wrap_Aeron_XrCaptureGrip(int hand, int captured) {
 		fflush(stdout);
 	}
 	__real_Aeron_XrCaptureGrip(hand, captured);
+}
+
+void __real_Aeron_XrCaptureTrigger(int hand, int captured);
+void __wrap_Aeron_XrCaptureTrigger(int hand, int captured) {
+	if (s_xr.on && hand >= 0 && hand < 2 && s_xr.trigger_captured[hand] != (captured != 0)) {
+		s_xr.trigger_captured[hand] = captured != 0;
+		printf("[tie-test] frame %llu: xr trigger %d %s\n", (unsigned long long)TieTest_Frame(), hand,
+			   captured ? "captured" : "released");
+		fflush(stdout);
+	}
+	__real_Aeron_XrCaptureTrigger(hand, captured);
 }
 
 int __real_Aeron_XrLocateRenderModel(int hand, float position[3], float orientation[4], AeronXrRenderModelNode* nodes,

@@ -8,11 +8,12 @@
 #include "aeron/aeron.h"
 #include "tie_remaster/flight/render_math.h"
 #include "tie_remaster/vr/vr_controller_labels.h"
+#include "tie_remaster/flight/vr_console.h"
 #include "tie_remaster/vr/vr_flight_stick.h"
 #include "tie_remaster/vr/vr_gloves.h"
 #include "tie_remaster/vr/vr_hand_overlay.h"
 
-enum { TIE_VR_HANDS_MAX_LAYERS = 4 };
+enum { TIE_VR_HANDS_MAX_LAYERS = 8 };
 
 static struct {
 	int submitted; /* hands submitted this host frame */
@@ -122,17 +123,28 @@ void TieVrHands_CommitLayers(const AeronXrHudQuad* hud, const AeronXrHudQuad* hu
 		TieVrHandOverlay_Rects(rects);
 		Aeron_XrStereoCommitEyeOverlayRect((const int(*)[4])rects);
 	}
-	if (s_hands.label_count > 0)
+	/* No button labels while a controller points at the lap console, the
+	 * side panel or the wheel: they would sit over what it points at. */
+	float ray_start[3], ray_end[3];
+	const int pointing = TieVrConsole_RayBeam(0, ray_start, ray_end) || TieVrConsole_RayBeam(1, ray_start, ray_end);
+	if (s_hands.label_count > 0 && !pointing)
 		Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_LABELS, s_hands.labels, s_hands.label_count);
 	s_hands.layer_count = 0;
 	TieVrHands_LayerFromQuad(hud, frame);
 	TieVrHands_LayerFromQuad(hud_world, frame);
 }
 
+void TieVrHands_AddPanelLayer(const AeronXrPanel* quad) {
+	if (quad && quad->size[0] > 0.0f && quad->size[1] > 0.0f && s_hands.layer_count < TIE_VR_HANDS_MAX_LAYERS)
+		s_hands.layers[s_hands.layer_count++] = *quad;
+}
+
 void TieVrHands_CaptureGrip(int hand) {
 	if (hand >= 0 && hand < 2)
 		s_hands.grip_capture[hand] = 1;
 }
+
+int TieVrHands_GripCaptured(int hand) { return hand >= 0 && hand < 2 && s_hands.grip_capture[hand]; }
 
 void TieVrHands_EndFrame(void) {
 	if (!s_hands.submitted) {

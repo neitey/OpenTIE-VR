@@ -1,0 +1,48 @@
+# VR lap console, side panel and quick wheel with the fake headset (needs
+# TIE_TEST_XR=1). xrpose values from tools/vrtest/aim_panel.py: a controller at
+# (x, y, z) LOCAL metres turned yaw (+left) / pitch (+up) degrees so its ray
+# meets a panel pixel (console: 1536x512 px, 0.51x0.17 m, 52 deg down at
+# 0.52 m; side panel: 1024x768 px, 0.40x0.30 m, 80 deg right, 12 down, 0.6 m).
+#   run.sh <build> tools/vrtest/scripts/console.txt /tmp/out TIE_TEST_XR=1
+#   python3 tools/vrtest/compose.py /tmp/out/*_xr.txt
+# Expect: LASERS MAX lit + "Cannons recharging at maximum rate" (console_pressed),
+# the side panel's three tabs, the wheel's ENERGY ring, laser recharge -> off.
+0 mission HF1W
+0 wait flying 5 timeout=4000
++1 axis yaw 1
++1 axis pitch -0.6
++1 head 0 -52                     # look down at the lap console
++3 capture console_idle
++1 axis yaw 0
++1 axis pitch 0
++1 xrpose right 0.150 -0.300 -0.250 65.39 -15.54   # at LASERS: MAX
++2 capture console_aim
++1 xrhand right 1
++2 xrhand right 0
++6 capture console_pressed
++1 head -80 -12                   # look right at the side panel
++3 capture panel_map
++1 xrpose right 0.250 -0.200 -0.200 -104.73 29.07  # at the VOICE COMMANDS tab
++2 xrhand right 1
++2 xrhand right 0
++3 capture panel_voice
++1 xrpose right 0.250 -0.200 -0.200 -120.08 25.09  # at the BUTTON MAPPING tab
++2 xrhand right 1
++2 xrhand right 0
++3 capture panel_buttons
++1 head 0 -10
++1 xrpose left -0.15 -0.35 -0.35 0 27
++1 xrhand left 0 1                # hold the left grip: the wheel opens
++3 capture wheel_open
++1 xrpose left -0.15 -0.35 -0.35 -26.6 0   # at ENERGY (3 o'clock)
++2 capture wheel_energy_hover
++1 xrhand left 1 1
++2 xrhand left 0 1
++1 xrpose left -0.15 -0.35 -0.35 -27.5 14.9  # at LASER RECHARGE
++2 capture wheel_energy
++1 xrhand left 1 1
++2 xrhand left 0 1
++4 capture wheel_laser_off
++1 xrhand left 0 0
++3 capture wheel_closed
++2 quit

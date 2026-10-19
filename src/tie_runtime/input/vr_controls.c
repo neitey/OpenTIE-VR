@@ -22,7 +22,18 @@ static struct {
 	int pointer;  /* last Aeron_XrSetPointerEnabled value, -1 unknown */
 	int buttons;  /* last Aeron_XrSetFlightButtons value, -1 unknown */
 	bool logged;
+	uint32_t shift_uses;  /* grip-layer uses (TieVrControls_ShiftUseSerial) */
+	bool wheel_open;      /* the quick wheel owns a trigger */
+	bool grip_owned[2];   /* a panel holds this physical grip */
 } g_vr = { .pointer = -1, .buttons = -1 };
+
+uint32_t TieVrControls_ShiftUseSerial(void) { return g_vr.shift_uses; }
+
+void TieVrControls_SetConsoleState(bool wheel_open, const bool grip_owned[2]) {
+	g_vr.wheel_open = wheel_open;
+	g_vr.grip_owned[0] = grip_owned && grip_owned[0];
+	g_vr.grip_owned[1] = grip_owned && grip_owned[1];
+}
 
 /* ---- helpers ---- */
 
@@ -42,7 +53,10 @@ static float TieVrControls_HandTrigger(int physical_hand) {
 /* The shift layer: the (game-side) left grip held. */
 static bool TieVrControls_ShiftHeld(void) {
 	AeronXrHand hand;
-	return Aeron_XrGetHand(TieVrControls_PhysicalHand(0), &hand) && hand.grip >= TIE_VR_SHIFT_GRIP;
+	const int physical = TieVrControls_PhysicalHand(0);
+	if (g_vr.grip_owned[physical])
+		return false; /* it holds a panel by its handle */
+	return Aeron_XrGetHand(physical, &hand) && hand.grip >= TIE_VR_SHIFT_GRIP;
 }
 
 static bool TieVrControls_HapticsEnabled(void) {
@@ -133,6 +147,8 @@ static void TieVrControls_UpdateChord(bool enabled, bool shift) {
 		return;
 	g_chord.fired = true;
 	g_chord.trigger_pending = false;
+	if (shift)
+		++g_vr.shift_uses;
 	if (pstate.space_confirm_action)
 		TieVrControls_Dispatch(TIE_INPUT_ACTION_CONFIRM);
 	else
@@ -217,6 +233,8 @@ static void TieVrControls_FlightButton(AeronXrButton button, bool shifted, bool 
 		return;
 	}
 	const TieInputAction action = TieVrButtons_Action(button, shifted);
+	if (shifted && action != TIE_INPUT_ACTION_NONE)
+		++g_vr.shift_uses;
 	TieVrControls_Dispatch(action);
 	if (action != TIE_INPUT_ACTION_NONE && TieVrControls_HapticsEnabled()) {
 		/* A short tick on the controller that pressed it. */
@@ -281,9 +299,11 @@ uint32_t TieVrControls_Frame(bool settings_open, bool host_paused) {
 		requests |= TIE_VR_REQUEST_CLOSE_SETTINGS;
 
 	const bool shift = flight && TieVrControls_ShiftHeld();
-	TieVrControls_UpdateChord(flight, shift);
-	const bool chord_offered = flight && TieVrControls_ChordOffered(shift);
-	if (!flight)
+	/* The open quick wheel's trigger picks commands: no chord meanwhile. */
+	const bool chord_enabled = flight && !g_vr.wheel_open;
+	TieVrControls_UpdateChord(chord_enabled, shift);
+	const bool chord_offered = chord_enabled && TieVrControls_ChordOffered(shift);
+	if (!chord_enabled)
 		g_chord.trigger_pending = false;
 
 	AeronXrButton button;

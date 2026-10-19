@@ -11,6 +11,7 @@
 #include "tie_remaster/flight/render_math.h"
 #include "tie_remaster/flight/renderer.h"
 #include "tie_remaster/flight/xr_env.h"
+#include "tie_remaster/flight/vr_console.h"
 #include "tie_remaster/flight/xr_stereo.h"
 #include "tie_remaster/vr/vr_hands.h"
 #include "tie_remaster/integration/snapshot_adapter.h"
@@ -803,6 +804,20 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		ok = TieFlightRenderer_RenderFrame(flight->renderer, cmd);
 	}
 
+	/* VR panels (lap console, side panel, quick wheel): redrawn into their
+	 * own layers only when they change; shown after the HUD commit. They
+	 * are hidden (count 0) outside cockpit flight. */
+	AeronXrPanel console_quads[2], panel_quads[2], wheel_quads[2];
+	int console_n = 0, panel_n = 0, wheel_n = 0;
+	if (ok && xr) {
+		if (xr->console_width > 0)
+			console_n = TieVrConsole_Frame(cmd, xr->console_width, xr->console_height, xr->views, console_quads);
+		if (xr->card_width > 0) {
+			panel_n = TieVrConsole_PanelFrame(cmd, xr->card_width, xr->card_height, xr->views, panel_quads);
+			wheel_n = TieVrConsole_WheelFrame(cmd, xr->card_width, xr->card_height, xr->views, wheel_quads);
+		}
+	}
+
 	/* The flat image: the window, or the virtual screen. In stereo only for
 	 * a desktop mirror (it shows the right eye without the HUD). */
 	if (ok && (!xr || Aeron_HasDesktopMirror())) {
@@ -847,6 +862,16 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		}
 		/* The hands in front of the HUD, the controller labels. */
 		TieVrHands_CommitLayers(&hud, xr_split ? &hud_world : NULL, xr);
+		/* The VR panels; the hands come out in front of them next frame. */
+		Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_CONSOLE, console_quads, console_n);
+		Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_CARD, panel_quads, panel_n);
+		Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_CARD2, wheel_quads, wheel_n);
+		for (int i = 0; i < console_n; ++i)
+			TieVrHands_AddPanelLayer(&console_quads[i]);
+		for (int i = 0; i < panel_n; ++i)
+			TieVrHands_AddPanelLayer(&panel_quads[i]);
+		for (int i = 0; i < wheel_n; ++i)
+			TieVrHands_AddPanelLayer(&wheel_quads[i]);
 	}
 	return true;
 }
@@ -1202,6 +1227,9 @@ bool TieRemaster_Frame(const TieSnapshot* snapshot, int32_t delta_us, bool pause
 		return true;
 	TieVrHands_BeginFrame();
 	const bool ok = TieRemaster_FrameBody(snapshot, delta_us, paused);
+	/* The VR panels hand their grips to vr_hands (applied in its EndFrame)
+	 * and let go of what they did not show this frame. */
+	TieVrConsole_EndFrame();
 	/* Without a stereo flight frame (menus, flat flight) the hands hide and
 	 * let go of the flight stick. */
 	TieVrHands_EndFrame();
@@ -1414,5 +1442,6 @@ void TieRemaster_Shutdown(void) {
 		Aeron_DestroyRenderTarget(scene->retired_target);
 	if (scene->cutscene)
 		TieScene2dCutscene_Shutdown(scene->cutscene);
+	TieVrConsole_Shutdown();
 	memset(&g_remaster, 0, sizeof g_remaster);
 }
