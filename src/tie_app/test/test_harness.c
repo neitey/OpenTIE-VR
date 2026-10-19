@@ -46,6 +46,10 @@
  *   xrmenu a|b|x|y           latch for Aeron_XrTakeAPressed/TakeMenu?Pressed
  *   xrthrottle <0..1>        Aeron_XrThrottleLever
  *   xrhand left|right <trigger> [grip]   Aeron_XrGetHand trigger/grip
+ *   xrpose left|right <x> <y> <z> [yaw pitch]   hand pose (m LOCAL, deg),
+ *                            replaces TIE_TEST_XR_LHAND/RHAND from then on
+ *   (the game's flight stick, Aeron_XrSetVirtualStick, moves the xrpad's
+ *   right-stick axes like the engine does: logged as "xr vstick")
  *   log <text>, quit
  * ------------------------------------------------------------------------ */
 
@@ -69,6 +73,7 @@ enum {
 	TT_CMD_XRMENU,
 	TT_CMD_XRTHROTTLE,
 	TT_CMD_XRHAND,
+	TT_CMD_XRPOSE,
 	TT_CMD_XRPAD,
 };
 
@@ -308,6 +313,7 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 		{ "xrmenu", TT_CMD_XRMENU },
 		{ "xrthrottle", TT_CMD_XRTHROTTLE },
 		{ "xrhand", TT_CMD_XRHAND },
+		{ "xrpose", TT_CMD_XRPOSE },
 		{ "xrpad", TT_CMD_XRPAD },
 	};
 	out->cmd = -1;
@@ -441,6 +447,25 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 			out->ivalue[0] = SDL_strcasecmp(arg, "right") == 0;
 			out->fvalue[0] = (float)SDL_atof(trigger);
 			out->fvalue[1] = grip ? (float)SDL_atof(grip) : 0.0f;
+			return true;
+		}
+		case TT_CMD_XRPOSE: {
+			arg = TieTest_NextToken(&cursor);
+			if (!arg || (SDL_strcasecmp(arg, "left") && SDL_strcasecmp(arg, "right"))) {
+				TieTest_Log("script line %d: xrpose left|right <x> <y> <z> [yaw pitch]", line_no);
+				return false;
+			}
+			out->ivalue[0] = SDL_strcasecmp(arg, "right") == 0;
+			float pose[5] = { 0.0f, 0.0f, 0.0f, out->ivalue[0] ? 10.0f : -10.0f, 30.0f };
+			int n = 0;
+			for (char* t; n < 5 && (t = TieTest_NextToken(&cursor)) != NULL; ++n)
+				pose[n] = (float)SDL_atof(t);
+			if (n < 3) {
+				TieTest_Log("script line %d: xrpose left|right <x> <y> <z> [yaw pitch]", line_no);
+				return false;
+			}
+			SDL_memcpy(out->fvalue, pose, sizeof pose);
+			out->fcount = 5;
 			return true;
 		}
 		case TT_CMD_WAIT: {
@@ -894,6 +919,7 @@ static void TieTest_Execute(AeronInputSnapshot* input, const TieTestLine* line) 
 		case TT_CMD_XRMENU:
 		case TT_CMD_XRTHROTTLE:
 		case TT_CMD_XRHAND:
+		case TT_CMD_XRPOSE:
 			if (!TieTestXr_Enabled()) {
 				TieTest_Log("script line %d: XR controller input needs TIE_TEST_XR=1", line->line_no);
 				break;
@@ -904,6 +930,8 @@ static void TieTest_Execute(AeronInputSnapshot* input, const TieTestLine* line) 
 				TieTestXr_MenuPress(line->ivalue[0]);
 			else if (line->cmd == TT_CMD_XRTHROTTLE)
 				TieTestXr_SetThrottle(line->fvalue[0]);
+			else if (line->cmd == TT_CMD_XRPOSE)
+				TieTestXr_SetHandPose(line->ivalue[0], line->fvalue);
 			else
 				TieTestXr_SetHandInput(line->ivalue[0], line->fvalue[0], line->fvalue[1]);
 			break;
@@ -977,10 +1005,24 @@ static void TieTest_ApplyGamepad(AeronInputSnapshot* input) {
 		pad->gamepad_available_axes = (1u << AERON_GAMEPAD_AXIS_COUNT) - 1u;
 		pad->gamepad_available_buttons = (uint32_t)((1ull << AERON_GAMEPAD_BUTTON_COUNT) - 1ull);
 	}
+	int16_t axes[AERON_GAMEPAD_AXIS_COUNT];
+	SDL_memcpy(axes, g_test.pad_axes, sizeof axes);
+	/* The game's flight stick drives the XR pad's right-stick axes (LEFTX/
+	 * LEFTY, forward = -Y) and roll (RIGHTX), whichever is pushed further,
+	 * as Aeron's virtual Touch pad does. */
+	float vstick[3];
+	if (g_test.pad_is_xr && TieTestXr_VirtualStick(vstick)) {
+		const int16_t v[3] = { (int16_t)(vstick[0] * 32767.0f), (int16_t)(-vstick[1] * 32767.0f),
+							   (int16_t)(vstick[2] * 32767.0f) };
+		const int slot[3] = { AERON_GAMEPAD_AXIS_LEFTX, AERON_GAMEPAD_AXIS_LEFTY, AERON_GAMEPAD_AXIS_RIGHTX };
+		for (int k = 0; k < 3; ++k)
+			if (abs(v[k]) > abs(axes[slot[k]]))
+				axes[slot[k]] = v[k];
+	}
 	for (int i = 0; i < AERON_GAMEPAD_AXIS_COUNT; ++i) {
-		pad->gamepad_axes[i] = g_test.pad_axes[i];
+		pad->gamepad_axes[i] = axes[i];
 		if (i < AERON_CONTROLLER_AXIS_MAX)
-			pad->raw_axes[i] = g_test.pad_axes[i];
+			pad->raw_axes[i] = axes[i];
 	}
 	pad->gamepad_buttons = g_test.pad_buttons;
 	pad->gamepad_pressed_buttons = g_test.pad_buttons & ~g_test.pad_prev_buttons;

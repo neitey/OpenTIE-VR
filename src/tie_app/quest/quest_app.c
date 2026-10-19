@@ -66,7 +66,17 @@ static const char k_settings_template[] =
 	"# 1 = right thumbstick back pushes the nose down (inverted pitch):\n"
 	"#AERON_XR_INVERT_PITCH=0\n"
 	"# 1 = left-handed controls (the controllers trade roles):\n"
-	"#AERON_XR_LEFT_HANDED=0\n";
+	"#AERON_XR_LEFT_HANDED=0\n"
+	"# Your hands in flight: controllers, gloves or off:\n"
+	"#XWA_XR_HANDS=controllers\n"
+	"# 0 = no button labels when you look at a controller:\n"
+	"#XWA_XR_CONTROLLER_LABELS=1\n"
+	"# 0 = no grabbable flight stick right of the seat:\n"
+	"#XWA_XR_FLIGHT_STICK=1\n"
+	"# Its spot (x,y,z in metres from your head; set by moving it with the left grip):\n"
+	"#XWA_XR_STICK_POS=0.12,-0.70,-0.32\n"
+	"# Glove size (1 = the model's own, large):\n"
+	"#XWA_XR_GLOVE_SCALE=0.85\n";
 
 static void quest_load_settings(void) {
 	char path[1100];
