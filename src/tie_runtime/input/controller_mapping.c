@@ -263,11 +263,16 @@ bool TieControllerMapping_InitializeGamepads(TieControllerOptions* options,
 	/* The OpenXR virtual gamepad uses the built-in XR profile unless the
 	 * player configured it. Earlier builds auto-added it with the ordinary
 	 * gamepad defaults (whose right trigger fires: the throttle lever on
-	 * this pad); drop such an untouched entry. */
+	 * this pad); drop such an untouched entry, and a cleared one ("Clear
+	 * All" in the settings), which would leave the headset without
+	 * controls. */
 	for (size_t i = 0; i < options->count; ++i) {
 		TieControllerModel* m = &options->models[i];
+		TieControllerProfile cleared;
+		TieControllerMapping_ClearProfile(&cleared, AERON_CONTROLLER_KIND_GAMEPAD);
 		if (strcmp(m->guid, TIE_XR_PAD_GUID) || m->kind != AERON_CONTROLLER_KIND_GAMEPAD ||
-			!TieControllerMapping_ProfileEqual(&m->profile, defaults))
+			(!TieControllerMapping_ProfileEqual(&m->profile, defaults) &&
+			 !TieControllerMapping_ProfileEqual(&m->profile, &cleared)))
 			continue;
 		memmove(m, m + 1, (options->count - i - 1) * sizeof *m);
 		--options->count;

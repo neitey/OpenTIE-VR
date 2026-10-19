@@ -214,6 +214,23 @@ static void TestXrProfile(void) {
 	options.models[0].profile = defaults;
 	CHECK(TieControllerMapping_InitializeGamepads(&options, &defaults, &g_input, error, sizeof error));
 	CHECK(options.count == 0);
+	/* A player's own XR profile stays; a cleared one goes. */
+	CHECK(TieControllerMapping_AddModel(&options, pad, error, sizeof error));
+	options.models[0].profile = *TieControllerMapping_XrProfile();
+	options.models[0].profile.mapping.axes[TIE_INPUT_AXIS_ROLL].invert = true;
+	CHECK(TieControllerMapping_InitializeGamepads(&options, &defaults, &g_input, error, sizeof error));
+	CHECK(options.count == 1);
+	TieControllerMapping_ClearProfile(&options.models[0].profile, AERON_CONTROLLER_KIND_GAMEPAD);
+	CHECK(TieControllerMapping_InitializeGamepads(&options, &defaults, &g_input, error, sizeof error));
+	CHECK(options.count == 0);
+	/* Real gamepads still get the defaults. */
+	g_input.controllers[0] = *pad;
+	snprintf(g_input.controllers[0].path, sizeof g_input.controllers[0].path, "/dev/input/event7");
+	snprintf(g_input.controllers[0].guid, sizeof g_input.controllers[0].guid, "030000005e0400008e02000014010000");
+	g_input.controllers[0].instance_id = 7;
+	CHECK(TieControllerMapping_InitializeGamepads(&options, &defaults, &g_input, error, sizeof error));
+	CHECK(options.count == 1);
+	memset(&g_input.controllers[0], 0, sizeof g_input.controllers[0]);
 
 	/* Stick forward (negative LEFTY) is nose down (negative pitch). */
 	TieControllerMapping_SetXrFlight(true);
