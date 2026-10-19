@@ -57,18 +57,16 @@ static void TieVrControls_Dispatch(TieInputAction action) {
 	TieInputActions_DispatchController(action, false);
 }
 
+/* Set every frame (cheap flags in Aeron), so another caller cannot leave a
+ * stale mode behind. */
 static void TieVrControls_SetPointer(int enabled) {
-	if (enabled != g_vr.pointer) {
-		g_vr.pointer = enabled;
-		Aeron_XrSetPointerEnabled(enabled);
-	}
+	g_vr.pointer = enabled;
+	Aeron_XrSetPointerEnabled(enabled);
 }
 
 static void TieVrControls_SetButtons(int enabled) {
-	if (enabled != g_vr.buttons) {
-		g_vr.buttons = enabled;
-		Aeron_XrSetFlightButtons(enabled);
-	}
+	g_vr.buttons = enabled;
+	Aeron_XrSetFlightButtons(enabled);
 }
 
 float TieVrControls_LeverForThrottle(uint16_t throttle) {
