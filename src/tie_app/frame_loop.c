@@ -18,6 +18,7 @@
 #include "tie_runtime/display/classic_framebuffer.h"
 #include "tie_runtime/flight_assets/service.h"
 #include "tie_runtime/input/input.h"
+#include "tie_runtime/input/vr_controls.h"
 #include "tie_runtime/presentation/classic_layer.h"
 #include "tie_runtime/presentation/flight_marker.h"
 #include "tie_runtime/presentation/presentation.h"
@@ -160,6 +161,12 @@ void TieFrameLoop_Run(void) {
 		const TieHotkeysFrame hotkey_frame = TieHotkeys_Process(&hotkeys, input);
 		bool menu_open = hotkey_frame.menu_open;
 		bool settings_opened_this_frame = hotkey_frame.settings_opened;
+		/* VR controllers: pointer / flight-button modes, B = back. */
+		if ((TieVrControls_Frame(TieSettings_Open(), hotkey_frame.paused) & TIE_VR_REQUEST_CLOSE_SETTINGS) &&
+			TieSettings_Open() && !settings_opened_this_frame) {
+			TieSettings_Toggle();
+			menu_open = TieSettings_Open();
+		}
 		TieInput_UpdateCapture(TieSnapshot_Current(), TieSettings_Open());
 		TieClassicLayer_SyncInputExtent();
 
