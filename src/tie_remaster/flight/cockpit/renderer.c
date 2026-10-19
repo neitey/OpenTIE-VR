@@ -2758,6 +2758,12 @@ static void TieCockpitRenderer_DrawWidgetsForView(TieCockpitRenderer* cg, AeronC
 		TieCockpitRendererHudWidgetKind kind = (TieCockpitRendererHudWidgetKind)hud_widget_kind[idx];
 		if (!TieCockpitRenderer_ViewAllowsWidget(v, idx, kind))
 			continue;
+		/* XR world split: the gunsight (36) and its weapon fire-status marks
+		 * (37..44) belong to the craft-fixed world quad with the target box,
+		 * so they stay on the line of fire. */
+		AeronDrawList2D* const widget_list = cg->record_list;
+		if (idx >= 36 && idx <= 44 && cg->xr_world_ready)
+			cg->record_list = cg->xr_world_list;
 
 		switch (kind) {
 			case HUD_W_RADAR_DISC:
@@ -2790,6 +2796,7 @@ static void TieCockpitRenderer_DrawWidgetsForView(TieCockpitRenderer* cg, AeronC
 			default:
 				break;
 		}
+		cg->record_list = widget_list;
 	}
 }
 
