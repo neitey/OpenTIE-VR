@@ -9,6 +9,8 @@
 #include "aeron/aeron.h"
 #include "aeron/compat/host.h"
 #include "tie_app/hotkeys.h"
+#include "tie_app/quest/quest_app.h"
+#include <SDL3/SDL_stdinc.h>
 #include "tie_app/settings/flight_options.h"
 #include "tie_app/settings/settings.h"
 #include "tie_remaster/remaster.h"
@@ -40,7 +42,14 @@ static const TieFramebuffer* TieFrameLoop_Tie98AspectCorrectedFramebuffer(bool e
 static bool TieFrameLoop_UpdateFocus(const AeronInputSnapshot* input, bool* ever_had_focus) {
 	if (input && input->has_focus)
 		*ever_had_focus = true;
-	const bool focus_paused = input && !input->has_focus && *ever_had_focus;
+	bool focus_paused = input && !input->has_focus && *ever_had_focus;
+	/* Headset taken off or its system menu open (XWA_XR_AUTO_PAUSE=0 keeps
+	 * the game running). */
+	if (Aeron_XrIsUnfocused()) {
+		const char* auto_pause = SDL_getenv("XWA_XR_AUTO_PAUSE");
+		if (!(auto_pause && auto_pause[0] == '0'))
+			focus_paused = true;
+	}
 	TieRuntime_SetWindowActive(!focus_paused);
 	return focus_paused;
 }
@@ -143,6 +152,7 @@ void TieFrameLoop_Run(void) {
 		if (Aeron_QuitRequested())
 			TieRuntime_RequestExit();
 
+		TieQuest_Frame();
 		const AeronInputSnapshot* input = Aeron_InputSnapshot();
 		TieFrameLoop_DiscoverControllers(input);
 		const bool focus_paused = TieFrameLoop_UpdateFocus(input, &ever_had_focus);

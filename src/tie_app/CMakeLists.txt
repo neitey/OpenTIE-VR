@@ -1,4 +1,4 @@
-add_executable(tie
+set(TIE_APP_SOURCES
     application.c
     application.h
     frame_loop.c
@@ -23,7 +23,19 @@ add_executable(tie
     settings/controller_page.c
     setup/installation.c
     setup/installation_ui.c
-    setup/setup.c)
+    setup/setup.c
+    quest/quest_app.c
+    quest/quest_app.h)
+if(ANDROID)
+    list(APPEND TIE_APP_SOURCES quest/xr_tier.c quest/crash_report.c)
+endif()
+if(ANDROID)
+    # Quest: SDL's Java activity loads the game as libmain.so.
+    add_library(tie SHARED ${TIE_APP_SOURCES})
+    set_target_properties(tie PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+else()
+    add_executable(tie ${TIE_APP_SOURCES})
+endif()
 
 # Aeron resolves generated shaders and staged resources relative to the
 # executable. Keep the application beside those build-tree directories even
@@ -31,6 +43,9 @@ add_executable(tie
 set_target_properties(tie PROPERTIES
     OUTPUT_NAME "OpenTIE"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+if(ANDROID)
+    set_target_properties(tie PROPERTIES OUTPUT_NAME "main")
+endif()
 
 if(TIE_ENABLE_DEBUG_UI)
     target_sources(tie PRIVATE

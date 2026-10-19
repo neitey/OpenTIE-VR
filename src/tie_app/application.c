@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include "tie_app/application.h"
+#include "tie_app/quest/quest_app.h"
 #include "tie_app/frame_loop.h"
 #include "tie_app/window_icon.h"
 
@@ -134,13 +135,19 @@ static AeronDx5Rect TieApplication_Dx5PresentationRect(void* context, int surfac
 	};
 }
 
-int TieApplication_Run(const TieLaunchOptions* launch) {
-	const AeronConfig config = TieApplication_AeronConfig(launch);
+int TieApplication_Run(const TieLaunchOptions* launch_options) {
+	/* Headsets: settings file, log, game folders; VR when asked for. */
+	TieLaunchOptions launch_copy = *launch_options;
+	const TieLaunchOptions* launch = &launch_copy;
+	const int xr_requested = TieQuest_PreInit(&launch_copy);
+	AeronConfig config = TieApplication_AeronConfig(launch);
+	config.xr_enabled = xr_requested;
 
 	if (!Aeron_Init(&config)) {
 		fprintf(stderr, "[tie-aeron] Aeron_Init failed\n");
 		return 1;
 	}
+	TieQuest_PostInit();
 	/* Activation is asynchronous on macOS. Request it before the remaining
 	 * synchronous startup work, then service the events queued by Aeron_Init. */
 	Aeron_RaiseWindow();
