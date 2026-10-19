@@ -72,7 +72,7 @@ python3 "$HERE/manifest_rename.py" m5.xml AndroidManifest.xml org.opentie.quest 
 python3 "$HERE/dexgen_setup_provider.py" classes2.dex
 EXTRA="$EXTRA classes2.dex=classes2.dex"
 
-cp "$HERE/../THIRD-PARTY-NOTICES.txt" stage/THIRD-PARTY-NOTICES.txt
+cp "$HERE/../THIRD-PARTY-NOTICES-TIE.txt" stage/THIRD-PARTY-NOTICES.txt
 EXTRA="$EXTRA assets/THIRD-PARTY-NOTICES.txt=stage/THIRD-PARTY-NOTICES.txt"
 if [ -f "$ASSETS/vr_splash.png" ]; then EXTRA="$EXTRA assets/vr_splash.png=$ASSETS/vr_splash.png"; fi
 if [ -d "$ASSETS/icon" ]; then
