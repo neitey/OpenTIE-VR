@@ -319,6 +319,10 @@ struct TieFlightRenderer {
 	bool xr_near_valid;
 	AeronSceneMark xr_near_begin, xr_near_end;
 	float xr_near_shift[2][3];
+	/* Shared bloom (XWA_XR_BLOOM=1): the left eye's bloom resampled for
+	 * the right eye. */
+	AeronRenderTarget* xr_bloom_right;
+	struct AeronDrawList2D* xr_bloom_blit;
 
 	/* Shared spatial post settings, initialized from the canonical Aeron
 	 * profile and mutable through the debug inspectors. */

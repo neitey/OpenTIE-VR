@@ -20,6 +20,7 @@
 #include "aeron/aeron.h"
 #include "aeron/log.h"
 #include "aeron/scene/bloom.h"
+#include "aeron/scene/draw_list2d.h"
 #include "aeron/scene/world.h"
 
 #include <math.h>
@@ -1004,18 +1005,104 @@ static AeronScenePresentChain* TieFlightRenderer_XrPresentChain(TieFlightRendere
 	return g->xr_present_chain;
 }
 
-/* Bloom + tonemap of the scene RT just rendered into one eye's target. */
-static bool TieFlightRenderer_XrOutputEye(TieFlightRenderer* g, AeronCommandBuffer* cmd, AeronRenderTarget* target) {
+/* XWA_XR_BLOOM: 1 (default) one bloom for both eyes, computed for the left
+ * eye and resampled for the right one (a glow is a wide blur; the eyes'
+ * parallax does not show in it); "eye" = per eye; 0 = no bloom in VR. */
+static int TieFlightRenderer_XrBloomMode(void) {
+	const char* env = getenv("XWA_XR_BLOOM");
+	if (env && env[0] == '0')
+		return 0;
+	if (env && strcmp(env, "eye") == 0)
+		return 2;
+	return 1;
+}
+
+/* The left eye's bloom as the right eye sees it. The eyes' asymmetric
+ * frusta put one direction on different pixels; for distant (blooming)
+ * things that is an axis-aligned scale and offset, so one resampling blit
+ * lines the glow up (OpenXWA-VR fl_xr_right_bloom). NULL: compute it. */
+static AeronTexture* TieFlightRenderer_XrRightBloom(TieFlightRenderer* g, AeronCommandBuffer* cmd) {
+	AeronRenderTarget* left_rt = TieFlightRenderer_BloomRt(g);
+	AeronTexture* left = left_rt ? Aeron_RenderTargetGetTexture(left_rt) : NULL;
+	if (!left)
+		return NULL;
+	const int w = Aeron_TextureGetWidth(left), h = Aeron_TextureGetHeight(left);
+	if (w <= 0 || h <= 0)
+		return NULL;
+	if (g->xr_bloom_right) {
+		AeronTexture* t = Aeron_RenderTargetGetTexture(g->xr_bloom_right);
+		if (!t || Aeron_TextureGetWidth(t) != w || Aeron_TextureGetHeight(t) != h ||
+			Aeron_TextureGetFormat(t) != Aeron_TextureGetFormat(left)) {
+			Aeron_DestroyRenderTarget(g->xr_bloom_right);
+			g->xr_bloom_right = NULL;
+		}
+	}
+	if (!g->xr_bloom_right) {
+		g->xr_bloom_right = Aeron_CreateRenderTarget(&(AeronRenderTargetDesc) {
+			.width = w,
+			.height = h,
+			.format = Aeron_TextureGetFormat(left),
+			.sample_count = AERON_SAMPLE_COUNT_1,
+			.debug_name = "tie.vr.bloom_right",
+		});
+	}
+	if (!g->xr_bloom_blit)
+		g->xr_bloom_blit = AeronDrawList_Create(4);
+	if (!g->xr_bloom_right || !g->xr_bloom_blit)
+		return NULL;
+	const float* fl = g->xr_frame.views[0].fov;
+	const float* fr = g->xr_frame.views[1].fov;
+	const float ll = tanf(fl[0]), rl = tanf(fl[1]), ul = tanf(fl[2]), dl = tanf(fl[3]);
+	const float lr = tanf(fr[0]), rr = tanf(fr[1]), ur = tanf(fr[2]), dr = tanf(fr[3]);
+	if (rl - ll <= 0.0f || ul - dl <= 0.0f)
+		return NULL;
+	/* Right-eye image coordinate -> the left eye's: u_l = a * u_r + b. */
+	const float ax = (rr - lr) / (rl - ll), bx = (lr - ll) / (rl - ll);
+	const float ay = (ur - dr) / (ul - dl), by = (ul - ur) / (ul - dl);
+	/* Only where the left eye saw the same directions (the rest keeps no
+	 * bloom; clamped sampling there would smear edge texels). */
+	const float x0 = fmaxf(0.0f, -bx / ax), x1 = fminf(1.0f, (1.0f - bx) / ax);
+	const float y0 = fmaxf(0.0f, -by / ay), y1 = fminf(1.0f, (1.0f - by) / ay);
+	if (x1 <= x0 || y1 <= y0)
+		return NULL;
+	AeronDrawList_Begin(g->xr_bloom_blit, g->xr_bloom_right, w, h, AERON_DRAWLIST2D_CLEAR, NULL);
+	AeronDrawList_AddSprite(g->xr_bloom_blit, &(AeronDrawList2DSprite) {
+												   .texture = left,
+												   .src_u0 = ax * x0 + bx,
+												   .src_u1 = ax * x1 + bx,
+												   .src_v0 = ay * y0 + by,
+												   .src_v1 = ay * y1 + by,
+												   .dst_x = x0 * (float)w,
+												   .dst_y = y0 * (float)h,
+												   .dst_w = (x1 - x0) * (float)w,
+												   .dst_h = (y1 - y0) * (float)h,
+												   .tint = { 1.0f, 1.0f, 1.0f, 1.0f },
+												   .blend = AERON_BLIT2D_BLEND_NONE,
+												   .filter = AERON_BLIT2D_FILTER_LINEAR,
+											   });
+	AeronDrawList_Render(g->xr_bloom_blit, cmd);
+	return Aeron_RenderTargetGetTexture(g->xr_bloom_right);
+}
+
+/* Bloom + tonemap of the scene RT just rendered into eye `eye`'s target. */
+static bool TieFlightRenderer_XrOutputEye(TieFlightRenderer* g, AeronCommandBuffer* cmd, int eye) {
+	AeronRenderTarget* target = g->xr_frame.eye_targets[eye];
 	g->scene_rt = AeronScene_SceneRt(g->scene);
 	AeronScenePresentChain* chain = TieFlightRenderer_XrPresentChain(g, g->xr_frame.format);
 	AeronRenderTarget* scene_target = g->scene_rt ? g->scene_rt : AeronScene_ColorRt(g->scene);
 	if (!chain || !scene_target || !target)
 		return false;
-	const char* bloom_env = getenv("XWA_XR_BLOOM");
-	const bool bloom_on = g->frame.hd_full && g->bloom && !(bloom_env && bloom_env[0] == '0');
-	if (bloom_on && !TieFlightRenderer_ApplyBloom(g, cmd, g->frame.curr))
-		return false;
-	AeronRenderTarget* bloom_target = bloom_on ? TieFlightRenderer_BloomRt(g) : NULL;
+	const int bloom_mode = TieFlightRenderer_XrBloomMode();
+	const bool bloom_on = g->frame.hd_full && g->bloom && bloom_mode != 0;
+	AeronTexture* bloom_tex = NULL;
+	if (bloom_on && eye == 1 && bloom_mode == 1)
+		bloom_tex = TieFlightRenderer_XrRightBloom(g, cmd);
+	if (bloom_on && !bloom_tex) {
+		if (!TieFlightRenderer_ApplyBloom(g, cmd, g->frame.curr))
+			return false;
+		AeronRenderTarget* bloom_rt = TieFlightRenderer_BloomRt(g);
+		bloom_tex = bloom_rt ? Aeron_RenderTargetGetTexture(bloom_rt) : NULL;
+	}
 	AeronRenderPass* pass = Aeron_BeginRenderPass(&(AeronRenderPassDesc) {
 		.color_target = target,
 		.clear_color = 1,
@@ -1027,8 +1114,7 @@ static bool TieFlightRenderer_XrOutputEye(TieFlightRenderer* g, AeronCommandBuff
 		return false;
 	static const float tint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 	AeronScenePresentChain_Draw(chain, pass, Aeron_RenderTargetGetTexture(scene_target), g->sampler_linear,
-								bloom_target ? Aeron_RenderTargetGetTexture(bloom_target) : NULL,
-								AeronSceneBloom_Intensity(), g->rt_w, g->rt_h, 1.0f, tint, 0);
+								bloom_tex, AeronSceneBloom_Intensity(), g->rt_w, g->rt_h, 1.0f, tint, 0);
 	Aeron_EndRenderPass(pass);
 	return true;
 }
@@ -1041,7 +1127,7 @@ bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cm
 		AeronScene_TranslateRange(g->scene, &g->xr_near_begin, &g->xr_near_end, g->xr_near_shift[0]);
 	TIE_GPU_PUSH(cmd, "Flight scene, left eye");
 	bool ok = AeronScene_Render(g->scene, cmd) != 0 &&
-			  TieFlightRenderer_XrOutputEye(g, cmd, g->xr_frame.eye_targets[0]);
+			  TieFlightRenderer_XrOutputEye(g, cmd, 0);
 	TIE_GPU_POP(cmd);
 	if (ok) {
 		/* Same submissions, right eye camera; the right eye reuses the left
@@ -1056,7 +1142,7 @@ bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cm
 			AeronScene_TranslateRange(g->scene, &g->xr_near_begin, &g->xr_near_end, to_right);
 		}
 		ok = AeronScene_SetCamera(g->scene, &g->xr_eyes[1].camera) && AeronScene_Render(g->scene, cmd) &&
-			 TieFlightRenderer_XrOutputEye(g, cmd, g->xr_frame.eye_targets[1]);
+			 TieFlightRenderer_XrOutputEye(g, cmd, 1);
 		TIE_GPU_POP(cmd);
 	}
 	if (ok)
