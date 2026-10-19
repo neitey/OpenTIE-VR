@@ -26,16 +26,18 @@ set(TIE_APP_SOURCES
     setup/installation_ui.c
     setup/setup.c
     quest/quest_app.c
-    quest/quest_app.h
+    quest/quest_app.h)
+if(ANDROID)
+    list(APPEND TIE_APP_SOURCES quest/xr_tier.c quest/crash_report.c)
+endif()
+# VR voice commands (speech recognizer dlopen'ed at run time).
+list(APPEND TIE_APP_SOURCES
     quest/voice_commands.c
     quest/voice_commands.h
     quest/voice_core.c
     quest/voice_core.h
     quest/vr_voice.c
     quest/vr_voice.h)
-if(ANDROID)
-    list(APPEND TIE_APP_SOURCES quest/xr_tier.c quest/crash_report.c)
-endif()
 if(ANDROID)
     # Quest: SDL's Java activity loads the game as libmain.so.
     add_library(tie SHARED ${TIE_APP_SOURCES})

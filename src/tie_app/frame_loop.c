@@ -10,7 +10,6 @@
 #include "aeron/compat/host.h"
 #include "tie_app/hotkeys.h"
 #include "tie_app/quest/quest_app.h"
-#include "tie_app/quest/vr_voice.h"
 #include <SDL3/SDL_stdinc.h>
 #include "tie_app/settings/flight_options.h"
 #include "tie_app/settings/settings.h"
@@ -25,6 +24,7 @@
 #include "tie_runtime/runtime/profile.h"
 #include "tie_runtime/runtime/runtime.h"
 #include "tie_runtime/snapshot/snapshot.h"
+#include "tie_app/quest/vr_voice.h"
 
 static uint64_t TieFrameLoop_PresentationIntervalUs(void) {
 	const double rate = Aeron_PresentationRate();

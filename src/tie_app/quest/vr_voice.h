@@ -12,7 +12,7 @@
  * XWA_XR_VOICE: 0 off, doubletap (default), hold.
  * XWA_VOICE_LIB, XWA_VOICE_MODEL_DIR (desktop), XWA_VOICE_DEBUG.
  * TIE_VOICE_INJECT="next target;full throttle" (tests, any platform, no
- * headset needed): handles these as if heard, one every 90 flight frames.
+ * headset needed): handles these as if heard, one every 30 flight frames.
  */
 
 #include <stdbool.h>

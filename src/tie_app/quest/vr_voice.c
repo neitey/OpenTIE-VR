@@ -154,7 +154,7 @@ static void TieVrVoice_Inject(bool flying) {
 	const char* list = SDL_getenv("TIE_VOICE_INJECT");
 	if (done || !list || !list[0] || !flying)
 		return;
-	if (++frames < 90)
+	if (++frames < 30)
 		return;
 	frames = 0;
 	const char* p = list;
