@@ -1,0 +1,106 @@
+OpenXWA for Meta Quest 3 (standalone) - 1.0.0
+=============================================
+
+If something goes wrong, the log file (step 6) is what's needed to fix it.
+
+What you need
+  * Quest 3 / 3S (Quest 2 and Pro may also work) in Developer Mode
+    (Meta Horizon phone app -> Devices -> your headset -> Headset settings ->
+    Developer Mode; needs a free Meta developer account).
+  * A PC with adb plus a USB-C cable. Easiest on Windows:
+      winget install Google.PlatformTools
+    then open a NEW PowerShell window, run "adb devices", put the headset on
+    and allow USB debugging. (SideQuest and Meta Quest Developer Hub also
+    bring their own adb.)
+  * Your installed X-Wing Alliance folder (GOG or Steam), about 1 GB.
+
+1. Install the APK
+     adb install -r OpenXWA-quest.apk
+   (SideQuest: drag the APK onto the window.) A newer APK installs over the
+   old one the same way; the copied game files stay.
+
+2. Copy the game files (from the PC, headset connected via USB; it can stay
+   on the desk)
+   Files copied with "adb push" belong to the wrong user on Quest and the game
+   cannot read them, so the app unpacks a zip itself:
+   * Zip the CONTENTS of your X-Wing Alliance folder into xwa.zip (select
+     everything inside the folder -> Send to -> Compressed (zipped) folder),
+     so RESDATA.TXT is at the top of the zip.
+   * Then:
+       adb shell content call --uri content://org.openxwa.quest.setup --method mkdirs --arg XWA
+       adb push xwa.zip /sdcard/Android/obb/org.openxwa.quest/openxwa-import.zip
+       adb shell content call --uri content://org.openxwa.quest.setup --method unzip --arg XWA
+     The last command prints the number of files unpacked.
+   The OpenXWA-VR Launcher does all of this for you.
+
+3. Check
+     adb shell ls /sdcard/Android/data/org.openxwa.quest/files/XWA
+   should list RESDATA.TXT and the game folders.
+
+4. Play
+   In the headset: Library -> filter "Unknown sources" -> OpenXWA. On first start the game asks for a pilot
+   name: a keyboard appears on the virtual screen, type with the laser
+   pointer and press Enter. Controls are the same as the PC VR build:
+     right stick = pitch/yaw, left stick X = roll, left stick Y = throttle lever,
+     right trigger = fire, right stick click = target in sights,
+     right grip = countermeasures, A = next target, B = previous target,
+     X = target closest enemy, Y = target my attacker,
+     left trigger = change weapon, left stick click = link weapons,
+     left grip (hold) = radial menu, left menu button = Esc,
+     thumb rest (double-tap, then speak) = voice command.
+     In menus the right controller is a laser pointer.
+   Taking the headset off or opening the Meta menu pauses the game.
+   Hold the Meta button to recenter.
+
+5. Settings (optional)
+   /sdcard/Android/data/org.openxwa.quest/files/openxwa-quest.cfg is created on
+   first start. Edit it on the PC:
+     adb pull /sdcard/Android/data/org.openxwa.quest/files/openxwa-quest.cfg
+     (remove the '#' in front of a line and change the value)
+     adb push openxwa-quest.cfg /sdcard/Android/data/org.openxwa.quest/files/
+   Most useful:
+     AERON_XR_RESOLUTION_SCALE=0.9   lower (0.7) if it stutters
+     XWA_XR_SHADOWS=1                cockpit shadows (costs GPU time)
+     XWA_XR_STEREO=0                 everything on the flat virtual screen
+     XWA_QUEST_PROFILE=0             use the in-game graphics options as-is
+
+6. Please send back
+     adb pull /sdcard/Android/data/org.openxwa.quest/files/openxwa.log
+   If the app closes immediately or shows nothing, also capture logcat while
+   starting it:
+     adb logcat -c
+     adb logcat > openxwa-logcat.txt      (start the app, wait 20 s, Ctrl+C)
+   The log has a line every 5 s like
+     "perf: 72.0 fps (display 72 Hz), frame work avg ..."
+   For GPU numbers, Meta's "OVR Metrics Tool" overlay is the best source.
+
+Uninstalling
+     adb uninstall org.openxwa.quest
+   WARNING: this also deletes the copied game files in .../files/XWA.
+
+Known limits
+  * Not yet run on a real Quest. The Vulkan/OpenXR path was only tested on PC
+    (Quest Link) and on a simulated headset.
+  * Each eye renders the full scene (no multiview yet), so frame rate on the
+    Quest is the main unknown. The Quest render profile turns off SSAO,
+    FSR, motion blur, HDR and shadows and uses MSAA 4x at 0.9 resolution.
+  * Optional HD texture packs (BC7) are decoded on the CPU at load time
+    (the Quest GPU can't sample BC formats) and capped at 2048 px. That
+    makes loading slower and uses more memory.
+  * Runs at the Quest default of 72 Hz.
+
+Other headsets (same APK, from 0.0.17-quest100)
+  The APK also runs on Pico (Neo 3, 4, 4 Ultra) and Steam Frame. Steps 1-6
+  are the same with adb; only developer mode and the library differ:
+  * Pico: Settings -> General -> About -> tap "Software Version" until
+    developer mode appears; turn on USB debugging there. The app is under
+    Library -> Unknown sources. Android/data can usually be reached from
+    Windows Explorer as well.
+  * Steam Frame: turn on developer mode (Steam settings), start "Lepton
+    Development", connect adb, then install as above and start it from the
+    headset's Android apps. Copy the game files with adb push as in step 3.
+  The game picks its defaults from the GPU (see the log's "device tier"
+  line): Quest 2 and Pico 4 render fewer pixels at 72 Hz with stronger
+  foveation; Quest 3 is unchanged; Steam Frame gets a larger pixel budget.
+  Voice commands need the Quest controllers' thumb rests (not on Pico yet);
+  the speech model is in the APK.

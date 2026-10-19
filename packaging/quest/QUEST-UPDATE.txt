@@ -1,0 +1,36 @@
+OpenXWA Quest build 0.0.17-quest2: one-time reinstall
+=====================================================
+
+This build is signed with a new key, so Android won't install it over the old
+one ("INSTALL_FAILED_UPDATE_INCOMPATIBLE"). You have to uninstall the old app
+once. Uninstalling deletes the app's folder, so move the game files out first.
+Future builds use the same new key and install with "adb install -r" again.
+
+Headset connected over USB, from the folder that holds the APK:
+
+1. Park the game files and settings outside the app folder
+     adb shell mv /sdcard/Android/data/org.openxwa.quest/files /sdcard/openxwa-files-backup
+   (This can take a minute if Android copies instead of renaming.)
+   Check that it worked:
+     adb shell ls /sdcard/openxwa-files-backup
+   You should see XWA, openxwa.log and openxwa-quest.cfg.
+
+2. Replace the app
+     adb uninstall org.openxwa.quest
+     adb install OpenXWA-quest.apk
+
+3. Start OpenXWA once in the headset (it creates its folder), then quit it.
+
+4. Put the files back
+     adb shell rm -rf /sdcard/Android/data/org.openxwa.quest/files
+     adb shell mv /sdcard/openxwa-files-backup /sdcard/Android/data/org.openxwa.quest/files
+
+If step 4 fails, push the game files again as in QUEST-INSTALL.txt step 3.
+
+What's new
+  * Stars in VR: drawn as sky sprites (the GPU star pass never showed on the
+    Quest). XWA_XR_STARS=shader in openxwa-quest.cfg switches back.
+  * Dynamic lights from lasers/explosions are off by default on the Quest.
+    XWA_POINT_LIGHTS=1 turns them back on.
+  * The settings template explains world scale and the HUD keys. An existing
+    openxwa-quest.cfg is left as it is.

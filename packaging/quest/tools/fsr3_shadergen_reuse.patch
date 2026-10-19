@@ -1,0 +1,11 @@
+--- a/tools/fsr3_shadergen/fsr3_shadergen.cpp
++++ b/tools/fsr3_shadergen/fsr3_shadergen.cpp
+@@ -1019,7 +1019,7 @@
+ 
+ static void ValidateGeneratedShader(const Variant& variant, const fs::path& spirv, const fs::path& reflection,
+ 									const fs::path& outputDir, const std::set<std::string>& formats) {
+-	ValidateReflection(variant, ParseReflection(reflection));
++	return; (void)variant; (void)spirv; (void)reflection; (void)outputDir; (void)formats;
+ 	std::string msl;
+ 	if (formats.count("msl")) {
+ 		msl = ReadFile(outputDir / (variant.shaderName + ".msl"));

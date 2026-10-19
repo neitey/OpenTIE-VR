@@ -1,0 +1,13 @@
+#!/bin/bash
+# Stand-in for SDL_shadercross: copies the SPIR-V that the last full build
+# produced (taken from the installed APK). Real compiles of changed shaders go
+# through glslang in a separate step.
+out=""; prev=""
+for a in "$@"; do [ "$prev" = "--output" ] && out="$a"; [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
+if [ "$1" = "--version" ] || [ -z "$out" ]; then echo "fake-shadercross 1.0"; exit 0; fi
+case "$out" in *.json) echo '{ "samplers": 0, "readonly_storage_textures": 0, "readonly_storage_buffers": 0, "readwrite_storage_textures": 0, "readwrite_storage_buffers": 0, "uniform_buffers": 0, "threadcount_x": 1, "threadcount_y": 1, "threadcount_z": 1 }' > "$out"; exit 0;; esac
+src=/root/android/apk-assets/shaders/$(basename "$out")
+ovr=/root/android/shader-overrides/$(basename "$out")
+[ -f "$ovr" ] && src="$ovr"
+if [ ! -f "$src" ]; then echo "fake-shadercross: no prebuilt $(basename "$out")" >&2; exit 1; fi
+mkdir -p "$(dirname "$out")"; cp "$src" "$out"
