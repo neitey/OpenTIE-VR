@@ -282,6 +282,10 @@ static void TieControllerSettings_DeviceSelector(TieControllerSettings* settings
 		TieControllerMapping_ClearProfile(&settings->unconfigured, selected_device
 																	   ? selected_device->kind
 																	   : AERON_CONTROLLER_KIND_JOYSTICK);
+		/* The VR controllers' virtual gamepad starts from its built-in
+		 * profile, not from nothing. */
+		if (TieControllerMapping_IsXrPad(selected_device))
+			settings->unconfigured = *TieControllerMapping_XrProfile();
 	}
 }
 

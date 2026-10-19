@@ -1,4 +1,58 @@
-# OpenTIE
+# OpenTIE-VR
+
+*Star Wars: TIE Fighter* in virtual reality, standalone on Meta Quest 3 / 3S,
+flown from X-Wing Alliance's 3D TIE cockpits. Pico and Steam Frame are planned
+the same way as in [OpenXWA VR](https://github.com/neitey/OpenXWA-Quest).
+
+OpenTIE-VR is a fork of [OpenTIE](https://github.com/elyosh/OpenTIE), the
+open-source reimplementation of TIE Fighter, with the VR layer of
+[OpenXWA VR](https://github.com/neitey/OpenXWA-Quest) (same engine).
+
+> [!WARNING]
+> Work in progress: early test builds only.
+
+> [!IMPORTANT]
+> No content from the original games is included. You need your own
+> *TIE Fighter Special Edition* (Steam or GOG) on a Windows PC. For the 3D
+> cockpits you also need *X-Wing Alliance* (Steam, GOG or CD): only its three
+> TIE cockpit models are copied to the headset. Without it you fly with TIE
+> Fighter's own cockpit art.
+
+## Plan
+
+The goal is feature parity with OpenXWA VR:
+
+- X-Wing Alliance's 3D cockpits instead of the 2D cockpit art: TIE Fighter,
+  Interceptor, Advanced and Defender in XWA's TIE cockpit, the TIE Bomber in
+  its own, the Assault Gunboat and Missile Boat in XWA's generic cockpit;
+  TIE Fighter's instruments on the cockpit's panels
+- Stereo 3D flight, menus, briefings and films on a screen in VR
+- Motion controllers: thumbsticks or a flight stick and throttle lever in the
+  cockpit, every TIE function on the buttons
+- Laser pointer for the menus, VR settings page
+- Later: lap touch console, radial menu, side panel, voice commands, VR menu
+  environments, as in OpenXWA VR
+- A Windows launcher that installs the app and copies your game files over USB
+  (the headset can stay on the desk)
+
+## Building
+
+See [packaging/quest](packaging/quest) and the OpenXWA VR build notes. The
+engine submodule is the VR fork of aeron
+([neitey/aeron-quest](https://github.com/neitey/aeron-quest), branch
+`tie-vr`).
+
+## Credits
+
+- OpenTIE: elyosh and contributors
+- OpenXWA VR (the VR layer): Neitey, MarkD
+- TIE Fighter: Totally Games / LucasArts
+
+## Licence
+
+GPL-3.0, like OpenTIE (see [LICENSE](LICENSE)).
+
+## About OpenTIE (upstream)
 
 [![GitHub Release](https://img.shields.io/github/v/release/elyosh/OpenTIE)](https://github.com/elyosh/OpenTIE/releases/latest)
 [![Visit our Discord server](https://img.shields.io/discord/1533001488391995442)](https://discord.gg/WBvYzczWfG)

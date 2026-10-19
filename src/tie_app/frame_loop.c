@@ -10,6 +10,7 @@
 #include "aeron/compat/host.h"
 #include "tie_app/hotkeys.h"
 #include "tie_app/quest/quest_app.h"
+#include "tie_app/test/test_harness.h"
 #include <SDL3/SDL_stdinc.h>
 #include "tie_app/settings/flight_options.h"
 #include "tie_app/settings/settings.h"
@@ -18,12 +19,14 @@
 #include "tie_runtime/display/classic_framebuffer.h"
 #include "tie_runtime/flight_assets/service.h"
 #include "tie_runtime/input/input.h"
+#include "tie_runtime/input/vr_controls.h"
 #include "tie_runtime/presentation/classic_layer.h"
 #include "tie_runtime/presentation/flight_marker.h"
 #include "tie_runtime/presentation/presentation.h"
 #include "tie_runtime/runtime/profile.h"
 #include "tie_runtime/runtime/runtime.h"
 #include "tie_runtime/snapshot/snapshot.h"
+#include "tie_app/quest/vr_voice.h"
 
 static uint64_t TieFrameLoop_PresentationIntervalUs(void) {
 	const double rate = Aeron_PresentationRate();
@@ -154,12 +157,20 @@ void TieFrameLoop_Run(void) {
 
 		TieQuest_Frame();
 		const AeronInputSnapshot* input = Aeron_InputSnapshot();
+		if (TieTest_Active())
+			TieTest_ApplyInput((AeronInputSnapshot*)input);
 		TieFrameLoop_DiscoverControllers(input);
 		const bool focus_paused = TieFrameLoop_UpdateFocus(input, &ever_had_focus);
 		TieFrameLoop_UpdatePresentation(input, delta_us);
 		const TieHotkeysFrame hotkey_frame = TieHotkeys_Process(&hotkeys, input);
 		bool menu_open = hotkey_frame.menu_open;
 		bool settings_opened_this_frame = hotkey_frame.settings_opened;
+		/* VR controllers: pointer / flight-button modes, B = back. */
+		if ((TieVrControls_Frame(TieSettings_Open(), hotkey_frame.paused) & TIE_VR_REQUEST_CLOSE_SETTINGS) &&
+			TieSettings_Open() && !settings_opened_this_frame) {
+			TieSettings_Toggle();
+			menu_open = TieSettings_Open();
+		}
 		TieInput_UpdateCapture(TieSnapshot_Current(), TieSettings_Open());
 		TieClassicLayer_SyncInputExtent();
 
@@ -170,6 +181,7 @@ void TieFrameLoop_Run(void) {
 		if (Aeron_FatalErrorRequested())
 			break;
 		TieInput_UpdateKeyboard(input, menu_open || hotkey_frame.paused || focus_paused);
+		TieVrVoice_Update(menu_open || hotkey_frame.paused || focus_paused);
 		if (!menu_open)
 			TieInput_BeginFrame(delta_us);
 		if (!hotkey_frame.paused && !menu_open && !focus_paused)
@@ -201,10 +213,14 @@ void TieFrameLoop_Run(void) {
 
 		if (Aeron_FatalErrorRequested())
 			break;
+		if (TieTest_Active())
+			TieTest_BeforePresent();
 		if (!Aeron_Present()) {
 			Aeron_RequestFatalRendererError("frame presentation");
 			break;
 		}
+		if (TieTest_Active() && TieTest_AfterPresent())
+			TieRuntime_RequestExit();
 
 		uint64_t wake_delay_us = TieFrameLoop_PresentationIntervalUs();
 		if (!pause_requested) {
@@ -214,5 +230,6 @@ void TieFrameLoop_Run(void) {
 		}
 		Aeron_WaitForNextFrame(wake_delay_us);
 	}
+	TieVrVoice_Shutdown();
 	TieClassicLayer_Shutdown();
 }

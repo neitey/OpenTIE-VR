@@ -443,6 +443,10 @@ set(TIE_RUNTIME_SOURCES
     src/tie_runtime/input/mouse_flight.h
     src/tie_runtime/input/controller_mapping.c
     src/tie_runtime/input/controller_mapping.h
+    src/tie_runtime/input/vr_buttons.c
+    src/tie_runtime/input/vr_buttons.h
+    src/tie_runtime/input/vr_controls.c
+    src/tie_runtime/input/vr_controls.h
     src/tie_runtime/input/transform.c
     src/tie_runtime/input/transform.h
     src/tie_runtime/storage/pilot_storage.c
@@ -696,6 +700,21 @@ endfunction()
 add_subdirectory(src/tie_remaster/scene2d)
 add_subdirectory(src/tie_remaster)
 add_subdirectory(src/tie_app)
+
+# VR controls unit test (Aeron's OpenXR input faked at link time):
+#   ninja tie_vr_controls_test && ./tie_vr_controls_test
+if(NOT ANDROID)
+    add_executable(tie_vr_controls_test EXCLUDE_FROM_ALL tests/vr_controls_test.c)
+    target_include_directories(tie_vr_controls_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(tie_vr_controls_test PRIVATE tie_core tie_remaster)
+    foreach(TIE_VR_TEST_WRAP
+            Aeron_XrIsPresenting Aeron_XrSetPointerEnabled Aeron_XrSetFlightButtons Aeron_XrSetMenuKeys
+            Aeron_XrLeftHanded Aeron_XrTakeMenuBPressed Aeron_XrPollButton Aeron_XrGetHand
+            Aeron_XrThrottleLever Aeron_XrSetThrottleLever Aeron_XrHapticPulse SDL_GetTicks
+            TieSnapshot_Current TieFlightPause_IsActive)
+        target_link_options(tie_vr_controls_test PRIVATE "LINKER:--wrap=${TIE_VR_TEST_WRAP}")
+    endforeach()
+endif()
 
 if(TIE_BUILD_TOOLS)
 add_subdirectory(tools)

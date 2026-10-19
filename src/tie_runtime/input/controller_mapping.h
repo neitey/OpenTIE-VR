@@ -59,6 +59,15 @@ bool TieControllerMapping_Profilevalidate(const TieControllerProfile* profile, A
 /* Converts the player-facing inversion preference to the raw-axis polarity used by TieInputMapping. */
 bool TieControllerMapping_EffectiveAxisInvert(AeronControllerKind kind, TieInputAxis axis, bool invert);
 
+/* Aeron's OpenXR virtual gamepad (Quest Touch controllers). Unless a
+ * configured model claims its GUID it is driven by the built-in XR profile
+ * (never auto-added to the options): yaw/pitch/roll/absolute throttle lever
+ * and fire. */
+bool TieControllerMapping_IsXrPad(const AeronControllerSnapshot* device);
+const TieControllerProfile* TieControllerMapping_XrProfile(void);
+/* Whether the XR pad's sticks steer (flight) this frame; set by vr_controls. */
+void TieControllerMapping_SetXrFlight(bool flight);
+
 bool TieControllerMapping_SetOptions(const TieControllerOptions* options);
 void TieControllerMapping_Suspend(void);
 void TieControllerMapping_Resume(void);
