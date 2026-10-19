@@ -18,22 +18,27 @@ open-source reimplementation of TIE Fighter, with the VR layer of
 > TIE cockpit models are copied to the headset. Without it you fly with TIE
 > Fighter's own cockpit art.
 
-## Plan
-
-The goal is feature parity with OpenXWA VR:
+## Features (first test builds)
 
 - X-Wing Alliance's 3D cockpits instead of the 2D cockpit art: TIE Fighter,
   Interceptor, Advanced and Defender in XWA's TIE cockpit, the TIE Bomber in
-  its own, the Assault Gunboat and Missile Boat in XWA's generic cockpit;
-  TIE Fighter's instruments on the cockpit's panels
-- Stereo 3D flight, menus, briefings and films on a screen in VR
-- Motion controllers: thumbsticks or a flight stick and throttle lever in the
-  cockpit, every TIE function on the buttons
-- Laser pointer for the menus, VR settings page
-- Later: lap touch console, radial menu, side panel, voice commands, VR menu
-  environments, as in OpenXWA VR
+  its own, the Assault Gunboat and Missile Boat in XWA's generic cockpit, with
+  TIE Fighter's instruments live on the cockpit's panels (CMD with the target
+  picture, sensors, shields, throttle, clock)
+- Stereo 3D flight; menus, briefings and films on a screen in an Imperial
+  space scene (ships from your own TIE Fighter installation)
+- Motion controllers: every TIE function on the buttons, throttle lever on
+  the left stick, optional flight stick in the cockpit, controller models or
+  gloves, button labels when you look at a controller, haptics
+- Lap touch console (energy, targeting, wingmen, ship), radial menu, side
+  panel with a tactical map, voice commands and the button list
+- Voice commands recognised on the headset (double-tap a thumb rest)
+- Laser pointer and VR keyboard for the menus, VR settings page, launch
+  prompt after loading, briefing page in flight, pause when the headset is off
 - A Windows launcher that installs the app and copies your game files over USB
   (the headset can stay on the desk)
+
+Controls and install steps: [packaging/quest/README-RELEASE-TIE.txt](packaging/quest/README-RELEASE-TIE.txt).
 
 ## Building
 
