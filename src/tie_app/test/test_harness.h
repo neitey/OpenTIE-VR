@@ -80,6 +80,9 @@ void TieTestXr_QueueButton(int button);
 void TieTestXr_MenuPress(int index);
 void TieTestXr_SetThrottle(float value);
 void TieTestXr_SetHandInput(int hand, float trigger, float grip);
+/* A hand's aim pose: position (m, LOCAL) and yaw/pitch (deg, as
+ * TIE_TEST_XR_LHAND/RHAND), replacing the env/default pose. */
+void TieTestXr_SetHandPose(int hand, const float pose[5]);
 /* Frames on which stereo was committed so far. */
 uint64_t TieTestXr_CommittedFrames(void);
 

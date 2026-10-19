@@ -36,6 +36,18 @@ uint32_t TieVrControls_Frame(bool settings_open, bool host_paused);
 /* Nonzero while the frame's mode is flight (see above). */
 bool TieVrControls_InFlight(void);
 
+/* The VR lap console / quick wheel (tie_remaster/flight/vr_console.c)
+ * share the left grip and the triggers with the flight buttons:
+ *   - ShiftUseSerial counts grip-layer uses (a shifted flight button or the
+ *     grip + both-triggers chord): the quick wheel opens only on a grip
+ *     held for a moment with no such use;
+ *   - while the wheel is open (`wheel_open`) its trigger picks, so the
+ *     both-trigger chord is off; a grip that holds a panel by its handle
+ *     (`grip_owned[physical hand]`) is not the shift layer.
+ * Set every frame by the console (last frame's state). */
+uint32_t TieVrControls_ShiftUseSerial(void);
+void TieVrControls_SetConsoleState(bool wheel_open, const bool grip_owned[2]);
+
 /* The throttle lever position (0..1) that makes the virtual gamepad report
  * `throttle` (TieControllerMapping_ThrottlePosition's 0..65535) exactly. */
 float TieVrControls_LeverForThrottle(uint16_t throttle);

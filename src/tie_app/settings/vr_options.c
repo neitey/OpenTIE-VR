@@ -68,6 +68,13 @@ static const TieVrOptionRow k_rows[] = {
 	{ "XWA_XR_VOICE", "Voice Commands", k_voice_labels, k_voice_values, 3, 1, false,
 	  "In flight: double-tap a thumb rest (or hold it), then speak, e.g. \"attack my target\", \"next target\", "
 	  "\"full throttle\", \"lasers to shields\", \"cover me\"." },
+	{ "XWA_XR_CONSOLE", "Lap Console", k_off_on, k_0_1, 2, 1, false,
+	  "A touch panel over your lap (look down): energy, targeting, wingmen, ship. Touch a button or point at it "
+	  "and pull the trigger; squeeze a grip at its end to move it." },
+	{ "XWA_XR_WHEEL", "Radial Menu", k_off_on, k_0_1, 2, 1, false,
+	  "Hold the left grip still for a moment (no button with it), point at a command, pull the left trigger." },
+	{ "XWA_XR_SIDE_PANEL", "Side Panel", k_off_on, k_0_1, 2, 1, false,
+	  "On your right: tactical map, voice commands, button mapping." },
 	{ "AERON_XR_RESOLUTION_SCALE", "Resolution", k_res_labels, k_res_values, 4, 2, true, NULL },
 	{ "AERON_XR_REFRESH_RATE", "Refresh Rate", k_refresh_labels, k_refresh_values, 4, 0, true, NULL },
 	{ "XWA_XR_FOVEATION", "Foveation", k_fov_labels, k_fov_values, 4, 1, true,
@@ -77,7 +84,7 @@ static const TieVrOptionRow k_rows[] = {
 
 enum { TIE_VR_ROW_COUNT = (int)(sizeof k_rows / sizeof k_rows[0]) };
 /* Rows from here on apply after a restart (AERON_XR_RESOLUTION_SCALE ...). */
-enum { TIE_VR_FIRST_HEADSET_ROW = 10 };
+enum { TIE_VR_FIRST_HEADSET_ROW = 13 };
 
 static bool s_restart_needed;
 
@@ -138,11 +145,20 @@ void TieVrOptions_Draw(AeronUiContext* ui) {
 			TieVrOptions_Set(row, index);
 		if (row->help && i < TIE_VR_FIRST_HEADSET_ROW)
 			AeronUi_Help(ui, row->help);
+		if (strcmp(row->key, "XWA_XR_CONSOLE") == 0) {
+			const char* pose = SDL_getenv("XWA_XR_CONSOLE_POSE");
+			if (AeronUi_ButtonEnabled(ui, "Reset Console Position", pose && pose[0])) {
+				SDL_setenv_unsafe("XWA_XR_CONSOLE_POSE", "", 1);
+				TieQuest_SaveSetting("XWA_XR_CONSOLE_POSE", "");
+			}
+		}
 	}
 	AeronUi_Spacer(ui, 8.0f);
 	if (AeronUi_Button(ui, "Restore VR Defaults")) {
 		for (int i = 0; i < TIE_VR_ROW_COUNT; ++i)
 			TieVrOptions_Set(&k_rows[i], k_rows[i].default_index);
+		SDL_setenv_unsafe("XWA_XR_CONSOLE_POSE", "", 1);
+		TieQuest_SaveSetting("XWA_XR_CONSOLE_POSE", "");
 	}
 	if (s_restart_needed)
 		AeronUi_Error(ui, "Some changes will take effect after restarting the game.");

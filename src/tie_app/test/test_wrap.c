@@ -291,6 +291,9 @@ static struct {
 	int menu_latch[4]; /* A, B, X, Y */
 	float throttle;
 	float trigger[2], grip[2];
+	int hand_pose_set[2];
+	int capture_trigger[2], capture_grip[2];
+	float hand_pose[2][5];
 } s_xr = { .pointer = -1, .menu_keys = -1, .flight_buttons = -1 };
 
 void TieTestXr_Enable(int eye_width, int eye_height) {
@@ -610,6 +613,8 @@ int __wrap_Aeron_XrGetHand(int hand, AeronXrHand* out) {
 	const char* env = SDL_getenv(hand ? "TIE_TEST_XR_RHAND" : "TIE_TEST_XR_LHAND");
 	if (env)
 		(void)SDL_sscanf(env, "%f,%f,%f,%f,%f", &p[0], &p[1], &p[2], &p[3], &p[4]);
+	if (s_xr.hand_pose_set[h])
+		memcpy(p, s_xr.hand_pose[h], sizeof p);
 	const float d2r = 3.14159265f / 360.0f;
 	const float qy[4] = { 0, sinf(p[3] * d2r), 0, cosf(p[3] * d2r) };
 	const float qx[4] = { sinf(p[4] * d2r), 0, 0, cosf(p[4] * d2r) };
@@ -733,6 +738,36 @@ void TieTestXr_SetHandInput(int hand, float trigger, float grip) {
 	const int h = hand ? 1 : 0;
 	s_xr.trigger[h] = trigger;
 	s_xr.grip[h] = grip;
+}
+
+/* Panel captures of a hand's trigger / grip: logged when they change. */
+static void TieTestXr_LogCapture(const char* what, int* last, int hand, int captured) {
+	if (hand < 0 || hand > 1 || last[hand] == (captured != 0))
+		return;
+	last[hand] = captured != 0;
+	printf("[tie-test] frame %llu: xr capture %s hand=%d %s\n", (unsigned long long)TieTest_Frame(), what, hand,
+		   captured ? "on" : "off");
+	fflush(stdout);
+}
+
+void __real_Aeron_XrCaptureTrigger(int hand, int captured);
+void __wrap_Aeron_XrCaptureTrigger(int hand, int captured) {
+	if (s_xr.on)
+		TieTestXr_LogCapture("trigger", s_xr.capture_trigger, hand, captured);
+	__real_Aeron_XrCaptureTrigger(hand, captured);
+}
+
+void __real_Aeron_XrCaptureGrip(int hand, int captured);
+void __wrap_Aeron_XrCaptureGrip(int hand, int captured) {
+	if (s_xr.on)
+		TieTestXr_LogCapture("grip", s_xr.capture_grip, hand, captured);
+	__real_Aeron_XrCaptureGrip(hand, captured);
+}
+
+void TieTestXr_SetHandPose(int hand, const float pose[5]) {
+	const int h = hand ? 1 : 0;
+	memcpy(s_xr.hand_pose[h], pose, sizeof s_xr.hand_pose[h]);
+	s_xr.hand_pose_set[h] = 1;
 }
 
 int __real_Aeron_XrGetRenderModel(int hand, AeronXrRenderModel* out);
@@ -874,6 +909,10 @@ void TieTestXr_SetHandInput(int hand, float trigger, float grip) {
 	(void)hand;
 	(void)trigger;
 	(void)grip;
+}
+void TieTestXr_SetHandPose(int hand, const float pose[5]) {
+	(void)hand;
+	(void)pose;
 }
 
 #endif

@@ -10,6 +10,7 @@
 #include "tie_remaster/flight/cockpit/renderer.h"
 #include "tie_remaster/flight/render_math.h"
 #include "tie_remaster/flight/renderer.h"
+#include "tie_remaster/flight/vr_console.h"
 #include "tie_remaster/flight/xr_stereo.h"
 #include "tie_remaster/integration/snapshot_adapter.h"
 #include "tie_remaster/scene2d/cursor.h"
@@ -798,6 +799,20 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		ok = TieFlightRenderer_RenderFrame(flight->renderer, cmd);
 	}
 
+	/* VR panels (lap console, side panel, quick wheel): redrawn into their
+	 * own layers only when they change; shown after the HUD commit. They
+	 * are hidden (count 0) outside cockpit flight. */
+	AeronXrPanel console_quads[2], panel_quads[2], wheel_quads[2];
+	int console_n = 0, panel_n = 0, wheel_n = 0;
+	if (ok && xr) {
+		if (xr->console_width > 0)
+			console_n = TieVrConsole_Frame(cmd, xr->console_width, xr->console_height, xr->views, console_quads);
+		if (xr->card_width > 0) {
+			panel_n = TieVrConsole_PanelFrame(cmd, xr->card_width, xr->card_height, xr->views, panel_quads);
+			wheel_n = TieVrConsole_WheelFrame(cmd, xr->card_width, xr->card_height, xr->views, wheel_quads);
+		}
+	}
+
 	/* The flat image: the window, or the virtual screen. In stereo only for
 	 * a desktop mirror (it shows the right eye without the HUD). */
 	if (ok && (!xr || Aeron_HasDesktopMirror())) {
@@ -840,6 +855,9 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 									   TieFlightXr_HudLayout() == TIE_FLIGHT_XR_HUD_HELMET, 0, &hud);
 			Aeron_XrStereoCommit(&hud);
 		}
+		Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_CONSOLE, console_quads, console_n);
+		Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_CARD, panel_quads, panel_n);
+		Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_CARD2, wheel_quads, wheel_n);
 	}
 	return true;
 }
@@ -1379,5 +1397,6 @@ void TieRemaster_Shutdown(void) {
 		Aeron_DestroyRenderTarget(scene->retired_target);
 	if (scene->cutscene)
 		TieScene2dCutscene_Shutdown(scene->cutscene);
+	TieVrConsole_Shutdown();
 	memset(&g_remaster, 0, sizeof g_remaster);
 }

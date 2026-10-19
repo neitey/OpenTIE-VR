@@ -26,7 +26,10 @@
 #include "tie_runtime/runtime/profile.h"
 #include "tie_runtime/runtime/runtime.h"
 #include "tie_runtime/snapshot/snapshot.h"
+#include "tie_app/quest/voice_commands.h"
 #include "tie_app/quest/vr_voice.h"
+#include "tie_remaster/flight/vr_console.h"
+#include "tie_runtime/input/vr_console_game.h"
 #include "tie_app/vr_keyboard.h"
 
 static uint64_t TieFrameLoop_PresentationIntervalUs(void) {
@@ -148,6 +151,7 @@ void TieFrameLoop_Run(void) {
 	uint32_t profile_generation = TieFlightAssets_ProfileGeneration();
 	bool audio_paused = false;
 	bool ever_had_focus = false;
+	TieVrConsole_SetVoiceList(TieVoiceCommands_Count, TieVoiceCommands_Label, TieVoiceCommands_Phrase);
 
 	while (TieRuntime_IsActive() && !TieRuntime_ShouldExit() && !Aeron_FatalErrorRequested()) {
 		const int32_t delta_us = Aeron_BeginFrame();
@@ -185,6 +189,19 @@ void TieFrameLoop_Run(void) {
 		/* VR keyboard for text fields: types into the key queue, owns its clicks. */
 		TieVrKeyboard_BeginFrame(input, delta_us, menu_open || hotkey_frame.paused || focus_paused);
 		TieVrVoice_Update(menu_open || hotkey_frame.paused || focus_paused);
+		/* VR lap console / quick wheel / side panel: last frame's presses
+		 * become game actions (ignored outside cockpit flight), and the
+		 * ship state they show. */
+		TieVrConsole_BeginFrame((float)delta_us * 1e-6f);
+		{
+			TieVrConsoleAction console_action;
+			int console_arg;
+			while (TieVrConsole_PollAction(&console_action, &console_arg))
+				TieVrConsoleGame_Action(console_action, console_arg);
+			TieVrConsoleState console_state;
+			TieVrConsoleGame_GetState(&console_state);
+			TieVrConsole_SetState(&console_state);
+		}
 		if (!menu_open)
 			TieInput_BeginFrame(delta_us);
 		if (!hotkey_frame.paused && !menu_open && !focus_paused)
@@ -209,6 +226,16 @@ void TieFrameLoop_Run(void) {
 		const TieSnapshot* snapshot = TieSnapshot_Current();
 		TieFrameLoop_SubmitGameLayers(&previous_output_kind, snapshot, &flight_options, delta_us,
 									  hotkey_frame.paused || menu_open);
+		TieVrConsole_EndFrame();
+		{
+			/* The player put the lap console somewhere new / the side panel
+			 * shows another tab: keep it. */
+			char console_value[160];
+			if (TieVrConsole_TakePlacement(console_value, (int)sizeof console_value))
+				TieQuest_SaveSetting("XWA_XR_CONSOLE_POSE", console_value);
+			if (TieVrConsole_TakePanelTab(console_value, (int)sizeof console_value))
+				TieQuest_SaveSetting("XWA_XR_PANEL_TAB", console_value);
+		}
 		TieVrKeyboard_Submit();
 		/* Do not let the input edge that opened the menu close it again. */
 		if (!settings_opened_this_frame)

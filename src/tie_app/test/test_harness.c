@@ -46,6 +46,8 @@
  *   xrmenu a|b|x|y           latch for Aeron_XrTakeAPressed/TakeMenu?Pressed
  *   xrthrottle <0..1>        Aeron_XrThrottleLever
  *   xrhand left|right <trigger> [grip]   Aeron_XrGetHand trigger/grip
+ *   xrpose left|right x y z yaw pitch    Aeron_XrGetHand aim pose (m, deg; +yaw
+ *                            left, +pitch up; as TIE_TEST_XR_LHAND/RHAND)
  *   log <text>, quit
  * ------------------------------------------------------------------------ */
 
@@ -69,6 +71,7 @@ enum {
 	TT_CMD_XRMENU,
 	TT_CMD_XRTHROTTLE,
 	TT_CMD_XRHAND,
+	TT_CMD_XRPOSE,
 	TT_CMD_XRPAD,
 };
 
@@ -308,6 +311,7 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 		{ "xrmenu", TT_CMD_XRMENU },
 		{ "xrthrottle", TT_CMD_XRTHROTTLE },
 		{ "xrhand", TT_CMD_XRHAND },
+		{ "xrpose", TT_CMD_XRPOSE },
 		{ "xrpad", TT_CMD_XRPAD },
 	};
 	out->cmd = -1;
@@ -441,6 +445,23 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 			out->ivalue[0] = SDL_strcasecmp(arg, "right") == 0;
 			out->fvalue[0] = (float)SDL_atof(trigger);
 			out->fvalue[1] = grip ? (float)SDL_atof(grip) : 0.0f;
+			return true;
+		}
+		case TT_CMD_XRPOSE: {
+			arg = TieTest_NextToken(&cursor);
+			if (!arg || (SDL_strcasecmp(arg, "left") && SDL_strcasecmp(arg, "right"))) {
+				TieTest_Log("script line %d: xrpose left|right x y z yaw pitch", line_no);
+				return false;
+			}
+			out->ivalue[0] = SDL_strcasecmp(arg, "right") == 0;
+			for (int i = 0; i < 5; ++i) {
+				char* v = TieTest_NextToken(&cursor);
+				if (!v) {
+					TieTest_Log("script line %d: xrpose left|right x y z yaw pitch", line_no);
+					return false;
+				}
+				out->fvalue[i] = (float)SDL_atof(v);
+			}
 			return true;
 		}
 		case TT_CMD_WAIT: {
@@ -894,6 +915,7 @@ static void TieTest_Execute(AeronInputSnapshot* input, const TieTestLine* line) 
 		case TT_CMD_XRMENU:
 		case TT_CMD_XRTHROTTLE:
 		case TT_CMD_XRHAND:
+		case TT_CMD_XRPOSE:
 			if (!TieTestXr_Enabled()) {
 				TieTest_Log("script line %d: XR controller input needs TIE_TEST_XR=1", line->line_no);
 				break;
@@ -904,6 +926,8 @@ static void TieTest_Execute(AeronInputSnapshot* input, const TieTestLine* line) 
 				TieTestXr_MenuPress(line->ivalue[0]);
 			else if (line->cmd == TT_CMD_XRTHROTTLE)
 				TieTestXr_SetThrottle(line->fvalue[0]);
+			else if (line->cmd == TT_CMD_XRPOSE)
+				TieTestXr_SetHandPose(line->ivalue[0], line->fvalue);
 			else
 				TieTestXr_SetHandInput(line->ivalue[0], line->fvalue[0], line->fvalue[1]);
 			break;
