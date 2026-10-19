@@ -48,6 +48,27 @@ void TieVrHands_Submit(AeronScene3D* scene, AeronCommandBuffer* cmd, const Aeron
 	s_hands.submitted = 1;
 }
 
+void TieVrHands_SubmitMenu(AeronScene3D* scene, AeronCommandBuffer* cmd, const AeronSceneCamera* craft_cam,
+						   float units, const AeronXrStereoFrame* frame, const AeronXrPanel* screen) {
+	if (!scene || !cmd || !craft_cam || !frame || units <= 0.0f)
+		return;
+	float crows[9];
+	TieRenderMath_QuaternionToMat3(craft_cam->ori, crows);
+	TieVrGloves_Submit(scene, cmd, crows, craft_cam->pos, units);
+	if (screen)
+		TieVrHandOverlay_SetLayers(screen, 1);
+	s_hands.over = TieVrHandOverlay_Prepare(cmd, frame->views, frame->width, frame->height);
+	s_hands.submitted = 1;
+}
+
+void TieVrHands_CommitMenu(void) {
+	if (s_hands.submitted && s_hands.over) {
+		int rects[2][4];
+		TieVrHandOverlay_Rects(rects);
+		Aeron_XrStereoCommitEyeOverlayRect((const int(*)[4])rects);
+	}
+}
+
 AeronDrawList2D* TieVrHands_EyeAlpha(int eye) { return s_hands.over ? TieVrHandOverlay_List(eye) : NULL; }
 
 void TieVrHands_FinishRightEye(AeronCommandBuffer* cmd) {

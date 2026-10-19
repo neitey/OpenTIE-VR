@@ -10,6 +10,7 @@
 #include "tie_remaster/flight/cockpit/renderer.h"
 #include "tie_remaster/flight/render_math.h"
 #include "tie_remaster/flight/renderer.h"
+#include "tie_remaster/flight/xr_env.h"
 #include "tie_remaster/flight/xr_stereo.h"
 #include "tie_remaster/vr/vr_hands.h"
 #include "tie_remaster/integration/snapshot_adapter.h"
@@ -1283,6 +1284,21 @@ static bool TieRemaster_FrameBody(const TieSnapshot* snapshot, int32_t delta_us,
 		if (compose_flight)
 			TieRemaster_FlightRenderCommitted(snapshot);
 	}
+	/* VR: everywhere the flight is not in stereo, an Imperial fleet in space
+	 * around the virtual screen (menus, briefings, films and loading dimmed,
+	 * the in-flight map with the sky only). Paused flight stays as it is: its
+	 * flat image renders through the same scene at the window's size. */
+	if (Aeron_XrIsPresenting() && flight->renderer && !Aeron_FatalErrorRequested()) {
+		const bool in_mission = snapshot && snapshot->scene_kind == TIE_SCENE_FLIGHT;
+		if (in_mission)
+			TieFlightXrEnv_ReleaseShips();
+		if (!stereo && !(in_mission && flight_is_active)) {
+			const bool dimmed = snapshot && (snapshot->scene_kind == TIE_SCENE_CUTSCENE ||
+											 snapshot->scene_kind == TIE_SCENE_FLIGHT_LOADING);
+			(void)TieFlightXrEnv_Render(flight->renderer, g_remaster.assets, g_remaster.host_elapsed_us,
+										!in_mission, dimmed);
+		}
+	}
 	/* Stereo shows the flight in the headset; the flat layer only feeds a
 	 * desktop mirror. */
 	if (stereo && !Aeron_HasDesktopMirror())
@@ -1376,6 +1392,7 @@ void TieRemaster_Shutdown(void) {
 	if (!g_remaster.initialized)
 		return;
 
+	TieFlightXrEnv_Shutdown();
 	TieVrHands_Shutdown();
 	TieRemaster_ShutdownFlight();
 	TiePresentationCursor* cursor = &g_remaster.cursor;

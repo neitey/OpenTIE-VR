@@ -42,6 +42,14 @@ void TieVrHands_BeginFrame(void);
 void TieVrHands_Submit(AeronScene3D* scene, AeronCommandBuffer* cmd, const AeronSceneCamera* craft_cam, float units,
 					   const AeronXrStereoFrame* frame);
 
+/* The menu scene (flight/xr_env.c), scene open, no pass on `cmd`: the hands
+ * (no flight stick) and their overlay masks against `screen` (the virtual
+ * screen's quad in LOCAL space; NULL = in front of everything). After the
+ * eyes, TieVrHands_CommitMenu commits the overlay. */
+void TieVrHands_SubmitMenu(AeronScene3D* scene, AeronCommandBuffer* cmd, const AeronSceneCamera* craft_cam,
+						   float units, const AeronXrStereoFrame* frame, const AeronXrPanel* screen);
+void TieVrHands_CommitMenu(void);
+
 /* The alpha of eye `eye` for the overlay (draw it into the eye image after
  * its colour, in the same pass); NULL when there is none this frame. */
 AeronDrawList2D* TieVrHands_EyeAlpha(int eye);

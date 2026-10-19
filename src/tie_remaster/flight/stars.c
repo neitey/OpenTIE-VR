@@ -290,3 +290,50 @@ void TieFlightStars_DrawInPass(TieFlightStars* stars, AeronCommandBuffer* cmd, A
 	Aeron_DrawInstanced(pass, 6, stars->pending_count, 0);
 	TIE_GPU_POP(cmd);
 }
+
+bool TieFlightStars_PrepareCustom(TieFlightStars* stars, AeronCommandBuffer* cmd, const float (*dirs)[4],
+								  uint16_t count) {
+	if (!stars || !cmd || !dirs || count == 0)
+		return false;
+	if (count > TIE_FLIGHT_TIE98_MAX_STARS)
+		count = TIE_FLIGHT_TIE98_MAX_STARS;
+	for (uint16_t i = 0; i < count; ++i)
+		memcpy(stars->staging[i].axis_and_value, dirs[i], sizeof stars->staging[i].axis_and_value);
+	const uint32_t bytes = count * (uint32_t)sizeof stars->staging[0];
+	if (!stars->cache_valid || stars->cached_count != count || memcmp(stars->cached, stars->staging, bytes) != 0) {
+		if (!Aeron_UploadBufferDataCmd(cmd, stars->instances, 0, stars->staging, bytes)) {
+			stars->pending_count = 0;
+			return false;
+		}
+		memcpy(stars->cached, stars->staging, bytes);
+		stars->cached_count = count;
+		stars->cached_style = TIE_FLIGHT_STARFIELD_STYLE_TIE98;
+		stars->cache_valid = true;
+	}
+	stars->pending_count = count;
+	stars->pending_style = TIE_FLIGHT_STARFIELD_STYLE_TIE98;
+	return true;
+}
+
+void TieFlightStars_DrawCustom(TieFlightStars* stars, AeronCommandBuffer* cmd, AeronRenderPass* pass,
+							   const float view_proj[16], int rt_w, int rt_h, float half_size_px) {
+	if (!stars || !cmd || !pass || !view_proj || stars->pending_count == 0 || rt_w <= 0 || rt_h <= 0)
+		return;
+	if (!TieFlightStars_EnsurePipeline(stars, Aeron_RenderPassGetSampleCount(pass))) {
+		Aeron_CommandBufferSetFailure(cmd, "Starfield pipeline preparation failed");
+		return;
+	}
+	TieFlightStarsVertexUniforms uniforms = { 0 };
+	memcpy(uniforms.view_proj, view_proj, sizeof uniforms.view_proj);
+	uniforms.pixel_to_clip[0] = 2.0f / (float)rt_w;
+	uniforms.pixel_to_clip[1] = 2.0f / (float)rt_h;
+	uniforms.half_size_px[0] = half_size_px;
+	uniforms.half_size_px[1] = half_size_px;
+	uniforms.style = 1u; /* colour = intensity (w) */
+	TIE_GPU_PUSH(cmd, "VR environment stars");
+	Aeron_BindGraphicsPipeline(pass, stars->pipeline);
+	Aeron_BindStorageBuffer(pass, AERON_SHADER_STAGE_VERTEX, 0, stars->instances);
+	Aeron_BindUniformData(pass, AERON_SHADER_STAGE_VERTEX, 0, &uniforms, sizeof uniforms);
+	Aeron_DrawInstanced(pass, 6, stars->pending_count, 0);
+	TIE_GPU_POP(cmd);
+}
