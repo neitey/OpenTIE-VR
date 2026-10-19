@@ -1915,6 +1915,9 @@ static void register_idraw_Reg_String_Button(Input* input, Rect* frame, Rect* cl
 	if (xinpattr_Is_Input_Active(&btn->header)) {
 		int16_t caret_color = xio_Blink() ? xstyle_Get_Style_Down_Color() : 0;
 		xpaint_Horiz_Clipped_Line(frame->left + str_width + 4, frame->top + 11, 6, caret_color);
+#ifdef TIE_MODERN
+		TieInput_MarkTextEntry(); /* password field: the VR keyboard shows */
+#endif
 	}
 
 	if (xinpattr_Is_Input_Dirty(&btn->header))
