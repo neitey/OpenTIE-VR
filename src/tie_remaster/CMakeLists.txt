@@ -36,6 +36,7 @@ add_library(tie_remaster STATIC
     vr/vr_flight_stick.c
     vr/vr_hand_overlay.c
     vr/vr_controller_labels.c
+    vr/vr_cockpit_hud.c
 )
 if(TIE_ENABLE_DEBUG_UI)
     target_sources(tie_remaster PRIVATE

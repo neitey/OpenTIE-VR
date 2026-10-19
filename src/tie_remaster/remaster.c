@@ -13,6 +13,8 @@
 #include "tie_remaster/flight/xr_env.h"
 #include "tie_remaster/flight/vr_console.h"
 #include "tie_remaster/flight/xr_stereo.h"
+#include "tie_remaster/flight/xwa_cockpit.h"
+#include "tie_remaster/vr/vr_cockpit_hud.h"
 #include "tie_remaster/vr/vr_hands.h"
 #include "tie_remaster/integration/snapshot_adapter.h"
 #include "tie_remaster/scene2d/cursor.h"
@@ -777,13 +779,22 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		return false;
 	}
 
-	const bool xr_split = xr && xr->hud_world_target && TieFlightXr_HudLayout() == TIE_FLIGHT_XR_HUD_HELMET;
+	/* Cockpit HUD layout (default): the instruments float around the canopy
+	 * as separate panels (vr/vr_cockpit_hud.h) in cockpit views; elsewhere
+	 * (external views) it falls back to the helmet HUD. */
+	const TieFlightXrHudLayout hud_layout = TieFlightXr_HudLayout();
+	const bool xr_panels = xr && flight->cockpit && hud_layout == TIE_FLIGHT_XR_HUD_COCKPIT &&
+						   TieXwaCockpit_PanelView(snapshot);
+	const bool xr_split = xr && xr->hud_world_target &&
+						  (hud_layout == TIE_FLIGHT_XR_HUD_HELMET || hud_layout == TIE_FLIGHT_XR_HUD_COCKPIT);
 	int hud_area[4] = { 0, 0, 0, 0 };
 	if (xr)
 		TieFlightXr_HudArea(xr->hud_width, xr->hud_height, hud_area);
 	TieFlightRenderer_SetXrFrame(flight->renderer, xr);
-	if (flight->cockpit)
+	if (flight->cockpit) {
 		TieCockpitRenderer_SetXrTarget(flight->cockpit, hud_area[2], hud_area[3], hud_area[0], hud_area[1], xr_split);
+		TieCockpitRenderer_SetXrPanels(flight->cockpit, xr_panels);
+	}
 	bool ok = TieFlightRenderer_PrepareFrame(flight->renderer, cmd, TieSnapshot_Previous(), snapshot,
 											 delta_us, host_time_us, paused);
 	if (ok && flight->cockpit)
@@ -797,6 +808,9 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 			  (TieCockpitRenderer_RenderXrTarget(flight->cockpit, cmd, xr->hud_target, snapshot, false) &&
 			   (!xr_split ||
 				TieCockpitRenderer_RenderXrTarget(flight->cockpit, cmd, xr->hud_world_target, snapshot, true))));
+		/* The instrument panels' content (cockpit HUD layout). */
+		if (ok && xr_panels)
+			(void)TieVrCockpitHud_RenderContent(cmd, xr, flight->cockpit, snapshot, hud_area);
 		/* The controller labels' layer (vr_hands.h). */
 		if (ok)
 			TieVrHands_RenderLayers(cmd, xr);
@@ -851,7 +865,19 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		const int w = xr->hud_width, h = xr->hud_height;
 		AeronXrHudQuad hud;
 		AeronXrHudQuad hud_world;
-		if (xr_split) {
+		AeronXrPanel hud_panels[TIE_VR_COCKPIT_HUD_MAX_PANELS];
+		int hud_panel_n = 0;
+		if (xr_panels) {
+			hud_panel_n = TieVrCockpitHud_Build(xr, TieXwaCockpit_Drawn(snapshot) ? TieXwaCockpit_ModelName() : "2D",
+												hud_panels, TIE_VR_COCKPIT_HUD_MAX_PANELS);
+		} else {
+			TieVrCockpitHud_Idle();
+		}
+		if (hud_panel_n > 0) {
+			/* Cockpit HUD: the panels + the far world quad (target box, gunsight). */
+			TieFlightXr_HudQuadForArea(&snapshot->camera, w, h, hud_area, 0, 1, &hud_world);
+			Aeron_XrStereoCommitPanels(&hud_world, hud_panels, hud_panel_n);
+		} else if (xr_split) {
 			TieFlightXr_HudQuadForArea(&snapshot->camera, w, h, hud_area, 1, 0, &hud);
 			TieFlightXr_HudQuadForArea(&snapshot->camera, w, h, hud_area, 0, 1, &hud_world);
 			Aeron_XrStereoCommitHuds(&hud, &hud_world);
@@ -861,7 +887,9 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 			Aeron_XrStereoCommit(&hud);
 		}
 		/* The hands in front of the HUD, the controller labels. */
-		TieVrHands_CommitLayers(&hud, xr_split ? &hud_world : NULL, xr);
+		TieVrHands_CommitLayers(hud_panel_n > 0 ? NULL : &hud, xr_split ? &hud_world : NULL, xr);
+		for (int i = 0; i < hud_panel_n; ++i)
+			TieVrHands_AddPanelLayer(&hud_panels[i]);
 		/* The VR panels; the hands come out in front of them next frame. */
 		Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_CONSOLE, console_quads, console_n);
 		Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_CARD, panel_quads, panel_n);
@@ -1422,6 +1450,7 @@ void TieRemaster_Shutdown(void) {
 
 	TieFlightXrEnv_Shutdown();
 	TieVrHands_Shutdown();
+	TieVrCockpitHud_Shutdown();
 	TieRemaster_ShutdownFlight();
 	TiePresentationCursor* cursor = &g_remaster.cursor;
 	if (cursor->target)

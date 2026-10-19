@@ -15,6 +15,7 @@
 #include "tie_app/settings/flight_options.h"
 #include "tie_app/settings/settings.h"
 #include "tie_remaster/remaster.h"
+#include "tie_remaster/vr/vr_cockpit_hud.h"
 #include "tie_remaster/vr/vr_hands.h"
 #include "tie_runtime/display/classic_display.h"
 #include "tie_runtime/display/classic_framebuffer.h"
@@ -119,6 +120,10 @@ static void TieFrameLoop_SubmitGameLayers(TieClassicOutputKind* previous_output_
 	char stick_pos[64];
 	if (TieVrHands_TakeStickPlacement(stick_pos, (int)sizeof stick_pos))
 		TieQuest_SaveSetting("XWA_XR_STICK_POS", stick_pos);
+	/* A VR HUD panel was moved: keep the cockpit's layout. */
+	char hud_key[96], hud_layout[1024];
+	if (TieVrCockpitHud_TakeLayout(hud_key, (int)sizeof hud_key, hud_layout, (int)sizeof hud_layout))
+		TieQuest_SaveSetting(hud_key, hud_layout);
 }
 
 static void TieFrameLoop_DiscoverControllers(const AeronInputSnapshot* input) {

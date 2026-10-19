@@ -215,6 +215,18 @@ struct TieCockpitRenderer {
 	AeronDrawList2D* xr_world_list;
 	AeronGraphicsPipeline* xr_pip_pipeline;
 	AeronTextureFormat xr_pip_format;
+	/* VR cockpit HUD (TieCockpitRenderer_SetXrPanels): the instrument atlas
+	 * is drawn for floating panels (2D cockpit mode too), and where each
+	 * instrument landed in it: the estimate from its anchor (coord frame) and
+	 * the sprites it actually drew (atlas px), recorded while the atlas
+	 * records (track_ins = instrument + 1, 0 = none). */
+	bool xr_panels;
+	int track_ins;
+	TieCockpitRendererDrawSpace ins_space;
+	float ins_est[TIE_MAX_HUD_INSTRUMENTS][4];
+	float ins_px[TIE_MAX_HUD_INSTRUMENTS][4];
+	uint8_t ins_est_valid[TIE_MAX_HUD_INSTRUMENTS];
+	uint8_t ins_px_valid[TIE_MAX_HUD_INSTRUMENTS];
 };
 
 static AeronTexture* TieCockpitRenderer_LoadKtx2(TieCockpitRenderer* cg, AeronCommandBuffer* cmd,
@@ -1192,6 +1204,18 @@ static void TieCockpitRenderer_BlitCockpitQuadFull(TieCockpitRenderer* cg, Aeron
 	if (!cg || !cg->record_list || dst_w <= 0.0f || dst_h <= 0.0f)
 		return;
 	const TieCockpitRendererDrawSpace* space = &cg->pending_space;
+	if (cg->track_ins > 0 && cg->track_ins <= TIE_MAX_HUD_INSTRUMENTS) {
+		/* VR cockpit HUD: where this instrument draws in the atlas. */
+		float* b = cg->ins_px[cg->track_ins - 1];
+		const float x0 = space->fit_x + dst_x * space->scale_x, y0 = space->fit_y + dst_y * space->scale_y;
+		const float x1 = x0 + dst_w * space->scale_x, y1 = y0 + dst_h * space->scale_y;
+		if (!cg->ins_px_valid[cg->track_ins - 1]) {
+			b[0] = x0, b[1] = y0, b[2] = x1, b[3] = y1;
+			cg->ins_px_valid[cg->track_ins - 1] = 1;
+		} else {
+			b[0] = fminf(b[0], x0), b[1] = fminf(b[1], y0), b[2] = fmaxf(b[2], x1), b[3] = fmaxf(b[3], y1);
+		}
+	}
 	if (!tex) {
 		const float color[4] = { tint_r + bias_r, tint_g + bias_g, tint_b + bias_b, tint_a + bias_a };
 		AeronDrawList_AddFill(cg->record_list, space->fit_x + dst_x * space->scale_x,
@@ -2804,6 +2828,7 @@ static void TieCockpitRenderer_DrawWidgetsForView(TieCockpitRenderer* cg, AeronC
 		if (cg->xr_world_ready && cg->widget_filter != 1 &&
 			((idx >= 36 && idx <= 44) || cg->widget_filter == 2))
 			cg->record_list = cg->xr_world_list;
+		cg->track_ins = cg->widget_filter == 1 ? idx + 1 : 0;
 
 		switch (kind) {
 			case HUD_W_RADAR_DISC:
@@ -2836,6 +2861,7 @@ static void TieCockpitRenderer_DrawWidgetsForView(TieCockpitRenderer* cg, AeronC
 			default:
 				break;
 		}
+		cg->track_ins = 0;
 		cg->record_list = widget_list;
 	}
 }
@@ -2963,7 +2989,7 @@ bool TieCockpitRenderer_Prepare(TieCockpitRenderer* cg, AeronCommandBuffer* cmd,
 	/* OpenTIE-VR 3D cockpit: the panel art and instruments go to the
 	 * instrument atlas (full panel view only; other cockpit views keep the
 	 * last atlas), the flight RT gets the screen-space HUD. */
-	if (TieXwaCockpit_Drawn(snap)) {
+	if (TieXwaCockpit_Drawn(snap) || (cg->xr_panels && TieXwaCockpit_PanelView(snap))) {
 		if (snap->cockpit.view_idx == 0 &&
 			!TieCockpitRenderer_RenderInstrumentAtlas(cg, cmd, entry, snap, coord_w, coord_h))
 			return false;
@@ -3281,6 +3307,17 @@ static void TieCockpitRenderer_PanelFromBox(const TieCockpitRendererDrawSpace* s
 	out->aspect = (px1 - px0) / (py1 - py0);
 }
 
+/* VR cockpit HUD: an instrument's estimated box (coord frame). */
+static void TieCockpitRenderer_InsEstimate(TieCockpitRenderer* cg, int id, float x0, float y0, float x1, float y1) {
+	if (id < 0 || id >= TIE_MAX_HUD_INSTRUMENTS)
+		return;
+	cg->ins_est[id][0] = x0;
+	cg->ins_est[id][1] = y0;
+	cg->ins_est[id][2] = x1;
+	cg->ins_est[id][3] = y1;
+	cg->ins_est_valid[id] = 1;
+}
+
 /* Sort the live instruments of the full panel view into panel groups:
  * the gunsight and whatever sits right around it (fire levers, lock
  * warnings) stay on the screen; each sensor disc is a panel; the CMD CRT with
@@ -3297,6 +3334,10 @@ static void TieCockpitRenderer_ClassifyInstruments(TieCockpitRenderer* cg, const
 	memset(boxes, 0, sizeof boxes);
 	for (int i = 0; i < TIE_MAX_HUD_INSTRUMENTS; ++i)
 		cg->ins_group[i] = COCKPIT_GROUP_NONE;
+	/* VR cockpit HUD: per-instrument boxes of this atlas (sprites follow). */
+	cg->ins_space = *space;
+	memset(cg->ins_est_valid, 0, sizeof cg->ins_est_valid);
+	memset(cg->ins_px_valid, 0, sizeof cg->ins_px_valid);
 
 	/* Sensor discs: centre anchor, radius from the layout or the engine. */
 	for (int s = 0; s < 2; ++s) {
@@ -3315,6 +3356,7 @@ static void TieCockpitRenderer_ClassifyInstruments(TieCockpitRenderer* cg, const
 		const float ry = rx * pixel_sy / pixel_sx;
 		const float pad = 1.25f;
 		TieCockpitRenderer_BoxAdd(&boxes[panel], cx - rx * pad, cy - ry * pad, cx + rx * pad, cy + ry * pad);
+		TieCockpitRenderer_InsEstimate(cg, id, cx - rx * pad, cy - ry * pad, cx + rx * pad, cy + ry * pad);
 	}
 
 	/* Gunsight cluster. */
@@ -3334,6 +3376,7 @@ static void TieCockpitRenderer_ClassifyInstruments(TieCockpitRenderer* cg, const
 		TieCockpitRenderer_ResolvePipRect(entry, snap, crt->x, crt->y, crt->param1, crt->param2, &x, &y, &w, &h);
 		if (w > 0.0f && h > 0.0f) {
 			TieCockpitRenderer_BoxAdd(cmd_box, x, y, x + w, y + h);
+			TieCockpitRenderer_InsEstimate(cg, TIE_HUDI_CMD_3D_CRT, x, y, x + w, y + h);
 			cmd_cx = x + w * 0.5f;
 			cg->ins_group[TIE_HUDI_CMD_3D_CRT] = TIE_COCKPIT_PANEL_CMD;
 		}
@@ -3346,6 +3389,7 @@ static void TieCockpitRenderer_ClassifyInstruments(TieCockpitRenderer* cg, const
 		TieCockpitRenderer_InsAnchor(entry, id, ins->x, ins->y, snap, &ax, &ay);
 		cg->ins_group[id] = TIE_COCKPIT_PANEL_CMD;
 		TieCockpitRenderer_BoxAdd(cmd_box, ax, ay, ax + 12.0f * pixel_sx, ay + 9.0f * pixel_sy);
+		TieCockpitRenderer_InsEstimate(cg, id, ax, ay, ax + 12.0f * pixel_sx, ay + 9.0f * pixel_sy);
 	}
 	const TieCockpitRendererBox cmd_core = *cmd_box;
 
@@ -3379,6 +3423,8 @@ static void TieCockpitRenderer_ClassifyInstruments(TieCockpitRenderer* cg, const
 		cg->ins_group[id] = (int8_t)panel;
 		TieCockpitRenderer_BoxAdd(&boxes[panel], ax - 4.0f * pixel_sx, ay - 4.0f * pixel_sy,
 								  ax + 24.0f * pixel_sx, ay + 18.0f * pixel_sy);
+		TieCockpitRenderer_InsEstimate(cg, id, ax - 4.0f * pixel_sx, ay - 4.0f * pixel_sy, ax + 24.0f * pixel_sx,
+									   ay + 18.0f * pixel_sy);
 	}
 	if (cmd_box->any) {
 		cmd_box->x0 -= 6.0f * pixel_sx;
@@ -3574,4 +3620,93 @@ bool TieCockpitRenderer_RenderXrTarget(TieCockpitRenderer* cg, AeronCommandBuffe
 	}
 	Aeron_EndRenderPass(pass);
 	return true;
+}
+
+/* ===== OpenTIE-VR cockpit HUD: floating instrument panels (vr/vr_cockpit_hud.c) ===== */
+
+void TieCockpitRenderer_SetXrPanels(TieCockpitRenderer* cg, bool on) {
+	if (cg)
+		cg->xr_panels = on;
+}
+
+bool TieCockpitRenderer_XrPanels(const TieCockpitRenderer* cg) {
+	return cg && cg->xr_panels;
+}
+
+struct AeronTexture* TieCockpitRenderer_InstrumentBoxes(const TieCockpitRenderer* cg, TieCockpitInstrumentBox* out,
+														int count) {
+	if (!out || count <= 0)
+		return NULL;
+	memset(out, 0, sizeof *out * (size_t)count);
+	if (!cg || !cg->atlas_drawn || !cg->atlas_rt || !cg->pending_xr3d)
+		return NULL;
+	const TieCockpitRendererDrawSpace* sp = &cg->ins_space;
+	if (sp->target_w <= 0 || sp->target_h <= 0)
+		return NULL;
+	const float iw = 1.0f / (float)sp->target_w, ih = 1.0f / (float)sp->target_h;
+	for (int i = 0; i < count && i < TIE_MAX_HUD_INSTRUMENTS; ++i) {
+		TieCockpitInstrumentBox* b = &out[i];
+		b->group = cg->ins_group[i];
+		b->slider = hud_widget_kind[i] == HUD_W_VERT_SLIDER;
+		if (cg->ins_est_valid[i]) {
+			const float* e = cg->ins_est[i];
+			b->est[0] = (sp->fit_x + e[0] * sp->scale_x) * iw;
+			b->est[1] = (sp->fit_y + e[1] * sp->scale_y) * ih;
+			b->est[2] = (sp->fit_x + e[2] * sp->scale_x) * iw;
+			b->est[3] = (sp->fit_y + e[3] * sp->scale_y) * ih;
+			b->valid = true;
+		}
+		if (cg->ins_px_valid[i]) {
+			const float* d = cg->ins_px[i];
+			b->drawn_uv[0] = d[0] * iw;
+			b->drawn_uv[1] = d[1] * ih;
+			b->drawn_uv[2] = d[2] * iw;
+			b->drawn_uv[3] = d[3] * ih;
+			b->drawn = true;
+		}
+	}
+	return Aeron_RenderTargetGetTexture(cg->atlas_rt);
+}
+
+bool TieCockpitRenderer_XrMessageRect(TieCockpitRenderer* cg, const TieSnapshot* snap, int rect[4]) {
+	if (!cg || !snap || !rect || cg->xr_target_w <= 0 || !snap->hud.msg_bar.present)
+		return false;
+	TieFlightHudMessageBarGeometry g;
+	if (!TieFlightHud_MessageBarGeometry(snap, cg->xr_target_w, cg->xr_target_h, &g))
+		return false;
+	TieUIText recs[4];
+	const int n = TieCockpitText_BuildmsgBarText(snap, (int)snap->hud.msg_bar.line_top, 2,
+												 (int)snap->hud.msg_bar.line_right, recs, 4);
+	float x1 = -1.0f;
+	for (int i = 0; i < n; ++i) {
+		/* The time-warp column only while time runs faster. */
+		if (recs[i].x == (int16_t)snap->hud.msg_bar.line_right && snap->hud.msg_bar.accelerated_time <= 1)
+			continue;
+		const float atlas_scale = cg->original_font_atlas_scale > 0.0f
+									  ? cg->original_font_atlas_scale
+									  : TieCockpitRenderer_CockpitAtlasScaleFor(NULL, g.classic_h);
+		const TieScene2dTextSpace space = {
+			.classic_w = g.classic_w,
+			.classic_h = g.classic_h,
+			.atlas_scale_x = atlas_scale,
+			.atlas_scale_y = atlas_scale,
+			.fit = TIE_SCENE2D_TEXT_FIT_FILL,
+		};
+		float w = cg->text_renderer ? TieScene2dTextRenderer_MeasureFestringClassic(
+										  cg->text_renderer, recs[i].font_domain, recs[i].font_id, &space, recs[i].text)
+									: 0.0f;
+		if (w <= 0.0f)
+			w = 6.0f * (float)strlen(recs[i].text);
+		x1 = fmaxf(x1, (float)recs[i].x + w);
+	}
+	if (x1 <= 2.0f)
+		return false;
+	const float pad = 6.0f * g.text_scale_x;
+	const float px0 = fmaxf(0.0f, g.text_fit_x + 2.0f * g.text_scale_x - pad);
+	const float px1 = fminf((float)cg->xr_target_w, g.text_fit_x + x1 * g.text_scale_x + pad);
+	rect[0] = cg->xr_origin_x + (int)floorf(px0);
+	rect[1] = cg->xr_origin_y + (int)floorf(g.separator_y);
+	rect[2] = (int)ceilf(px1 - px0);
+	rect[3] = (int)ceilf(g.bar_y + g.bar_h - g.separator_y);
+	return rect[2] > 4 && rect[3] > 2;
 }

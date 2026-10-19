@@ -356,6 +356,14 @@ void TieXwaCockpit_Prepare(AeronCommandBuffer* cmd, const TieFlightAssetSource* 
 	s_xwa.mission_gen = gen;
 }
 
+bool TieXwaCockpit_PanelView(const TieSnapshot* snap) {
+	return TieXwaCockpit_ViewShowsCockpit(snap);
+}
+
+const char* TieXwaCockpit_ModelName(void) {
+	return s_xwa.mesh ? s_xwa.name : "";
+}
+
 bool TieXwaCockpit_Drawn(const TieSnapshot* snap) {
 	return s_xwa.mesh && TieXwaCockpit_Enabled() && TieXwaCockpit_ViewShowsCockpit(snap) &&
 		   snap->mission_load_generation == s_xwa.mission_gen;
@@ -369,7 +377,9 @@ static void TieXwaCockpit_ModelToLocal(const float m[16], const float p[3], floa
 
 static void TieXwaCockpit_SubmitPanels(AeronScene3D* scene, const float m[16],
 									   const TieCockpitRenderer* instruments) {
-	if (!instruments)
+	/* VR cockpit HUD: the instruments float in front of the cockpit instead
+	 * (TIE_XR_HUD_LAYOUT=dashboard keeps them on the dashboard). */
+	if (!instruments || TieCockpitRenderer_XrPanels(instruments))
 		return;
 	TieCockpitPanelSource src[TIE_COCKPIT_PANEL_COUNT];
 	AeronTexture* atlas = TieCockpitRenderer_InstrumentAtlas(instruments, src);

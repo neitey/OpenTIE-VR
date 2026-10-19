@@ -14,7 +14,9 @@
  *   XWA_XR_STEREO=0          flight stays flat on the virtual screen
  *   XWA_XR_WORLD_SCALE       metres -> scene units multiplier [1.0]
  *   XWA_XR_DEPTH_BOOST       eye separation multiplier for the world [1.0]
- *   XWA_XR_HUD_LAYOUT        helmet (default) | fixed
+ *   XWA_XR_HUD_LAYOUT        cockpit (default) | helmet | fixed
+ *   TIE_XR_HUD_LAYOUT=dashboard  = helmet: with the 3D cockpit the instruments
+ *                            sit on its dashboard, the message bar head-locked
  *   XWA_XR_HUD_DISTANCE      helmet HUD distance in metres [3.0]
  *   XWA_XR_HUD_SCALE         helmet HUD size factor [0.65]
  *   XWA_XR_HUD_SMOOTH        helmet HUD follow time constant, s [0.18]
@@ -35,6 +37,9 @@ extern "C" {
 typedef enum TieFlightXrHudLayout {
 	TIE_FLIGHT_XR_HUD_HELMET = 0, /* head-locked sheet + far world quad for the target box */
 	TIE_FLIGHT_XR_HUD_FIXED = 1,  /* one sheet fixed in the craft frame (everything on it) */
+	/* The instruments as separate panels floating around the canopy
+	 * (vr/vr_cockpit_hud.c) + the far world quad; the default. */
+	TIE_FLIGHT_XR_HUD_COCKPIT = 2,
 } TieFlightXrHudLayout;
 
 /* Positive float from the environment, else `fallback`. */
