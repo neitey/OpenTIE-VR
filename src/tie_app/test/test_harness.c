@@ -11,17 +11,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 
 /* ------------------------------------------------------------------------
- * Script
+ * Script (TIE_TEST_SCRIPT): one command per line, '#' starts a comment.
  *
- *   [frame] command args...      # comment
+ *   <frame> <command> args...
  *
  * frame: N (absolute host frame) or +N (relative to the previous line, or to
  * the frame a 'wait' finished on). Lines run in order; a line never runs
- * before the one above it. Commands: key, keydown, keyup, text, mouse,
- * axis, button, buttondown, buttonup, head, capture, wait, log, quit.
+ * before the one above it.
+ *
+ *   key <name> [hold]        press for `hold` frames (3); SDL scancode names
+ *                            (Return Space Escape Up A F1 Backspace [ ] ;),
+ *                            optional ctrl+/shift+/alt+/gui+ prefixes
+ *   keydown <name> / keyup <name>
+ *   text <string>            typed text, one character every other frame
+ *   mouse <x> <y> [click|rclick|down|up|rdown|rup]
+ *                            logical coordinates (1440x1080 for 4:3 =
+ *                            640x480 frontend pixels * 2.25)
+ *   axis <yaw|pitch|roll|SDL gamepad axis> <-1..1>    virtual gamepad
+ *   button <SDL gamepad button> [hold] / buttondown / buttonup
+ *   head <yaw> <pitch> [roll [x y z]]   fake XR head pose (deg, m; +yaw
+ *                            looks left, +pitch up)
+ *   capture [label]          PNGs this frame (window, XR targets)
+ *   wait scene <frontend|briefing|hangar|flight|debrief|cutscene|loading>
+ *   wait shell <scene id>    e.g. 100 registration, 110 concourse
+ *   wait flying [n]          normal flight screen, n flight frames stepped
+ *                            (all waits: optional timeout=<frames>, 3600)
+ *   mission <m>              (frame 0) same as TIE_TEST_MISSION=<m>
+ *   log <text>, quit
  * ------------------------------------------------------------------------ */
 
 enum {
@@ -39,6 +57,7 @@ enum {
 	TT_CMD_WAIT,
 	TT_CMD_LOG,
 	TT_CMD_QUIT,
+	TT_CMD_MISSION,
 };
 
 enum {
@@ -271,6 +290,7 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 		{ "wait", TT_CMD_WAIT },
 		{ "log", TT_CMD_LOG },
 		{ "quit", TT_CMD_QUIT },
+		{ "mission", TT_CMD_MISSION },
 	};
 	out->cmd = -1;
 	for (size_t i = 0; i < SDL_arraysize(commands); ++i)
@@ -299,6 +319,7 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 			return true;
 		case TT_CMD_TEXT:
 		case TT_CMD_LOG:
+		case TT_CMD_MISSION:
 			while (*cursor && isspace((unsigned char)*cursor))
 				++cursor;
 			SDL_strlcpy(out->text, cursor, sizeof out->text);
@@ -556,6 +577,9 @@ void TieTest_ConfigureAeron(AeronConfig* config) {
 
 void TieTest_AfterRuntimeInit(void) {
 	const char* mission = SDL_getenv("TIE_TEST_MISSION");
+	for (int i = 0; (!mission || !mission[0]) && i < g_test.line_count; ++i)
+		if (g_test.lines[i].cmd == TT_CMD_MISSION)
+			mission = g_test.lines[i].text;
 	if (!g_test.active || !mission || !mission[0])
 		return;
 	ShellTask* shell = sHead_gbl ? (ShellTask*)(void*)sHead_gbl : NULL;
@@ -871,7 +895,7 @@ static void TieTest_ApplyGamepad(AeronInputSnapshot* input) {
 		pad->instance_id = 0x7e57u;
 		SDL_strlcpy(pad->name, "TIE test gamepad", sizeof pad->name);
 		SDL_strlcpy(pad->path, "tie-test", sizeof pad->path);
-		SDL_strlcpy(pad->guid, "0300000054494554657374706164000", sizeof pad->guid);
+		SDL_strlcpy(pad->guid, "03000000544945546573747061640000", sizeof pad->guid);
 		pad->axis_count = AERON_GAMEPAD_AXIS_COUNT;
 		pad->button_count = AERON_GAMEPAD_BUTTON_COUNT;
 		pad->gamepad_available_axes = (1u << AERON_GAMEPAD_AXIS_COUNT) - 1u;
@@ -980,8 +1004,14 @@ bool TieTest_AfterPresent(void) {
 		if (g_test.capture_armed && written)
 			TieTest_Log("captured %d XR images: %s_*", written, g_test.capture_prefix);
 	}
-	if (g_test.capture_armed)
-		TieTest_Log("capture %s_window.png", g_test.capture_prefix);
+	if (g_test.capture_armed) {
+		const TieSnapshot* snapshot = TieSnapshot_Current();
+		if (snapshot && snapshot->scene_kind == TIE_SCENE_FLIGHT)
+			TieTest_Log("capture %s_window.png (flight_frame %u, clock %.6s)", g_test.capture_prefix,
+						(unsigned)snapshot->flight_frame, snapshot->hud.mission_clock_text);
+		else
+			TieTest_Log("capture %s_window.png", g_test.capture_prefix);
+	}
 	g_test.capture_armed = false;
 	g_test.capture_now = false;
 	g_test.capture_label[0] = '\0';

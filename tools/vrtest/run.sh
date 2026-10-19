@@ -4,10 +4,11 @@
 #   tools/vrtest/run.sh <build-dir> <script|-> <capture-dir> [VAR=value ...]
 #
 #   build-dir    CMake build dir holding OpenTIE (Linux desktop build)
-#   script       TIE_TEST_SCRIPT file (see tools/vrtest/README.md), or - for none
+#   script       TIE_TEST_SCRIPT file (syntax: top of src/tie_app/test/test_harness.c;
+#                examples in tools/vrtest/scripts), or - for none
 #   capture-dir  PNG captures + run.log go here (created)
 #   VAR=value    extra environment, e.g. TIE_TEST_XR=1 TIE_TEST_EXIT_FRAME=600
-#                TIE_TEST_CAPTURE_FRAMES=every:100 AERON_XR_EYE_PIXELS=...
+#                TIE_TEST_CAPTURE_FRAMES=every:100 TIE_TEST_XR_EYE=768x768
 #
 # Defaults (override on the command line or in the environment):
 #   TIE_TEST_WINDOW=640x480     small window = fast SwiftShader frames
@@ -20,7 +21,7 @@
 # Exit status: the game's (0 ok, 3 a script 'wait' timed out, 124 timeout).
 set -eu
 if [ $# -lt 3 ]; then
-	sed -n '2,22p' "$0"
+	sed -n '2,21p' "$0"
 	exit 2
 fi
 BUILD=$(cd "$1" && pwd)

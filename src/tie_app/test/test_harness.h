@@ -5,7 +5,8 @@
  * Everything is switched on by environment variables and does nothing
  * (one flag test per call) when none of them is set:
  *
- *   TIE_TEST_SCRIPT=<file>        scripted input (see tools/vrtest/README.md)
+ *   TIE_TEST_SCRIPT=<file>        scripted input (syntax: top of test_harness.c,
+ *                                 examples: tools/vrtest/scripts)
  *   TIE_TEST_CAPTURE=<dir>        PNG captures (window composition, XR eyes/HUD)
  *   TIE_TEST_CAPTURE_FRAMES=list  "100,250,400" or "every:N" (default: script
  *                                 'capture' lines only)
