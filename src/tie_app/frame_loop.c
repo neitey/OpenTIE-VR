@@ -203,6 +203,21 @@ void TieFrameLoop_Run(void) {
 			int console_arg;
 			while (TieVrConsole_PollAction(&console_action, &console_arg))
 				TieVrConsoleGame_Action(console_action, console_arg);
+			/* Slow motion (45 % speed) while the quick wheel is open in
+			 * flight, eased in and out (XWA_XR_WHEEL_SLOWMO=0 turns it off). */
+			static float slow;
+			const char* slow_env = SDL_getenv("XWA_XR_WHEEL_SLOWMO");
+			const bool slow_on = !(slow_env && slow_env[0] == '0');
+			const float slow_dt = (float)delta_us * 1e-6f;
+			const bool slow_want = slow_on && TieVrConsole_WheelOpen() && TieVrControls_InFlight();
+			static bool slow_logged;
+			if (slow_want != slow_logged) {
+				Aeron_LogInfo("tie.vrconsole", "quick wheel slow motion %s", slow_want ? "on" : "off");
+				slow_logged = slow_want;
+			}
+			slow = slow_want ? SDL_min(1.0f, slow + slow_dt / 0.15f) : SDL_max(0.0f, slow - slow_dt / 0.25f);
+			const float slow_k = slow * slow * (3.0f - 2.0f * slow);
+			TieRuntime_SetSimTimeScale(1.0f - 0.55f * slow_k);
 			TieVrConsoleState console_state;
 			TieVrConsoleGame_GetState(&console_state);
 			TieVrConsole_SetState(&console_state);

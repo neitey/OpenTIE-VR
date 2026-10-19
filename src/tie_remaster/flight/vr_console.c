@@ -646,7 +646,7 @@ static void vc_hold_tick(int hand) {
 	const VcButton* b = &s_vc.buttons[h->press_button];
 	if (b->hold_action == TIE_VRC_NONE)
 		return;
-	h->press_time += s_vc.dt;
+	h->press_time += s_vc.wall_dt;
 	if (h->press_time >= VC_HOLD_S) {
 		h->hold_fired = 1;
 		Aeron_XrHapticPulse(hand, 0.9f, 60);
@@ -1784,6 +1784,7 @@ static void vw_update(const AeronXrView views[2]) {
 						  s_vc.card.place.grab_hand == hand + 1 || s_vc.card.place.hover_side[hand];
 			s_vw.held_s = 0.0f;
 			s_vw.serial = serial;
+			return; /* squeezed during the last frame: start counting now */
 		}
 		/* The grip is TIE's shift layer: a grip + button chord in this
 		 * squeeze, and it is not the wheel's. */

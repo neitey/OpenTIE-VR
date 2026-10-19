@@ -200,13 +200,35 @@ static int32_t TieRuntime_ClampHostDeltaUs(int32_t delta_us) {
 	return delta_us > TIE_RUNTIME_MAX_ADVANCE_US ? TIE_RUNTIME_MAX_ADVANCE_US : delta_us;
 }
 
+/* VR quick wheel slow motion: the flight sim's clock (TieSimClock) runs at
+ * this fraction of real time; music and the UI clocks stay at speed. */
+static float s_sim_time_scale = 1.0f;
+static double s_sim_time_carry_us;
+
+void TieRuntime_SetSimTimeScale(float scale) {
+	if (!(scale > 0.05f) || scale > 1.0f)
+		scale = 1.0f;
+	if (scale >= 1.0f)
+		s_sim_time_carry_us = 0.0;
+	s_sim_time_scale = scale;
+}
+
+static int32_t TieRuntime_ScaleSimStep(int32_t step_us) {
+	if (s_sim_time_scale >= 1.0f)
+		return step_us;
+	const double scaled = (double)step_us * (double)s_sim_time_scale + s_sim_time_carry_us;
+	const int32_t whole = (int32_t)scaled;
+	s_sim_time_carry_us = scaled - (double)whole;
+	return whole;
+}
+
 static void TieRuntime_AdvanceEngineTime(uint64_t delta_us) {
 	/* Deferred frontend time may span more than one catch-up quantum. Split it
 	 * so every clock receives the same accepted duration. */
 	while (delta_us > 0) {
 		const int32_t step_us =
 			(int32_t)(delta_us > TIE_RUNTIME_MAX_ADVANCE_US ? TIE_RUNTIME_MAX_ADVANCE_US : delta_us);
-		TieSimClock_Advance(step_us);
+		TieSimClock_Advance(TieRuntime_ScaleSimStep(step_us));
 		TieMusicPolicy_AdvanceTime(step_us);
 
 		TieImuseSession_Advance(step_us);

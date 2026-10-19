@@ -30,6 +30,10 @@ bool TieRuntime_SetMusicDuckingVolumePercent(int percent);
 
 /* Advances one host-visible tick using the supplied synthetic-clock delta. */
 void TieRuntime_Tick(int32_t delta_us);
+/* Slow motion: the flight sim's clock advances `scale` (0.05..1) of each
+ * tick's time; 1 = normal. Music and the frontend clocks are not scaled.
+ * The VR quick wheel uses it (XWA_XR_WHEEL_SLOWMO). */
+void TieRuntime_SetSimTimeScale(float scale);
 
 #ifdef TIE_MODERN
 /* UINT64_MAX means no task deadline precedes the presentation cadence. */
