@@ -68,6 +68,36 @@ Steam that is "STAR WARS Tie Fighter" (with the remastered and
 collectors_cd folders inside).
 
 
+In the headset
+--------------
+Menus: point with the right controller and pull the trigger to click.
+B goes back. A pilot name is typed on the keyboard that appears on the
+screen. The menu button opens the OpenTIE settings (with a VR page).
+
+Flying:
+  Right stick ............ pitch and turn
+  Left stick left/right .. roll
+  Left stick fwd/back .... throttle (stays where you leave it)
+  Right trigger .......... fire
+  A / B .................. next / previous target
+  X / Y .................. nearest fighter / your attacker
+  Left trigger ........... weapon (lasers, ions, warheads)
+  Left stick click ....... firing mode (single / linked)
+  Right stick click ...... match speed
+  Right grip ............. target in your sights
+  Hold left grip + A / B . shield / laser recharge rate
+  Hold left grip + X / Y . energy lasers -> shields / shields -> lasers
+  Hold left grip + L trig. beam weapon on/off
+  Both triggers .......... confirm (when the game asks, e.g. end mission)
+  Hold left grip still ... radial menu: point, pull the left trigger
+Look down: the lap console (energy, targeting, wingmen, ship), touch or
+point and pull the trigger. On your right: the side panel (tactical map,
+voice commands, button list). Look at a controller to see its labels.
+Voice: double-tap a thumb rest, then speak (e.g. "next target", "full
+throttle", "cover me").
+The game pauses while the headset is off. Settings: menu button -> VR.
+
+
 Problems?
 ---------
 Run the launcher and choose "Collect logs" at the end (or start it with
