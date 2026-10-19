@@ -449,7 +449,7 @@ static int gl_pin_build(AeronCommandBuffer* cmd) {
 		d->vertex_count = d->index_count = 0;
 		if (p == GL_PIN_PLATE) {
 			gl_pin_box(d, -0.0085f, -0.005f, -0.0002f, 0.0085f, 0.005f, 0.0010f);
-			gl_material(&d->material, 0.42f, 0.43f, 0.45f, 1.0f, 0.35f); /* brushed steel */
+			gl_material(&d->material, 0.55f, 0.56f, 0.58f, 0.7f, 0.4f); /* brushed steel */
 		} else {
 			const float y = p == GL_PIN_RED ? 0.0022f : -0.0022f;
 			for (int i = 0; i < 3; ++i) {

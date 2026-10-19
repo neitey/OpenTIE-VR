@@ -52,16 +52,6 @@
 
 /* ---- Math ---------------------------------------------------------------- */
 
-static void ct_rotate(const float q[4], const float v[3], float out[3]) {
-	const float x = q[0], y = q[1], z = q[2], w = q[3];
-	const float tx = 2.0f * (y * v[2] - z * v[1]);
-	const float ty = 2.0f * (z * v[0] - x * v[2]);
-	const float tz = 2.0f * (x * v[1] - y * v[0]);
-	out[0] = v[0] + w * tx + (y * tz - z * ty);
-	out[1] = v[1] + w * ty + (z * tx - x * tz);
-	out[2] = v[2] + w * tz + (x * ty - y * tx);
-}
-
 static void ct_norm(float v[3]) {
 	const float l = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
 	if (l > 1e-12f) {
