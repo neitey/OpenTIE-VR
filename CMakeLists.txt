@@ -451,6 +451,8 @@ set(TIE_RUNTIME_SOURCES
     src/tie_runtime/input/vr_text.h
     src/tie_runtime/input/vr_controls.c
     src/tie_runtime/input/vr_controls.h
+    src/tie_runtime/input/vr_pointer.c
+    src/tie_runtime/input/vr_pointer.h
     src/tie_runtime/input/vr_console_game.c
     src/tie_runtime/input/vr_console_game.h
     src/tie_runtime/input/vr_console_protocol.h

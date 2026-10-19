@@ -82,6 +82,11 @@ void TieFlightRenderer_SetXrFrame(TieFlightRenderer* g, const struct AeronXrSter
 bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cmd);
 /* True while the frame being prepared is stereo. */
 bool TieFlightRenderer_XrActive(const TieFlightRenderer* g);
+/* The stereo frame is the backdrop of a menu on the virtual screen (the
+ * settings overlay opened in flight): the hands as in the menus (no flight
+ * stick, shown in front of the screen) and the eyes dimmed by
+ * TIE_XR_PAUSE_DIM. Set before PrepareFrame; false for ordinary flight. */
+void TieFlightRenderer_SetXrMenuBackdrop(TieFlightRenderer* g, bool menu);
 /* Brackets (AeronScene_Mark) submissions made during PrepareFrame that sit
  * near the eyes, e.g. a 3D cockpit: with XWA_XR_DEPTH_BOOST > 1 they move
  * with each eye's boost shift so they keep their real size. */

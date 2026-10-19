@@ -315,6 +315,8 @@ struct TieFlightRenderer {
 	/* OpenXR stereo (TieFlightRenderer_SetXrFrame): this frame's views and
 	 * eye targets; the eye cameras PrepareFrame built from them. */
 	bool xr_active;
+	/* TieFlightRenderer_SetXrMenuBackdrop: a menu floats over this frame. */
+	bool xr_menu;
 	AeronXrStereoFrame xr_frame;
 	TieFlightCamera xr_eyes[2];
 	AeronScenePresentChain* xr_present_chain;

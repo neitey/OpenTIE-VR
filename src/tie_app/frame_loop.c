@@ -250,6 +250,7 @@ void TieFrameLoop_Run(void) {
 
 		TieClassicLayer_SyncInputExtent();
 		const TieSnapshot* snapshot = TieSnapshot_Current();
+		TieRemaster_SetMenuOverlayOpen(menu_open);
 		prof_t = TieXrProf_Add(TIE_XR_PROF_INPUT, prof_t);
 		const uint64_t prof_mark = TieXrProf_Mark();
 		TieFrameLoop_SubmitGameLayers(&previous_output_kind, snapshot, &flight_options, delta_us,

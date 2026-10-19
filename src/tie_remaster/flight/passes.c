@@ -1029,7 +1029,24 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 	g->xr_hands_valid = false;
 	if (xr) {
 		g->xr_hands_begin = AeronScene_Mark(g->scene);
-		TieVrHands_Submit(g->scene, cmd, &fcam.camera, TieFlightXr_UnitsPerMeter(), &g->xr_frame);
+		if (g->xr_menu) {
+			/* A menu on the virtual screen: menu hands, in front of it. */
+			AeronXrPanel screen;
+			memset(&screen, 0, sizeof screen);
+			float d = 0.0f, w = 0.0f, h = 0.0f, off = 0.0f;
+			const bool have_screen = Aeron_XrVirtualScreenGeometry(&d, &w, &h, &off) && w > 0.0f && h > 0.0f;
+			if (have_screen) {
+				screen.position[1] = off;
+				screen.position[2] = -d;
+				screen.orientation[3] = 1.0f;
+				screen.size[0] = w;
+				screen.size[1] = h;
+			}
+			TieVrHands_SubmitMenu(g->scene, cmd, &fcam.camera, TieFlightXr_UnitsPerMeter(), &g->xr_frame,
+								  have_screen ? &screen : NULL);
+		} else {
+			TieVrHands_Submit(g->scene, cmd, &fcam.camera, TieFlightXr_UnitsPerMeter(), &g->xr_frame);
+		}
 		g->xr_hands_end = AeronScene_Mark(g->scene);
 		g->xr_hands_valid = true;
 	}
@@ -1094,6 +1111,20 @@ void TieFlightRenderer_SetXrFrame(TieFlightRenderer* g, const AeronXrStereoFrame
 }
 
 bool TieFlightRenderer_XrActive(const TieFlightRenderer* g) { return g && g->xr_active; }
+
+void TieFlightRenderer_SetXrMenuBackdrop(TieFlightRenderer* g, bool menu) {
+	if (g)
+		g->xr_menu = menu;
+}
+
+/* TIE_XR_PAUSE_DIM: displayed brightness of the frozen cockpit behind a menu
+ * (0.1..1, default 0.6); the tint is applied in linear light. */
+static float TieFlightRenderer_XrMenuTint(void) {
+	const char* env = getenv("TIE_XR_PAUSE_DIM");
+	float v = env && env[0] ? (float)atof(env) : 0.6f;
+	v = v < 0.1f ? 0.1f : v > 1.0f ? 1.0f : v;
+	return powf(v, 2.2f);
+}
 
 void TieFlightRenderer_XrSetNearRange(TieFlightRenderer* g, const AeronSceneMark* begin, const AeronSceneMark* end) {
 	if (!g || !begin || !end)
@@ -1220,7 +1251,8 @@ static bool TieFlightRenderer_XrOutputEye(TieFlightRenderer* g, AeronCommandBuff
 	});
 	if (!pass)
 		return false;
-	static const float tint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	const float k = g->xr_menu ? TieFlightRenderer_XrMenuTint() : 1.0f;
+	const float tint[4] = { k, k, k, 1.0f };
 	AeronScenePresentChain_Draw(chain, pass, Aeron_RenderTargetGetTexture(scene_target), g->sampler_linear,
 								bloom_tex, AeronSceneBloom_Intensity(), g->rt_w, g->rt_h, 1.0f, tint, 0);
 	/* The eye's alpha for the hands' overlay over the HUD layers. */
