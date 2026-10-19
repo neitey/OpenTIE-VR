@@ -17,6 +17,7 @@
 #include "tie_app/settings/launch_options.h"
 #include "tie_app/settings/mouse_options.h"
 #include "tie_app/settings/video_options.h"
+#include "tie_app/settings/vr_options.h"
 #include "tie_app/setup/installation_ui.h"
 #include "tie_remaster/remaster.h"
 #include "tie_runtime/input/controller_mapping.h"
@@ -41,6 +42,7 @@ enum {
 	SETTINGS_PAGE_CONTROLLER,
 	SETTINGS_PAGE_KEYBOARD,
 	SETTINGS_PAGE_MOUSE,
+	SETTINGS_PAGE_VR,
 };
 
 static struct {
@@ -914,7 +916,8 @@ static void TieSettings_DrawExitConfirmation(AeronUiContext* ui) {
 }
 
 void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
-	static const char* const pages[] = { "Game", "Video", "Audio", "Controller", "Keyboard", "Mouse" };
+	static const char* const pages[] = { "Game", "Video", "Audio", "Controller", "Keyboard", "Mouse", "VR" };
+	const int page_count = TieVrOptions_Available() ? 7 : 6;
 	if (!g_settings.available || !g_settings.open || !input)
 		return;
 	AeronUi_BeginFrame(g_settings.ui, &(AeronUiFrameDesc) {
@@ -926,7 +929,7 @@ void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
 	AeronUiWindowDesc window = { .width_ref = 980.0f, .height_ref = 1000.0f, .centered = 1 };
 	if (AeronUi_BeginWindow(g_settings.ui, "OpenTIE Settings - v" TIE_VERSION_STRING, &window)) {
 		const int previous_page = g_settings.page;
-		AeronUi_BeginTabBar(g_settings.ui, "pages", pages, sizeof pages / sizeof pages[0], &g_settings.page);
+		AeronUi_BeginTabBar(g_settings.ui, "pages", pages, page_count, &g_settings.page);
 		if (previous_page != g_settings.page) {
 			TieControllerSettings_CancelCapture(&g_settings.controller, g_settings.ui);
 			TieKeyboardSettings_CancelCapture(&g_settings.keyboard, g_settings.ui);
@@ -955,6 +958,14 @@ void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
 			AeronUi_PopId(g_settings.ui);
 		} else if (g_settings.page == SETTINGS_PAGE_MOUSE)
 			TieSettings_MousePage(g_settings.ui);
+		else if (g_settings.page == SETTINGS_PAGE_VR) {
+			const float footer_reserve = 83.0f;
+			const float scroll_height = AeronUi_AvailableHeight(g_settings.ui) - footer_reserve;
+			if (AeronUi_BeginScroll(g_settings.ui, "VR Settings", scroll_height)) {
+				TieVrOptions_Draw(g_settings.ui);
+				AeronUi_EndScroll(g_settings.ui);
+			}
+		}
 		AeronUi_EndTabBar(g_settings.ui);
 		if (g_settings.page != SETTINGS_PAGE_VIDEO && g_settings.error[0])
 			AeronUi_Error(g_settings.ui, g_settings.error);

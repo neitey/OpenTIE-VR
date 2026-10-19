@@ -18,6 +18,7 @@ set(TIE_APP_SOURCES
     settings/launch_options.c
     settings/video_options.c
     settings/settings.c
+    settings/vr_options.c
     settings/keyboard_page.c
     settings/bindings_editor.c
     settings/controller_page.c
