@@ -9,6 +9,7 @@
 #include "aeron/aeron.h"
 #include "aeron/scene/draw_list2d.h"
 #include "tie_remaster/vr/vr_gloves.h"
+#include "tie_runtime/input/vr_pointer.h"
 
 /* The beam texture: a vertical strip in the target's top-left corner, the
  * screen end at the top. */
@@ -148,6 +149,21 @@ bool TieFlightXrBeam_Frame(AeronCommandBuffer* cmd, AeronRenderTarget* target, i
 		if (!Aeron_XrGetHand(1, &hand))
 			return false;
 		memcpy(start, hand.position, sizeof start);
+	}
+	/* A menu that steadies the pointer (vr_pointer.h): end on the steadied
+	 * spot, the pointer it shows, not on the raw ray. Logical pixels -> metres
+	 * on the screen quad (the logical frame fitted into it). */
+	float dx = 0.0f, dy = 0.0f;
+	float sd = 0.0f, sw = 0.0f, sh = 0.0f, soff = 0.0f;
+	int lw = 0, lh = 0;
+	if (TieVrPointer_Offset(&dx, &dy) && (dx != 0.0f || dy != 0.0f) &&
+		Aeron_XrVirtualScreenGeometry(&sd, &sw, &sh, &soff) && sw > 0.0f && sh > 0.0f &&
+		Aeron_GetLogicalSize(&lw, &lh) && lw > 0 && lh > 0) {
+		const float logical_aspect = (float)lw / (float)lh;
+		const float content_h = sw / sh > logical_aspect ? sh : sw / logical_aspect;
+		const float m_per_px = content_h / (float)lh;
+		hit[0] += dx * m_per_px;
+		hit[1] -= dy * m_per_px;
 	}
 	/* It ends just in front of the screen's glass. */
 	const float depth = TieFlightXrBeam_EnvFloat("XWA_XR_CURSOR_DEPTH", 0.02f);

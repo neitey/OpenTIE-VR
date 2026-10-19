@@ -2,10 +2,13 @@
 
 #include "tie_app/settings/settings.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "aeron/aeron.h"
 #include "aeron/scene/ui.h"
+#include "aeron/xr.h"
 #include "aeron/scene/ui_file_picker.h"
 
 #include "tie_app/midi_resources.h"
@@ -21,6 +24,7 @@
 #include "tie_app/setup/installation_ui.h"
 #include "tie_remaster/remaster.h"
 #include "tie_runtime/input/controller_mapping.h"
+#include "tie_runtime/input/vr_pointer.h"
 #include "tie_runtime/runtime/briefing_review.h"
 #include "tie_runtime/runtime/runtime.h"
 
@@ -65,6 +69,45 @@ static struct {
 	TieControllerSettings controller;
 	TieKeyboardSettings keyboard;
 } g_settings;
+
+/* In the headset the menu sits on the ~2 m virtual screen 3 m away, aimed
+ * at with the laser pointer: a bigger theme (rows ~1.4 degrees instead of
+ * ~1) on a window that fills the screen, every page scrolls, and a pointer
+ * dot shows where the laser is. */
+#define TIE_SETTINGS_VR_UI_SCALE 1.35f
+#define TIE_SETTINGS_FOOTER_RESERVE 83.0f
+
+static AeronUiTheme TieSettings_ScaledTheme(const AeronUiTheme* base, float k) {
+	AeronUiTheme theme = *base;
+	theme.text_px *= k;
+	theme.title_px *= k;
+	theme.help_px *= k;
+	theme.row_height *= k;
+	theme.title_height *= k;
+	theme.window_pad *= k;
+	theme.item_spacing *= k;
+	theme.column_spacing *= k;
+	theme.scrollbar_px *= 2.0f * k; /* a target the laser can grab */
+	theme.slider_track_px *= k;
+	theme.focus_px *= k;
+	return theme;
+}
+
+/* The XR touch pad's A (gamepad WEST in the engine's menu mapping) accepts
+ * the focused row, i.e. the one the pointer is on: a click without the
+ * trigger's jerk. The trigger itself is the mouse (the engine keeps it off
+ * the pad while the pointer is on). */
+static void TieSettings_XrAcceptButton(AeronInputSnapshot* in) {
+	for (int i = 0; i < AERON_CONTROLLER_MAX; ++i) {
+		AeronControllerSnapshot* pad = &in->controllers[i];
+		if (!pad->connected || strcmp(pad->path, "openxr:touch") != 0)
+			continue;
+		if (pad->gamepad_pressed_buttons & (1u << AERON_GAMEPAD_BUTTON_WEST))
+			pad->gamepad_pressed_buttons |= 1u << AERON_GAMEPAD_BUTTON_SOUTH;
+		if (pad->gamepad_buttons & (1u << AERON_GAMEPAD_BUTTON_WEST))
+			pad->gamepad_buttons |= 1u << AERON_GAMEPAD_BUTTON_SOUTH;
+	}
+}
 
 static bool TieSettings_RequestSelectedFlightProfile(const TieAppLaunchOptions* launch,
 													 const TieAppLiveFlightOptions* flight, char* error,
@@ -993,8 +1036,33 @@ static void TieSettings_DrawExitConfirmation(AeronUiContext* ui) {
 }
 
 void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
-	if (!g_settings.available || !g_settings.open || !input)
+	if (!g_settings.available || !g_settings.open || !input) {
+		TieVrPointer_Reset();
 		return;
+	}
+	/* VR: the steadied laser pointer, A = accept, the bigger theme. */
+	const bool vr = Aeron_XrIsPresenting() != 0;
+	static AeronInputSnapshot vr_input;
+	const AeronUiTheme base_theme = *AeronUi_GetTheme(g_settings.ui);
+	float ui_scale = 1.0f;
+	float window_w_ref = 980.0f, window_h_ref = 1000.0f;
+	if (vr) {
+		vr_input = *input;
+		TieVrPointer_Steady(&vr_input, dt_seconds);
+		if (!g_settings.captures_controller)
+			TieSettings_XrAcceptButton(&vr_input);
+		input = &vr_input;
+		const AeronUiTheme scaled = TieSettings_ScaledTheme(&base_theme, TIE_SETTINGS_VR_UI_SCALE);
+		AeronUi_SetTheme(g_settings.ui, &scaled);
+		ui_scale = TIE_SETTINGS_VR_UI_SCALE;
+		AeronRectI content;
+		const float aspect = Aeron_GetContentPixelRect(&content) && content.height > 0
+								 ? (float)content.width / (float)content.height
+								 : 4.0f / 3.0f;
+		window_w_ref = fminf(1400.0f, 1080.0f * aspect - 24.0f);
+		window_h_ref = 1056.0f;
+	}
+	const float footer_reserve = TIE_SETTINGS_FOOTER_RESERVE * ui_scale;
 	/* Tab titles and the page each tab shows: VR and (in flight) Briefing
 	 * are optional, so a tab index is not always a page id. */
 	const char* pages[8] = { "Game", "Video", "Audio", "Controller", "Keyboard", "Mouse" };
@@ -1017,7 +1085,7 @@ void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
 									  });
 	TieControllerSettings_Discover(&g_settings.controller, g_settings.ui, input,
 								   &g_settings.config->gamepad_defaults);
-	AeronUiWindowDesc window = { .width_ref = 980.0f, .height_ref = 1000.0f, .centered = 1 };
+	AeronUiWindowDesc window = { .width_ref = window_w_ref, .height_ref = window_h_ref, .centered = 1 };
 	if (AeronUi_BeginWindow(g_settings.ui, "OpenTIE Settings - v" TIE_VERSION_STRING, &window)) {
 		const int previous_page = g_settings.page;
 		AeronUi_BeginTabBar(g_settings.ui, "pages", pages, page_count, &g_settings.page);
@@ -1028,16 +1096,28 @@ void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
 		}
 		const int page_id = g_settings.page >= 0 && g_settings.page < page_count ? page_ids[g_settings.page]
 																				 : SETTINGS_PAGE_GAME;
-		if (page_id == SETTINGS_PAGE_GAME)
+		if (page_id == SETTINGS_PAGE_GAME && vr) {
+			/* The bigger VR rows need the room: scroll. */
+			const float scroll_height = AeronUi_AvailableHeight(g_settings.ui) - footer_reserve;
+			if (AeronUi_BeginScroll(g_settings.ui, "Game Settings", scroll_height)) {
+				TieSettings_GamePage(g_settings.ui);
+				AeronUi_EndScroll(g_settings.ui);
+			}
+		} else if (page_id == SETTINGS_PAGE_GAME)
 			TieSettings_GamePage(g_settings.ui);
 		else if (page_id == SETTINGS_PAGE_VIDEO) {
 			/* Keep the tab ending, separator and Close row outside the scroll view. */
-			const float footer_reserve = 83.0f;
 			const float scroll_height = AeronUi_AvailableHeight(g_settings.ui) - footer_reserve;
 			if (AeronUi_BeginScroll(g_settings.ui, "Video Settings", scroll_height)) {
 				TieSettings_VideoPage(g_settings.ui);
 				if (g_settings.error[0])
 					AeronUi_Error(g_settings.ui, g_settings.error);
+				AeronUi_EndScroll(g_settings.ui);
+			}
+		} else if (page_id == SETTINGS_PAGE_AUDIO && vr) {
+			const float scroll_height = AeronUi_AvailableHeight(g_settings.ui) - footer_reserve;
+			if (AeronUi_BeginScroll(g_settings.ui, "Audio Settings", scroll_height)) {
+				TieSettings_AudioPage(g_settings.ui);
 				AeronUi_EndScroll(g_settings.ui);
 			}
 		} else if (page_id == SETTINGS_PAGE_AUDIO)
@@ -1050,17 +1130,21 @@ void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
 			AeronUi_PushId(g_settings.ui, SETTINGS_PAGE_KEYBOARD);
 			TieKeyboardSettings_Draw(&g_settings.keyboard, g_settings.ui);
 			AeronUi_PopId(g_settings.ui);
+		} else if (page_id == SETTINGS_PAGE_MOUSE && vr) {
+			const float scroll_height = AeronUi_AvailableHeight(g_settings.ui) - footer_reserve;
+			if (AeronUi_BeginScroll(g_settings.ui, "Mouse Settings", scroll_height)) {
+				TieSettings_MousePage(g_settings.ui);
+				AeronUi_EndScroll(g_settings.ui);
+			}
 		} else if (page_id == SETTINGS_PAGE_MOUSE)
 			TieSettings_MousePage(g_settings.ui);
 		else if (page_id == SETTINGS_PAGE_BRIEFING) {
-			const float footer_reserve = 83.0f;
 			const float scroll_height = AeronUi_AvailableHeight(g_settings.ui) - footer_reserve;
 			if (AeronUi_BeginScroll(g_settings.ui, "Mission Briefing", scroll_height)) {
 				TieSettings_BriefingPage(g_settings.ui);
 				AeronUi_EndScroll(g_settings.ui);
 			}
 		} else if (page_id == SETTINGS_PAGE_VR) {
-			const float footer_reserve = 83.0f;
 			const float scroll_height = AeronUi_AvailableHeight(g_settings.ui) - footer_reserve;
 			if (AeronUi_BeginScroll(g_settings.ui, "VR Settings", scroll_height)) {
 				TieVrOptions_Draw(g_settings.ui);
@@ -1097,10 +1181,15 @@ void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
 		AeronUi_EndWindow(g_settings.ui);
 	}
 	TieSettings_DrawPathPicker(g_settings.ui);
+	/* No system cursor in the headset: show where the laser points. */
+	if (vr)
+		AeronUi_DrawPointer(g_settings.ui, 9.0f);
 	AeronUiOutput out = AeronUi_EndFrame(g_settings.ui);
 	g_settings.captures_keyboard = AeronUi_KeyboardCaptureActive(g_settings.ui) != 0;
 	g_settings.captures_controller = out.capture_all != 0 && !g_settings.captures_keyboard;
 	if (out.cancel_pressed)
 		(void)TieSettings_SettingsClose();
 	AeronUi_Submit(g_settings.ui);
+	if (vr)
+		AeronUi_SetTheme(g_settings.ui, &base_theme);
 }

@@ -1,5 +1,6 @@
 #include "tie_remaster/remaster.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "aeron/aeron.h"
@@ -11,6 +12,7 @@
 #include "tie_remaster/flight/render_math.h"
 #include "tie_remaster/flight/renderer.h"
 #include "tie_remaster/flight/xr_env.h"
+#include "tie_remaster/flight/xr_menu_beam.h"
 #include "tie_remaster/flight/vr_console.h"
 #include "tie_remaster/flight/xr_stereo.h"
 #include "tie_remaster/vr/vr_hands.h"
@@ -122,10 +124,14 @@ typedef struct TieRemasterFlight {
 	bool render_suspended;
 	/* The last flight render went to the headset in stereo. */
 	bool xr_stereo;
+	/* ... as the backdrop of a menu (the game paused). */
+	bool xr_menu;
 } TieRemasterFlight;
 
 typedef struct TieRemasterState {
 	bool initialized;
+	/* TieRemaster_SetMenuOverlayOpen. */
+	bool menu_overlay_open;
 	uint64_t host_elapsed_us;
 	bool aspect_correct_legacy_scenes;
 	TieRemasterViewMode view_mode;
@@ -731,10 +737,21 @@ static bool TieRemaster_XrStereoWanted(void) {
 	return Aeron_XrIsPresenting() && TieFlightXr_StereoEnabled();
 }
 
+/* TIE_XR_PAUSE_BACKDROP=0: paused flight (settings overlay, host pause) goes
+ * flat onto the virtual screen in black space, as before; default: it stays
+ * in stereo, frozen, the menu screen in front of the cockpit. */
+static bool TieRemaster_XrPauseBackdropWanted(void) {
+	const char* env = getenv("TIE_XR_PAUSE_BACKDROP");
+	return !(env && env[0] == '0');
+}
+
 /* `xr`: render this frame in stereo into the headset's eye and HUD targets
- * (NULL = flat into present_target). */
+ * (NULL = flat into present_target). `menu`: the stereo frame is the frozen
+ * cockpit behind a menu on the virtual screen (no HUD or panels; committed
+ * as the screen's backdrop with the pointer beam). */
 static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t delta_us,
-										   uint64_t host_time_us, bool paused, const AeronXrStereoFrame* xr) {
+										   uint64_t host_time_us, bool paused, const AeronXrStereoFrame* xr,
+										   bool menu) {
 	TieRemasterFlight* flight = &g_remaster.flight;
 	const TiePresentationLayout* presentation = TiePresentation_Layout();
 	if (!presentation)
@@ -777,11 +794,15 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		return false;
 	}
 
-	const bool xr_split = xr && xr->hud_world_target && TieFlightXr_HudLayout() == TIE_FLIGHT_XR_HUD_HELMET;
+	if (!xr)
+		menu = false;
+	const bool xr_split =
+		xr && !menu && xr->hud_world_target && TieFlightXr_HudLayout() == TIE_FLIGHT_XR_HUD_HELMET;
 	int hud_area[4] = { 0, 0, 0, 0 };
 	if (xr)
 		TieFlightXr_HudArea(xr->hud_width, xr->hud_height, hud_area);
 	TieFlightRenderer_SetXrFrame(flight->renderer, xr);
+	TieFlightRenderer_SetXrMenuBackdrop(flight->renderer, menu);
 	if (flight->cockpit)
 		TieCockpitRenderer_SetXrTarget(flight->cockpit, hud_area[2], hud_area[3], hud_area[0], hud_area[1], xr_split);
 	bool ok = TieFlightRenderer_PrepareFrame(flight->renderer, cmd, TieSnapshot_Previous(), snapshot,
@@ -790,7 +811,15 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		ok = TieCockpitRenderer_Prepare(flight->cockpit, cmd, snapshot);
 	if (Aeron_FatalErrorRequested())
 		ok = false;
-	if (ok && xr) {
+	AeronXrPanel menu_beam;
+	bool menu_beam_on = false;
+	if (ok && xr && menu) {
+		/* Both eyes, the frozen cockpit; the menu's pointer beam. */
+		ok = TieFlightRenderer_RenderStereo(flight->renderer, cmd);
+		menu_beam_on = ok && xr->beam_target &&
+					   TieFlightXrBeam_Frame(cmd, xr->beam_target, xr->beam_width, xr->beam_height, xr->views,
+											 &menu_beam);
+	} else if (ok && xr) {
 		/* Both eyes, then the cockpit/HUD into the HUD layer(s). */
 		ok = TieFlightRenderer_RenderStereo(flight->renderer, cmd) && xr->hud_target &&
 			 (!flight->cockpit ||
@@ -809,7 +838,7 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 	 * are hidden (count 0) outside cockpit flight. */
 	AeronXrPanel console_quads[2], panel_quads[2], wheel_quads[2];
 	int console_n = 0, panel_n = 0, wheel_n = 0;
-	if (ok && xr) {
+	if (ok && xr && !menu) {
 		if (xr->console_width > 0)
 			console_n = TieVrConsole_Frame(cmd, xr->console_width, xr->console_height, xr->views, console_quads);
 		if (xr->card_width > 0) {
@@ -844,7 +873,14 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		Aeron_RequestFatalRendererError("flight command-buffer submission");
 		return false;
 	}
-	if (xr) {
+	if (xr && menu) {
+		/* The menu's virtual screen over the frozen cockpit, the hands in
+		 * front of it, the beam on top. */
+		Aeron_XrStereoCommitBackdrop();
+		TieVrHands_CommitMenu();
+		if (menu_beam_on)
+			Aeron_XrStereoCommitBeams(&menu_beam, 1);
+	} else if (xr) {
 		/* Helmet: the cockpit/HUD sheet follows the head, the target box sits
 		 * on a far quad fixed in the craft's frame, matching the camera the
 		 * HUD was laid out for. Fixed: everything on one craft-fixed sheet. */
@@ -1222,6 +1258,8 @@ void TieRemaster_BeginFrame(const AeronInputSnapshot* input) {
 
 static bool TieRemaster_FrameBody(const TieSnapshot* snapshot, int32_t delta_us, bool paused);
 
+void TieRemaster_SetMenuOverlayOpen(bool open) { g_remaster.menu_overlay_open = open; }
+
 bool TieRemaster_Frame(const TieSnapshot* snapshot, int32_t delta_us, bool paused) {
 	if (!g_remaster.initialized)
 		return true;
@@ -1296,26 +1334,35 @@ static bool TieRemaster_FrameBody(const TieSnapshot* snapshot, int32_t delta_us,
 	} else if (!flight_is_active) {
 		flight->render_suspended = false;
 	}
-	/* VR stereo renders every host frame (the head moves) and not while the
-	 * game is paused by a menu: then everything is on the virtual screen. */
+	/* VR stereo renders every host frame (the head moves), also while the
+	 * game is paused: frozen, with its HUD for a host pause, and as the
+	 * backdrop of the virtual screen when that shows a menu (the settings
+	 * overlay). TIE_XR_PAUSE_BACKDROP=0: paused flight goes flat onto the
+	 * virtual screen (the old way). */
 	AeronXrStereoFrame xr_frame;
-	const bool stereo = compose_flight && !paused && g_remaster.view_mode == TIE_REMASTER_VIEW_HD &&
-						TieRemaster_XrStereoWanted() && Aeron_XrStereoBegin(&xr_frame) && xr_frame.width > 0 &&
-						xr_frame.height > 0 && xr_frame.eye_targets[0] && xr_frame.eye_targets[1];
+	const bool stereo = compose_flight && (!paused || TieRemaster_XrPauseBackdropWanted()) &&
+						g_remaster.view_mode == TIE_REMASTER_VIEW_HD && TieRemaster_XrStereoWanted() &&
+						Aeron_XrStereoBegin(&xr_frame) && xr_frame.width > 0 && xr_frame.height > 0 &&
+						xr_frame.eye_targets[0] && xr_frame.eye_targets[1];
+	const bool xr_menu = stereo && paused && g_remaster.menu_overlay_open;
 	if (stereo != flight->xr_stereo) {
 		flight->xr_stereo = stereo;
 		flight->force_render = true;
 	}
+	if (xr_menu != flight->xr_menu) {
+		flight->xr_menu = xr_menu;
+		Aeron_LogInfo("tie.vr", "flight %s", xr_menu ? "paused: cockpit behind the menu screen" : "resumed");
+	}
 	if (compose_flight && (stereo || TieRemaster_FlightRenderDue(snapshot))) {
-		compose_flight = TieRemaster_RenderFlightTarget(snapshot, delta_us, g_remaster.host_elapsed_us, paused,
-														stereo ? &xr_frame : NULL);
+		compose_flight = TieRemaster_RenderFlightTarget(snapshot, delta_us, g_remaster.host_elapsed_us,
+														paused, stereo ? &xr_frame : NULL, xr_menu);
 		if (compose_flight)
 			TieRemaster_FlightRenderCommitted(snapshot);
 	}
 	/* VR: everywhere the flight is not in stereo, an Imperial fleet in space
 	 * around the virtual screen (menus, briefings, films and loading dimmed,
-	 * the in-flight map with the sky only). Paused flight stays as it is: its
-	 * flat image renders through the same scene at the window's size. */
+	 * the in-flight map/goals rooms with the sky only). A menu over cockpit
+	 * flight has the frozen cockpit (above) instead. */
 	if (Aeron_XrIsPresenting() && flight->renderer && !Aeron_FatalErrorRequested()) {
 		const bool in_mission = snapshot && snapshot->scene_kind == TIE_SCENE_FLIGHT;
 		if (in_mission)

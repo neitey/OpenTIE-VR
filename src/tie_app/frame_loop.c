@@ -244,6 +244,7 @@ void TieFrameLoop_Run(void) {
 
 		TieClassicLayer_SyncInputExtent();
 		const TieSnapshot* snapshot = TieSnapshot_Current();
+		TieRemaster_SetMenuOverlayOpen(menu_open);
 		TieFrameLoop_SubmitGameLayers(&previous_output_kind, snapshot, &flight_options, delta_us,
 									  hotkey_frame.paused || menu_open);
 		{
