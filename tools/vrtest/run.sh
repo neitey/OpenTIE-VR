@@ -18,10 +18,11 @@
 #   TIE_XWA_COCKPITS            XWA FlightModels folder (cockpit OPTs)
 #
 # Every run gets a fresh HOME, so no pilot or config.yaml leaks between runs.
-# Exit status: the game's (0 ok, 3 a script 'wait' timed out, 124 timeout).
+# Exit status: the game's (0 ok, 3 a script 'wait' timed out, 4 killed by a signal from
+# outside, 124 wall timeout).
 set -eu
 if [ $# -lt 3 ]; then
-	sed -n '2,21p' "$0"
+	sed -n '2,22p' "$0"
 	exit 2
 fi
 BUILD=$(cd "$1" && pwd)

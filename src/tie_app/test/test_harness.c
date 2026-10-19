@@ -1092,6 +1092,13 @@ bool TieTest_AfterPresent(void) {
 	g_test.capture_now = false;
 	g_test.capture_label[0] = '\0';
 	++g_test.frame;
+	if (Aeron_QuitRequested() && !g_test.exit_requested) {
+		/* SIGTERM/SIGINT (SDL turns them into a quit event) or a window close. */
+		TieTest_Log("FAIL quit requested from outside (signal or window close)");
+		if (g_test.exit_status == 0)
+			g_test.exit_status = 4;
+		g_test.exit_requested = true;
+	}
 	if (g_test.exit_frame >= 0 && (int64_t)g_test.frame > g_test.exit_frame && !g_test.exit_requested) {
 		TieTest_Log("TIE_TEST_EXIT_FRAME reached");
 		g_test.exit_requested = true;
