@@ -74,7 +74,7 @@ Menus: point with the right controller and pull the trigger to click.
 B goes back. A pilot name is typed on the keyboard that appears on the
 screen. The menu button opens the OpenTIE settings (with a VR page).
 
-Flying:
+Flying: when a mission has loaded, it waits until you pull the trigger.
   Right stick ............ pitch and turn
   Left stick left/right .. roll
   Left stick fwd/back .... throttle (stays where you leave it)
@@ -95,7 +95,8 @@ point and pull the trigger. On your right: the side panel (tactical map,
 voice commands, button list). Look at a controller to see its labels.
 Voice: double-tap a thumb rest, then speak (e.g. "next target", "full
 throttle", "cover me").
-The game pauses while the headset is off. Settings: menu button -> VR.
+The game pauses while the headset is off. Settings: menu button -> VR;
+in a mission the settings also have a Briefing page (briefing and goals).
 
 
 Problems?
