@@ -13,6 +13,7 @@
 #include "tie_remaster/flight/renderer_internal.h"
 #include "tie_remaster/flight/sprite_cache.h"
 #include "tie_remaster/flight/stars.h"
+#include "tie_remaster/flight/xwa_cockpit.h"
 #include "tie_remaster/gpu_debug.h"
 #include "tie_remaster/scene2d/srgb_math.h"
 
@@ -688,6 +689,8 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 
 	if (!TieFlightRenderer_PrepareMissionAssets(g, cmd, curr))
 		return false;
+	/* OpenTIE-VR: X-Wing Alliance 3D cockpit for the player's craft. */
+	TieXwaCockpit_Prepare(cmd, g->assets, curr);
 
 	/* Build view-projection + viewport rects. The helper preserves the
 	 * captured classic aperture's focal scale while extending the
@@ -901,6 +904,16 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 	/* Snapshot → mesh instances (HD only; classic geometry draws via
 	 * the BEFORE_OPAQUE hook instead). */
 	TieFlightRenderer_SceneSubmit(g, curr, view_proj, fcam.camera.pos, &mb);
+	if (g->scene_model_backend) {
+		/* OpenTIE-VR: the 3D cockpit and its instrument panels. The marks
+		 * bracket them as the near range a stereo frame may shift per eye
+		 * (TieFlightRenderer_XrSetNearRange on the stereo branch). */
+		const AeronSceneMark cockpit_begin = AeronScene_Mark(g->scene);
+		TieXwaCockpit_Submit(g->scene, curr, g->cockpit);
+		const AeronSceneMark cockpit_end = AeronScene_Mark(g->scene);
+		(void)cockpit_begin;
+		(void)cockpit_end;
+	}
 	TieFlightPointLights_Submit(g->scene, &point_frame, true);
 	if (!TieFlightPointLights_ConfigureScene(g->scene))
 		return false;

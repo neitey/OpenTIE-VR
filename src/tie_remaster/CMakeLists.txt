@@ -23,6 +23,7 @@ add_library(tie_remaster STATIC
     flight/sprite_cache.c
     flight/stars.c
     flight/world_ambient.c
+    flight/xwa_cockpit.c
     integration/snapshot_adapter.c
 )
 if(TIE_ENABLE_DEBUG_UI)

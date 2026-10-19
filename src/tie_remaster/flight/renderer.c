@@ -28,6 +28,7 @@
 #include "tie_remaster/flight/renderer_internal.h"
 #include "tie_remaster/flight/sprite_cache.h"
 #include "tie_remaster/flight/stars.h"
+#include "tie_remaster/flight/xwa_cockpit.h"
 #include "tie_remaster/gpu_debug.h"
 #include "tie_runtime/audio/config.h"
 #include "tie_runtime/diagnostics/diagnostics.h"
@@ -392,6 +393,7 @@ void TieFlightRenderer_ReleaseMissionAssets(TieFlightRenderer* g) {
 		TieFlightRenderer_ReleaseSceneSpeciesShip(g, &g->scene_ships[i]);
 	}
 	TieFlightSpriteCache_ReleaseMissionAssets(g->sprites);
+	TieXwaCockpit_Release();
 	if (g->skybox_cube) {
 		Aeron_DestroyTexture(g->skybox_cube);
 		g->skybox_cube = NULL;
