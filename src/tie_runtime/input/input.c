@@ -225,6 +225,15 @@ static int system_cursor_visible = -1;
 /* DOS-order press edges retained until the engine samples them. */
 static int16_t pending_mouse_presses;
 static int16_t observed_mouse_presses;
+/* An overlay (the VR keyboard) owns the current press. */
+static bool pointer_buttons_blocked;
+static uint32_t text_entry_serial;
+
+void TieInput_MarkTextEntry(void) { ++text_entry_serial; }
+
+uint32_t TieInput_TextEntrySerial(void) { return text_entry_serial; }
+
+void TieInput_SetPointerButtonsBlocked(bool blocked) { pointer_buttons_blocked = blocked; }
 
 static float TieInput_Clamp(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
@@ -250,7 +259,7 @@ void TieInput_GetMousePosition(int16_t* buttons, int16_t* x, int16_t* y) {
 	const AeronInputSnapshot* in = Aeron_InputSnapshot();
 	int16_t btn = 0;
 
-	if (in && !eat_mouse_buttons && !mouse_flight_blocked) {
+	if (in && !eat_mouse_buttons && !mouse_flight_blocked && !pointer_buttons_blocked) {
 		/* input bridge order: bit 0 = left, bit 1 = right, bit 2 = middle. */
 		if (in->mouse.buttons & AERON_MOUSE_BUTTON_LEFT)
 			btn |= 1;
@@ -504,9 +513,11 @@ int TieInput_JoystickPresent(void) {
 void TieInput_JoystickShutdown(void) {}
 
 void TieInput_ReadJoystick(int port, int16_t* axes, int n_axes, uint16_t* out_buttons) {
-	if (port == 0)
+	if (port == 0) {
 		TieControllerMapping_Read(axes, n_axes, out_buttons);
-	else {
+		if (pointer_buttons_blocked && out_buttons)
+			*out_buttons = 0;
+	} else {
 		if (axes && n_axes > 0)
 			memset(axes, 0, (size_t)n_axes * sizeof *axes);
 		if (out_buttons)
@@ -619,7 +630,7 @@ void TieInput_BeginFrame(int32_t delta_us) {
 	 * edges until Landru or the flight input path reads the button state. */
 	pending_mouse_presses &= (int16_t)~observed_mouse_presses;
 	observed_mouse_presses = 0;
-	if (eat_mouse_buttons || mouse_flight_blocked) {
+	if (eat_mouse_buttons || mouse_flight_blocked || pointer_buttons_blocked) {
 		/* The press that restored flight capture must not become a shot. */
 		pending_mouse_presses = 0;
 	} else if (in->has_focus) {

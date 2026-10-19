@@ -1,5 +1,6 @@
 #include "tie/maproom.h"
 #ifdef TIE_MODERN
+#include "tie_runtime/input/vr_text.h"
 #include "tie_runtime/runtime/maproom_task.h"
 #endif
 #include "tie/backdrp2.h"
@@ -1616,7 +1617,12 @@ void maproom_drawNHIstatus(uint16_t page_idx) {
 	clearwindow();
 	festring_setcursor(2, 1);
 	festring_settextcolor(MAP_TC_HELP);
+#ifdef TIE_MODERN
+	/* VR: "SPACEBAR: Toggles 2-D/3-D" -> the button that sends Space here (X). */
+	festring_outstring((const uint8_t*)TieVrText_MenuHint(maproomhelpstrings[page_idx]));
+#else
 	festring_outstring((const uint8_t*)maproomhelpstrings[page_idx]);
+#endif
 
 	/* --- Top-right help string (always idx 2) --- */
 	mid_left = screenXRes - (sys2_calclength((const uint8_t*)maproomhelpstrings[2]) + fontheight);

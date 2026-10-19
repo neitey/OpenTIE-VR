@@ -22,6 +22,8 @@
 #include "tie_remaster/gpu_debug.h"
 #include "tie_runtime/flight_assets/source.h"
 #include "tie_runtime/species_id.h"
+#include "tie_remaster/vr/vr_gloves.h"
+#include "tie_remaster/vr/vr_hands.h"
 
 /* ---- scene layout (TIE world axes: x right, y ahead, z up; metres) ---- */
 
@@ -635,7 +637,7 @@ static void TieXrEnv_HookStars(AeronCommandBuffer* cmd, AeronRenderPass* pass, i
 							  s_env.star_half_px);
 }
 
-static bool TieXrEnv_OutputEye(TieFlightRenderer* g, AeronCommandBuffer* cmd, AeronRenderTarget* target,
+static bool TieXrEnv_OutputEye(TieFlightRenderer* g, AeronCommandBuffer* cmd, int eye, AeronRenderTarget* target,
 							   AeronTextureFormat format, float gain) {
 	if (!s_env.chain || s_env.chain_format != format) {
 		if (s_env.chain)
@@ -660,6 +662,10 @@ static bool TieXrEnv_OutputEye(TieFlightRenderer* g, AeronCommandBuffer* cmd, Ae
 	const float tint[4] = { gain, gain, gain, 1.0f };
 	AeronScenePresentChain_Draw(s_env.chain, pass, Aeron_RenderTargetGetTexture(scene_rt), g->sampler_linear, NULL,
 								0.0f, g->rt_w, g->rt_h, 1.0f, tint, 0);
+	/* The hands' alpha, for the overlay that shows them over the screen. */
+	AeronDrawList2D* hands_alpha = TieVrHands_EyeAlpha(eye);
+	if (hands_alpha)
+		AeronDrawList_RenderIntoPass(hands_alpha, cmd, pass, target);
 	Aeron_EndRenderPass(pass);
 	return true;
 }
@@ -701,6 +707,22 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 	TieXrEnv_SubmitSky(scene, fleet);
 	if (fleet)
 		TieXrEnv_SubmitCraft(scene, t_s);
+	/* The controllers or gloves (VR Options > Hands), in front of the
+	 * virtual screen where they reach over it. */
+	{
+		AeronXrPanel screen;
+		memset(&screen, 0, sizeof screen);
+		float d = 0.0f, w = 0.0f, h = 0.0f, off = 0.0f;
+		const bool have_screen = Aeron_XrVirtualScreenGeometry(&d, &w, &h, &off) && w > 0.0f && h > 0.0f;
+		if (have_screen) {
+			screen.position[1] = off;
+			screen.position[2] = -d;
+			screen.orientation[3] = 1.0f;
+			screen.size[0] = w;
+			screen.size[1] = h;
+		}
+		TieVrHands_SubmitMenu(scene, cmd, &base, TieFlightXr_UnitsPerMeter(), xr, have_screen ? &screen : NULL);
+	}
 
 	if (!TieFlightPointLights_ConfigureScene(scene))
 		return false;
@@ -744,12 +766,14 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 	AeronScene_SetFrameUniformData(scene, AERON_SHADER_STAGE_FRAGMENT, 1, &pbr, sizeof pbr);
 
 	TIE_GPU_PUSH(cmd, "VR menu scene, left eye");
-	bool ok = AeronScene_Render(scene, cmd) != 0 && TieXrEnv_OutputEye(g, cmd, xr->eye_targets[0], xr->format, gain);
+	bool ok = AeronScene_Render(scene, cmd) != 0 &&
+			  TieXrEnv_OutputEye(g, cmd, 0, xr->eye_targets[0], xr->format, gain);
 	TIE_GPU_POP(cmd);
 	if (ok) {
+		TieVrHands_FinishRightEye(cmd); /* its hand mask, filled meanwhile */
 		TIE_GPU_PUSH(cmd, "VR menu scene, right eye");
 		ok = AeronScene_SetCamera(scene, &eyes[1]) && AeronScene_Render(scene, cmd) &&
-			 TieXrEnv_OutputEye(g, cmd, xr->eye_targets[1], xr->format, gain);
+			 TieXrEnv_OutputEye(g, cmd, 1, xr->eye_targets[1], xr->format, gain);
 		TIE_GPU_POP(cmd);
 	}
 	/* Leave nothing of ours on the shared scene. */
@@ -839,6 +863,7 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 		return false;
 	}
 	Aeron_XrStereoCommitBackdrop();
+	TieVrHands_CommitMenu();
 	if (beam_on)
 		Aeron_XrStereoCommitBeams(&beam, 1);
 	return true;

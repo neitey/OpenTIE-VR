@@ -8,6 +8,7 @@
 
 #include "aeron/aeron.h"
 #include "aeron/scene/draw_list2d.h"
+#include "tie_remaster/vr/vr_gloves.h"
 
 /* The beam texture: a vertical strip in the target's top-left corner, the
  * screen end at the top. */
@@ -137,11 +138,17 @@ static bool TieFlightXrBeam_Pose(const float start[3], const float end[3], const
 
 bool TieFlightXrBeam_Frame(AeronCommandBuffer* cmd, AeronRenderTarget* target, int width, int height,
 						   const AeronXrView views[2], AeronXrPanel* out) {
-	float hit[3];
-	AeronXrHand hand;
-	if (!cmd || !target || !views || !out || !Aeron_XrPointerHit(hit) || !Aeron_XrGetHand(1, &hand))
+	float hit[3], start[3];
+	if (!cmd || !target || !views || !out || !Aeron_XrPointerHit(hit))
 		return false;
-	const float* start = hand.position;
+	/* From the glove's index fingertip, else from the controller. */
+	int pointing = 1;
+	if (!TieVrGloves_IndexTip(1, start, &pointing)) {
+		AeronXrHand hand;
+		if (!Aeron_XrGetHand(1, &hand))
+			return false;
+		memcpy(start, hand.position, sizeof start);
+	}
 	/* It ends just in front of the screen's glass. */
 	const float depth = TieFlightXrBeam_EnvFloat("XWA_XR_CURSOR_DEPTH", 0.02f);
 	const float glass_z = hit[2] + depth; /* LOCAL: -z ahead */

@@ -28,6 +28,7 @@
 #include "tie_app/setup/installation.h"
 #include "tie_app/setup/setup.h"
 #include "tie_app/ui.h"
+#include "tie_app/vr_keyboard.h"
 #include "tie_remaster/remaster.h"
 #include "tie_runtime/flight_assets/service.h"
 #include "tie_runtime/hooks/axis_input.h"
@@ -105,6 +106,7 @@ static void TieApplication_Shutdown(AeronVfs* vfs, TieAppConfigState* config,
 	if (!TieAppConfig_Save(vfs, config, error, sizeof error))
 		Aeron_LogError("tie.config", "%s", error);
 	TieSettings_Shutdown();
+	TieVrKeyboard_Shutdown();
 #ifdef AERON_DEBUG_UI
 	TieDebugTools_Shutdown();
 #endif
@@ -425,6 +427,7 @@ int TieApplication_Run(const TieLaunchOptions* launch_options) {
 		if (!TieSettings_Init(&app_ui, &app_config, installations.has_tie95, installations.has_tie98,
 							  settings_error, sizeof settings_error))
 			Aeron_RequestFatalError("Settings Menu Error", settings_error);
+		TieVrKeyboard_Init(&app_ui);
 	}
 	if (startup_cmd) {
 		if (Aeron_FatalErrorRequested()) {
