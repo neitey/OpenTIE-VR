@@ -27,6 +27,7 @@
 #include "tie_runtime/runtime/runtime.h"
 #include "tie_runtime/snapshot/snapshot.h"
 #include "tie_app/quest/vr_voice.h"
+#include "tie_app/vr_keyboard.h"
 
 static uint64_t TieFrameLoop_PresentationIntervalUs(void) {
 	const double rate = Aeron_PresentationRate();
@@ -181,6 +182,8 @@ void TieFrameLoop_Run(void) {
 		if (Aeron_FatalErrorRequested())
 			break;
 		TieInput_UpdateKeyboard(input, menu_open || hotkey_frame.paused || focus_paused);
+		/* VR keyboard for text fields: types into the key queue, owns its clicks. */
+		TieVrKeyboard_BeginFrame(input, delta_us, menu_open || hotkey_frame.paused || focus_paused);
 		TieVrVoice_Update(menu_open || hotkey_frame.paused || focus_paused);
 		if (!menu_open)
 			TieInput_BeginFrame(delta_us);
@@ -206,6 +209,7 @@ void TieFrameLoop_Run(void) {
 		const TieSnapshot* snapshot = TieSnapshot_Current();
 		TieFrameLoop_SubmitGameLayers(&previous_output_kind, snapshot, &flight_options, delta_us,
 									  hotkey_frame.paused || menu_open);
+		TieVrKeyboard_Submit();
 		/* Do not let the input edge that opened the menu close it again. */
 		if (!settings_opened_this_frame)
 			TieSettings_Frame(input, (float)delta_us * 1e-6f);

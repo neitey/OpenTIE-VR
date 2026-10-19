@@ -69,4 +69,12 @@ void TieInput_BeginFrame(int32_t delta_us);
 void TieInput_UpdateKeyboard(const AeronInputSnapshot* input, bool blocked);
 void TieInput_BlockKeyboard(void);
 
+/* Text entry (VR keyboard). A game text field that takes typed keys calls
+ * MarkTextEntry each frame it is live; the serial changes while one is. */
+void TieInput_MarkTextEntry(void);
+uint32_t TieInput_TextEntrySerial(void);
+/* Hides mouse and joystick buttons from the game while an overlay owns the
+ * press (set every host frame before TieInput_BeginFrame). */
+void TieInput_SetPointerButtonsBlocked(bool blocked);
+
 #endif
