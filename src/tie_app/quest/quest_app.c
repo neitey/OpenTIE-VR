@@ -233,8 +233,21 @@ static void quest_game_folders(TieLaunchOptions* launch) {
 	mkdir(path, 0775);
 	if (!SDL_getenv("TIE_XWA_COCKPITS"))
 		SDL_setenv_unsafe("TIE_XWA_COCKPITS", path, 1);
-	if (!launch->tie95_data && quest_dir_has_files(s_tie95))
-		launch->tie95_data = s_tie95;
+	/* The Collector's CD edition needs its CD image (game.fil on Steam, about
+	 * 600 MB): a TIE95 folder without it (copy cut short) would stop the
+	 * game at start, so it is left out and TIE98 is used alone. */
+	if (!launch->tie95_data && quest_dir_has_files(s_tie95)) {
+		static const char* const images[] = { "game.fil", "GAME.FIL", "game.ins", "GAME.INS", "game.gog", "GAME.GOG" };
+		int found = 0;
+		for (size_t i = 0; i < sizeof images / sizeof images[0] && !found; ++i) {
+			snprintf(path, sizeof path, "%s/%s", s_tie95, images[i]);
+			found = access(path, R_OK) == 0;
+		}
+		if (found)
+			launch->tie95_data = s_tie95;
+		else
+			Aeron_LogWarn("tie.quest", "%s has no CD image (game.fil): the 1995 edition is left out", s_tie95);
+	}
 	if (!launch->tie98_data && quest_dir_has_files(s_tie98))
 		launch->tie98_data = s_tie98;
 	Aeron_LogInfo("tie.quest", "game folders: TIE95 %s, TIE98 %s, cockpits %s",
