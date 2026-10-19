@@ -1,0 +1,24 @@
+# In the cockpit of a TIE fighter, flying a real mission for ~20 s of mission
+# time, with captures. Starts the flight directly (no menus): historical
+# mission HF1W (override with TIE_TEST_MISSION=..., e.g. train, B1M1FM). Add
+# TIE_TEST_XR=1 for the fake headset: each capture then also writes the eye /
+# HUD images (tools/vrtest/compose.py composites them).
+0 mission HF1W
+0 wait flying 5 timeout=4000     # mission loaded, sim running, normal flight screen
++1 capture start
++1 axis yaw 1                    # virtual gamepad: turn right, away from the shuttle ahead
++1 axis pitch -0.6               # and pull up
++40 capture turning
++1 axis yaw 0
++1 axis pitch 0
++2 key ]                         # 2/3 throttle
++2 key t                         # target next
++40 capture cruise
++2 head 35 -10                   # fake XR: look left and down (no-op without TIE_TEST_XR)
++4 capture look_left
++2 head 0 0
++2 button south 12               # fire lasers
++6 capture firing
++60 capture cruise2
++60 capture end
++2 quit

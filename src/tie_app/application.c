@@ -7,6 +7,7 @@
 
 #include "tie_app/application.h"
 #include "tie_app/quest/quest_app.h"
+#include "tie_app/test/test_harness.h"
 #include "tie_app/frame_loop.h"
 #include "tie_app/window_icon.h"
 
@@ -140,8 +141,10 @@ int TieApplication_Run(const TieLaunchOptions* launch_options) {
 	TieLaunchOptions launch_copy = *launch_options;
 	const TieLaunchOptions* launch = &launch_copy;
 	const int xr_requested = TieQuest_PreInit(&launch_copy);
+	TieTest_Init();
 	AeronConfig config = TieApplication_AeronConfig(launch);
 	config.xr_enabled = xr_requested;
+	TieTest_ConfigureAeron(&config);
 
 	if (!Aeron_Init(&config)) {
 		fprintf(stderr, "[tie-aeron] Aeron_Init failed\n");
@@ -373,6 +376,8 @@ int TieApplication_Run(const TieLaunchOptions* launch_options) {
 	});
 	if (!TieRuntime_Init(&runtime_config, config_error, sizeof config_error))
 		Aeron_RequestFatalError("Game Runtime Error", config_error);
+	else if (TieTest_Active())
+		TieTest_AfterRuntimeInit();
 	const TieFlightAssetSource* flight_source = NULL;
 	if (!Aeron_FatalErrorRequested()) {
 		flight_source = TieFlightAssets_CurrentSource();
@@ -450,7 +455,8 @@ int TieApplication_Run(const TieLaunchOptions* launch_options) {
 	TieDebugTools_Register();
 #endif
 	TieFrameLoop_Run();
-	const int exit_status = Aeron_FatalErrorRequested() ? 1 : 0;
+	const int exit_status = Aeron_FatalErrorRequested() ? 1 : TieTest_ExitStatus();
 	TieApplication_Shutdown(vfs, &app_config, &installations, &app_ui, sc55_romset);
+	TieTest_Shutdown();
 	return exit_status;
 }

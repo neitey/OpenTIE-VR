@@ -18,6 +18,7 @@ set(TIE_APP_SOURCES
     settings/launch_options.c
     settings/video_options.c
     settings/settings.c
+    settings/vr_options.c
     settings/keyboard_page.c
     settings/bindings_editor.c
     settings/controller_page.c
@@ -25,10 +26,21 @@ set(TIE_APP_SOURCES
     setup/installation_ui.c
     setup/setup.c
     quest/quest_app.c
-    quest/quest_app.h)
+    quest/quest_app.h
+    test/test_harness.c
+    test/test_harness.h
+    test/test_wrap.c)
 if(ANDROID)
     list(APPEND TIE_APP_SOURCES quest/xr_tier.c quest/crash_report.c)
 endif()
+# VR voice commands (speech recognizer dlopen'ed at run time).
+list(APPEND TIE_APP_SOURCES
+    quest/voice_commands.c
+    quest/voice_commands.h
+    quest/voice_core.c
+    quest/voice_core.h
+    quest/vr_voice.c
+    quest/vr_voice.h)
 if(ANDROID)
     # Quest: SDL's Java activity loads the game as libmain.so.
     add_library(tie SHARED ${TIE_APP_SOURCES})
@@ -57,9 +69,12 @@ endif()
 
 target_include_directories(tie PRIVATE
     ${CMAKE_SOURCE_DIR}/src)
+# third_party/sherpa-onnx/c-api.h (voice commands; the library is dlopen'ed).
+set_source_files_properties(quest/voice_core.c PROPERTIES INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}")
 target_link_libraries(tie PRIVATE
     tie_core
-    tie_remaster)
+    tie_remaster
+    ${CMAKE_DL_LIBS})
 target_compile_definitions(tie PRIVATE
     TIE_SHADER_RELATIVE_DIR="${TIE_SHADER_RELATIVE_DIR}"
     TIE_VERSION_STRING="${TIE_DISPLAY_VERSION}")
@@ -69,6 +84,47 @@ else()
     target_compile_definitions(tie PRIVATE TIE_GPU_DEBUG_LABELS=0)
 endif()
 tie_enable_warnings(tie)
+
+# Headless test harness (src/tie_app/test): window capture and a fake XR
+# headset need link-time wraps (GNU ld / lld). Inert unless TIE_TEST_* is set.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
+    set(TIE_TEST_WRAPPED_SYMBOLS
+        SDL_ClaimWindowForGPUDevice
+        SDL_WaitAndAcquireGPUSwapchainTexture
+        SDL_SubmitGPUCommandBuffer
+        Aeron_XrIsPresenting
+        Aeron_XrIsUnfocused
+        Aeron_XrStereoBegin
+        Aeron_XrStereoPanelTarget
+        Aeron_XrStereoCommit
+        Aeron_XrStereoCommitHuds
+        Aeron_XrStereoCommitPanels
+        Aeron_XrStereoCommitConsole
+        Aeron_XrStereoCommitCard
+        Aeron_XrStereoCommitPanelLayer
+        Aeron_XrStereoCommitEyeOverlay
+        Aeron_XrStereoCommitEyeOverlayRect
+        Aeron_XrStereoCommitBeams
+        Aeron_XrStereoCommitBackdrop
+        Aeron_XrVirtualScreenGeometry
+        Aeron_XrGetHand
+        Aeron_XrGetRenderModel
+        Aeron_XrSetPointerEnabled
+        Aeron_XrSetMenuKeys
+        Aeron_XrSetFlightButtons
+        Aeron_XrPollButton
+        Aeron_XrTakeAPressed
+        Aeron_XrTakeMenuBPressed
+        Aeron_XrTakeMenuXPressed
+        Aeron_XrTakeMenuYPressed
+        Aeron_XrThrottleLever
+        Aeron_XrSetThrottleLever
+        Aeron_XrHapticPulse)
+    target_compile_definitions(tie PRIVATE TIE_TEST_WRAP=1)
+    foreach(symbol IN LISTS TIE_TEST_WRAPPED_SYMBOLS)
+        target_link_options(tie PRIVATE "LINKER:--wrap=${symbol}")
+    endforeach()
+endif()
 
 add_dependencies(tie flight_shaders)
 
@@ -175,4 +231,13 @@ if(WIN32)
     configure_file("${CMAKE_SOURCE_DIR}/cmake/windows/tie.rc.in"
                    "${CMAKE_CURRENT_BINARY_DIR}/tie.rc" @ONLY)
     target_sources(tie PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/tie.rc")
+endif()
+
+# Voice command matcher test (host): ninja tie_voice_test && ./tie_voice_test
+if(NOT ANDROID)
+    add_executable(tie_voice_test EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tests/voice_commands_test.c
+        quest/voice_commands.c)
+    target_include_directories(tie_voice_test PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/aeron/include)
+    set_target_properties(tie_voice_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()

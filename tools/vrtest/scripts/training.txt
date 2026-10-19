@@ -1,0 +1,23 @@
+# Menu route into a flight (no TIE_TEST_MISSION): registration -> concourse ->
+# training room -> TIE fighter level 1 -> training course, then ~150 frames.
+0 wait shell 8
++30 key Space
+0 wait shell 10
++30 key Return
+0 wait shell 100
++60 text TEST
++30 key Return
++120 mouse 1245 612              # registration door
++10 mouse 1245 612 click
+0 wait shell 110 timeout=900     # concourse
++60 mouse 290 603                # training room door (TIE98 concourse)
++10 mouse 290 603 click
+0 wait shell 121 timeout=1200    # training room
++60 mouse 522 1044               # the red launch button under the ship display
++10 mouse 522 1044 click
+0 wait flying 5 timeout=3000
++1 capture course
++2 key Backspace                 # full throttle
++60 capture course2
++90 capture course3
++2 quit

@@ -1,0 +1,15 @@
+# Launch -> title -> pilot registration (new pilot TEST) -> concourse.
+# Logical coordinates are in the 1440x1080 4:3 frame (640x480 frontend
+# pixel * 2.25). Frame numbers: N absolute, +N after the previous line.
+0 wait shell 8                 # title (crawl)
++30 key Space                  # skip the crawl -> intro film (shell 10)
+0 wait shell 10
++30 key Return                 # skip the intro film -> registration (shell 100)
+0 wait shell 100
++60 text TEST                  # pilot name
++30 key Return                 # create the pilot
++120 mouse 1245 612            # the door on the right
++10 mouse 1245 612 click
+0 wait shell 110 timeout=900   # concourse (main menu)
++120 capture concourse
++10 quit

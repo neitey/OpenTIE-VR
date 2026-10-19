@@ -22,7 +22,54 @@ static struct {
 	int16_t axes[3];
 	uint16_t throttle;
 	uint32_t throttle_instance, generation;
+	/* Aeron's OpenXR virtual gamepad (Touch controllers) when no configured
+	 * model claims it: built-in profile, own hold state. */
+	ControllerInstance xr;
+	bool xr_flight;
 } g_controller;
+
+/* Identity Aeron gives its virtual Touch gamepad (aeron/src/xr_input.c). */
+#define TIE_XR_PAD_GUID "4f70656e5852546f7563680000000001"
+#define TIE_XR_PAD_PATH "openxr:touch"
+
+bool TieControllerMapping_IsXrPad(const AeronControllerSnapshot* device) {
+	return device && device->connected && device->kind == AERON_CONTROLLER_KIND_GAMEPAD &&
+		   (!strcmp(device->path, TIE_XR_PAD_PATH) || !strcmp(device->guid, TIE_XR_PAD_GUID));
+}
+
+const TieControllerProfile* TieControllerMapping_XrProfile(void) {
+	/* Matches aeron/src/xr_input_map.h: right stick -> LEFTX/LEFTY (yaw,
+	 * pitch), left stick X -> RIGHTX (roll), the integrated throttle lever
+	 * (left stick Y) -> RIGHT_TRIGGER (absolute), right trigger -> SOUTH.
+	 * Stick forward reports negative LEFTY like an SDL pad pushed up; the
+	 * player-facing pitch invert makes that nose down, like a flight stick
+	 * (AERON_XR_INVERT_PITCH=1 flips it in the engine). Everything else on
+	 * the Touch controllers is a flight button (vr_buttons.c). */
+	static TieControllerProfile profile;
+	static bool built;
+	if (!built) {
+		TieControllerMapping_ClearProfile(&profile, AERON_CONTROLLER_KIND_GAMEPAD);
+		profile.mapping.axes[TIE_INPUT_AXIS_YAW] =
+			(TieInputAxisBinding) { .source = AERON_GAMEPAD_AXIS_LEFTX, .invert = false, .deadzone = 0.10f };
+		profile.mapping.axes[TIE_INPUT_AXIS_PITCH] =
+			(TieInputAxisBinding) { .source = AERON_GAMEPAD_AXIS_LEFTY, .invert = true, .deadzone = 0.10f };
+		profile.mapping.axes[TIE_INPUT_AXIS_ROLL] =
+			(TieInputAxisBinding) { .source = AERON_GAMEPAD_AXIS_RIGHTX, .invert = false, .deadzone = 0.10f };
+		profile.mapping.axes[TIE_INPUT_AXIS_THROTTLE] = (TieInputAxisBinding) {
+			.source = AERON_GAMEPAD_AXIS_RIGHT_TRIGGER, .invert = false, .deadzone = 0.0f
+		};
+		profile.bindings[0] = (TieInputActionBinding) {
+			.source = { .kind = AERON_CONTROLLER_DIGITAL_BUTTON, .index = AERON_GAMEPAD_BUTTON_SOUTH,
+						.threshold = 0.5f },
+			.action = TIE_INPUT_ACTION_FIRE_WEAPON,
+		};
+		profile.binding_count = 1;
+		built = true;
+	}
+	return &profile;
+}
+
+void TieControllerMapping_SetXrFlight(bool flight) { g_controller.xr_flight = flight; }
 
 static bool TieControllerMapping_SameSource(const AeronControllerDigitalSource* left,
 											const AeronControllerDigitalSource* right) {
@@ -213,9 +260,27 @@ bool TieControllerMapping_InitializeGamepads(TieControllerOptions* options,
 	int count = 0;
 	if (!input)
 		return true;
+	/* The OpenXR virtual gamepad uses the built-in XR profile unless the
+	 * player configured it. Earlier builds auto-added it with the ordinary
+	 * gamepad defaults (whose right trigger fires: the throttle lever on
+	 * this pad); drop such an untouched entry, and a cleared one ("Clear
+	 * All" in the settings), which would leave the headset without
+	 * controls. */
+	for (size_t i = 0; i < options->count; ++i) {
+		TieControllerModel* m = &options->models[i];
+		TieControllerProfile cleared;
+		TieControllerMapping_ClearProfile(&cleared, AERON_CONTROLLER_KIND_GAMEPAD);
+		if (strcmp(m->guid, TIE_XR_PAD_GUID) || m->kind != AERON_CONTROLLER_KIND_GAMEPAD ||
+			(!TieControllerMapping_ProfileEqual(&m->profile, defaults) &&
+			 !TieControllerMapping_ProfileEqual(&m->profile, &cleared)))
+			continue;
+		memmove(m, m + 1, (options->count - i - 1) * sizeof *m);
+		--options->count;
+		break;
+	}
 	for (int slot = 0; slot < AERON_CONTROLLER_MAX; ++slot) {
 		const AeronControllerSnapshot* d = &input->controllers[slot];
-		if (!d->connected || d->kind != AERON_CONTROLLER_KIND_GAMEPAD)
+		if (!d->connected || d->kind != AERON_CONTROLLER_KIND_GAMEPAD || TieControllerMapping_IsXrPad(d))
 			continue;
 		int j = count++;
 		while (j > 0 && strcmp(sorted[j - 1]->guid, d->guid) > 0) {
@@ -257,14 +322,16 @@ const AeronControllerSnapshot* TieControllerMapping_Resolve(const TieControllerM
 	return best;
 }
 
-static void ReleaseInstance(ControllerInstance* state) {
-	if (state->id) {
-		const TieControllerProfile* p = &g_controller.options.models[state->model].profile;
+static void ReleaseState(ControllerInstance* state, const TieControllerProfile* p) {
+	if (state->id)
 		for (size_t i = 0; i < p->binding_count; ++i)
 			if (state->dispatched[i])
 				TieInputActions_DispatchController(p->bindings[i].action, false);
-	}
 	memset(state, 0, sizeof *state);
+}
+
+static void ReleaseInstance(ControllerInstance* state) {
+	ReleaseState(state, state->id ? &g_controller.options.models[state->model].profile : NULL);
 }
 
 bool TieControllerMapping_SetOptions(const TieControllerOptions* options) {
@@ -321,6 +388,7 @@ bool TieControllerMapping_SetOptions(const TieControllerOptions* options) {
 void TieControllerMapping_Suspend(void) {
 	for (int i = 0; i < AERON_CONTROLLER_MAX; ++i)
 		ReleaseInstance(&g_controller.instances[i]);
+	ReleaseState(&g_controller.xr, TieControllerMapping_XrProfile());
 	g_controller.suspended = true;
 	g_controller.present = false;
 	g_controller.throttle_valid = false;
@@ -358,11 +426,8 @@ static void LogUnavailableControls(const TieControllerModel* model, const AeronC
 					  missing, device->controls_truncated ? ", hardware controls truncated" : "");
 }
 
-static void SampleDigital(ControllerInstance* state, const AeronControllerSnapshot* device) {
-	const TieControllerModel* model = &g_controller.options.models[state->model];
-	const TieControllerProfile* profile = &model->profile;
-	if (!state->primed)
-		LogUnavailableControls(model, device);
+static void SampleProfileDigital(ControllerInstance* state, const TieControllerProfile* profile,
+								 const AeronControllerSnapshot* device) {
 	for (size_t i = 0; i < profile->binding_count; ++i) {
 		bool down = Aeron_ControllerDigitalSourceDown(device, &profile->bindings[i].source, state->down[i]);
 		if (!state->primed)
@@ -379,6 +444,13 @@ static void SampleDigital(ControllerInstance* state, const AeronControllerSnapsh
 		state->down[i] = down;
 	}
 	state->primed = true;
+}
+
+static void SampleDigital(ControllerInstance* state, const AeronControllerSnapshot* device) {
+	const TieControllerModel* model = &g_controller.options.models[state->model];
+	if (!state->primed)
+		LogUnavailableControls(model, device);
+	SampleProfileDigital(state, &model->profile, device);
 }
 
 uint16_t TieControllerMapping_ThrottlePosition(int16_t raw, AeronControllerKind kind, int source,
@@ -398,16 +470,15 @@ uint16_t TieControllerMapping_ThrottlePosition(int16_t raw, AeronControllerKind 
 	return (uint16_t)(((position - end_tolerance) * UINT16_MAX + range / 2) / range);
 }
 
-static void SampleAnalog(size_t index, const AeronControllerSnapshot* d, TieInputMapping* mapping) {
-	const TieControllerModel* model = &g_controller.options.models[index];
+static void SampleProfileAnalog(const TieControllerProfile* profile, AeronControllerKind kind,
+								const AeronControllerSnapshot* d, TieInputMapping* mapping, unsigned axis_mask) {
 	for (int axis = 0; axis < TIE_INPUT_AXIS_COUNT; ++axis) {
-		TieInputAxisBinding b = model->profile.mapping.axes[axis];
-		if (!Aeron_ControllerAxisAvailable(d, b.source))
+		TieInputAxisBinding b = profile->mapping.axes[axis];
+		if (!(axis_mask & (1u << axis)) || !Aeron_ControllerAxisAvailable(d, b.source))
 			continue;
 		int16_t raw = Aeron_ControllerAxisValue(d, b.source);
 		if (axis == TIE_INPUT_AXIS_THROTTLE) {
-			g_controller.throttle =
-				TieControllerMapping_ThrottlePosition(raw, model->kind, b.source, b.invert);
+			g_controller.throttle = TieControllerMapping_ThrottlePosition(raw, kind, b.source, b.invert);
 			g_controller.throttle_valid = true;
 			if (g_controller.throttle_instance != d->instance_id) {
 				g_controller.throttle_instance = d->instance_id;
@@ -422,11 +493,40 @@ static void SampleAnalog(size_t index, const AeronControllerSnapshot* d, TieInpu
 			g_controller.axes[axis] = (int16_t)value;
 			mapping->axes[axis] = (TieInputAxisBinding) {
 				.source = (int8_t)axis,
-				.invert = TieControllerMapping_EffectiveAxisInvert(model->kind, (TieInputAxis)axis, b.invert),
+				.invert = TieControllerMapping_EffectiveAxisInvert(kind, (TieInputAxis)axis, b.invert),
 				.deadzone = b.deadzone,
 			};
 		}
 	}
+}
+
+static void SampleAnalog(size_t index, const AeronControllerSnapshot* d, TieInputMapping* mapping) {
+	const TieControllerModel* model = &g_controller.options.models[index];
+	SampleProfileAnalog(&model->profile, model->kind, d, mapping, ~0u);
+}
+
+/* The OpenXR virtual gamepad without a configured model: the built-in XR
+ * profile, on the logical axes no connected configured model drives. Its
+ * sticks steer only in flight (in the menus the right controller is the
+ * pointer, and Landru would also move its cursor with them). */
+static void SampleXrPad(const AeronInputSnapshot* input, unsigned owned_axes, TieInputMapping* mapping) {
+	const AeronControllerSnapshot* pad = NULL;
+	for (int i = 0; i < AERON_CONTROLLER_MAX && !pad; ++i)
+		if (TieControllerMapping_IsXrPad(&input->controllers[i]) &&
+			TieControllerMapping_FindModel(&g_controller.options, input->controllers[i].guid) < 0)
+			pad = &input->controllers[i];
+	const TieControllerProfile* profile = TieControllerMapping_XrProfile();
+	if (!pad || pad->instance_id != g_controller.xr.id)
+		ReleaseState(&g_controller.xr, profile);
+	if (!pad)
+		return;
+	g_controller.xr.id = pad->instance_id;
+	g_controller.present = true;
+	unsigned mask = (1u << TIE_INPUT_AXIS_THROTTLE);
+	if (g_controller.xr_flight)
+		mask |= (1u << TIE_INPUT_AXIS_YAW) | (1u << TIE_INPUT_AXIS_PITCH) | (1u << TIE_INPUT_AXIS_ROLL);
+	SampleProfileAnalog(profile, AERON_CONTROLLER_KIND_GAMEPAD, pad, mapping, mask & ~owned_axes);
+	SampleProfileDigital(&g_controller.xr, profile, pad);
 }
 
 void TieControllerMapping_Update(const AeronInputSnapshot* input) {
@@ -454,6 +554,7 @@ void TieControllerMapping_Update(const AeronInputSnapshot* input) {
 			ReleaseInstance(state);
 	}
 	TieInputMapping mapping = { 0 };
+	unsigned owned_axes = 0;
 	for (int axis = 0; axis < TIE_INPUT_AXIS_COUNT; ++axis)
 		mapping.axes[axis].source = -1;
 	for (size_t model = 0; model < g_controller.options.count; ++model) {
@@ -463,6 +564,9 @@ void TieControllerMapping_Update(const AeronInputSnapshot* input) {
 		if (analog) {
 			g_controller.present = true;
 			SampleAnalog(model, analog, &mapping);
+			for (int axis = 0; axis < TIE_INPUT_AXIS_COUNT; ++axis)
+				if (g_controller.options.models[model].profile.mapping.axes[axis].source >= 0)
+					owned_axes |= 1u << axis;
 		}
 		uint32_t previous = 0;
 		for (int n = 0; n < AERON_CONTROLLER_MAX; ++n) {
@@ -494,6 +598,7 @@ void TieControllerMapping_Update(const AeronInputSnapshot* input) {
 				SampleDigital(state, d);
 		}
 	}
+	SampleXrPad(input, owned_axes, &mapping);
 	if (!g_controller.throttle_valid) {
 		g_controller.throttle_instance = 0;
 		TieInput_ResetThrottle();
