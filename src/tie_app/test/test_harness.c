@@ -39,6 +39,13 @@
  *   wait flying [n]          normal flight screen, n flight frames stepped
  *                            (all waits: optional timeout=<frames>, 3600)
  *   mission <m>              (frame 0) same as TIE_TEST_MISSION=<m>
+ *   fake XR controllers (TIE_TEST_XR=1):
+ *   xrpad                    the virtual gamepad takes the engine's XR Touch
+ *                            pad identity (before the first axis/button)
+ *   xrbutton a|b|x|y|lt|ls|rs|rgrip   one press for Aeron_XrPollButton
+ *   xrmenu a|b|x|y           latch for Aeron_XrTakeAPressed/TakeMenu?Pressed
+ *   xrthrottle <0..1>        Aeron_XrThrottleLever
+ *   xrhand left|right <trigger> [grip]   Aeron_XrGetHand trigger/grip
  *   log <text>, quit
  * ------------------------------------------------------------------------ */
 
@@ -58,6 +65,11 @@ enum {
 	TT_CMD_LOG,
 	TT_CMD_QUIT,
 	TT_CMD_MISSION,
+	TT_CMD_XRBUTTON,
+	TT_CMD_XRMENU,
+	TT_CMD_XRTHROTTLE,
+	TT_CMD_XRHAND,
+	TT_CMD_XRPAD,
 };
 
 enum {
@@ -138,6 +150,7 @@ static struct {
 	uint32_t mouse_buttons;
 	uint32_t mouse_pressed, mouse_released;
 	bool pad_used;
+	bool pad_is_xr;
 	int16_t pad_axes[AERON_GAMEPAD_AXIS_COUNT];
 	uint32_t pad_buttons;
 	uint32_t pad_prev_buttons;
@@ -291,6 +304,11 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 		{ "log", TT_CMD_LOG },
 		{ "quit", TT_CMD_QUIT },
 		{ "mission", TT_CMD_MISSION },
+		{ "xrbutton", TT_CMD_XRBUTTON },
+		{ "xrmenu", TT_CMD_XRMENU },
+		{ "xrthrottle", TT_CMD_XRTHROTTLE },
+		{ "xrhand", TT_CMD_XRHAND },
+		{ "xrpad", TT_CMD_XRPAD },
 	};
 	out->cmd = -1;
 	for (size_t i = 0; i < SDL_arraysize(commands); ++i)
@@ -392,6 +410,39 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 			if (arg)
 				SDL_strlcpy(out->text, arg, sizeof out->text);
 			return true;
+		case TT_CMD_XRBUTTON:
+		case TT_CMD_XRMENU: {
+			static const char* const buttons[] = { "a", "b", "x", "y", "lt", "ls", "rs", "rgrip" };
+			arg = TieTest_NextToken(&cursor);
+			out->ivalue[0] = -1;
+			const int count = out->cmd == TT_CMD_XRMENU ? 4 : (int)SDL_arraysize(buttons);
+			for (int i = 0; arg && i < count; ++i)
+				if (SDL_strcasecmp(arg, buttons[i]) == 0)
+					out->ivalue[0] = i;
+			if (out->ivalue[0] < 0) {
+				TieTest_Log("script line %d: %s", line_no,
+							out->cmd == TT_CMD_XRMENU ? "xrmenu a|b|x|y" : "xrbutton a|b|x|y|lt|ls|rs|rgrip");
+				return false;
+			}
+			return true;
+		}
+		case TT_CMD_XRTHROTTLE:
+			arg = TieTest_NextToken(&cursor);
+			out->fvalue[0] = arg ? (float)SDL_atof(arg) : 0.0f;
+			return arg != NULL;
+		case TT_CMD_XRHAND: {
+			arg = TieTest_NextToken(&cursor);
+			char* trigger = TieTest_NextToken(&cursor);
+			char* grip = TieTest_NextToken(&cursor);
+			if (!arg || !trigger || (SDL_strcasecmp(arg, "left") && SDL_strcasecmp(arg, "right"))) {
+				TieTest_Log("script line %d: xrhand left|right <trigger 0..1> [grip 0..1]", line_no);
+				return false;
+			}
+			out->ivalue[0] = SDL_strcasecmp(arg, "right") == 0;
+			out->fvalue[0] = (float)SDL_atof(trigger);
+			out->fvalue[1] = grip ? (float)SDL_atof(grip) : 0.0f;
+			return true;
+		}
 		case TT_CMD_WAIT: {
 			char* what = TieTest_NextToken(&cursor);
 			out->timeout = 3600;
@@ -839,6 +890,27 @@ static void TieTest_Execute(AeronInputSnapshot* input, const TieTestLine* line) 
 		case TT_CMD_LOG:
 			TieTest_Log("log: %s", line->text);
 			break;
+		case TT_CMD_XRBUTTON:
+		case TT_CMD_XRMENU:
+		case TT_CMD_XRTHROTTLE:
+		case TT_CMD_XRHAND:
+			if (!TieTestXr_Enabled()) {
+				TieTest_Log("script line %d: XR controller input needs TIE_TEST_XR=1", line->line_no);
+				break;
+			}
+			if (line->cmd == TT_CMD_XRBUTTON)
+				TieTestXr_QueueButton(line->ivalue[0]);
+			else if (line->cmd == TT_CMD_XRMENU)
+				TieTestXr_MenuPress(line->ivalue[0]);
+			else if (line->cmd == TT_CMD_XRTHROTTLE)
+				TieTestXr_SetThrottle(line->fvalue[0]);
+			else
+				TieTestXr_SetHandInput(line->ivalue[0], line->fvalue[0], line->fvalue[1]);
+			break;
+		case TT_CMD_XRPAD:
+			g_test.pad_used = true;
+			g_test.pad_is_xr = true;
+			break;
 		case TT_CMD_QUIT:
 			TieTest_Log("quit (script line %d)", line->line_no);
 			g_test.exit_requested = true;
@@ -893,9 +965,13 @@ static void TieTest_ApplyGamepad(AeronInputSnapshot* input) {
 		pad->connected = 1;
 		pad->kind = AERON_CONTROLLER_KIND_GAMEPAD;
 		pad->instance_id = 0x7e57u;
-		SDL_strlcpy(pad->name, "TIE test gamepad", sizeof pad->name);
-		SDL_strlcpy(pad->path, "tie-test", sizeof pad->path);
-		SDL_strlcpy(pad->guid, "03000000544945546573747061640000", sizeof pad->guid);
+		/* xrpad: the identity of the engine's virtual Touch gamepad
+		 * (aeron/src/xr_input.c), so the game treats it as the XR pad. */
+		SDL_strlcpy(pad->name, g_test.pad_is_xr ? "OpenXR Touch" : "TIE test gamepad", sizeof pad->name);
+		SDL_strlcpy(pad->path, g_test.pad_is_xr ? "openxr:touch" : "tie-test", sizeof pad->path);
+		SDL_strlcpy(pad->guid,
+					g_test.pad_is_xr ? "4f70656e5852546f7563680000000001" : "03000000544945546573747061640000",
+					sizeof pad->guid);
 		pad->axis_count = AERON_GAMEPAD_AXIS_COUNT;
 		pad->button_count = AERON_GAMEPAD_BUTTON_COUNT;
 		pad->gamepad_available_axes = (1u << AERON_GAMEPAD_AXIS_COUNT) - 1u;

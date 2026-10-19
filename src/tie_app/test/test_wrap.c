@@ -284,7 +284,14 @@ static struct {
 	TieTestXrCommit frame;
 	uint64_t committed_frames;
 	int warned;
-} s_xr;
+	/* scripted controller input */
+	int pointer, menu_keys, flight_buttons; /* last modes the game set (-1 unknown) */
+	int button_queue[16];
+	int button_count;
+	int menu_latch[4]; /* A, B, X, Y */
+	float throttle;
+	float trigger[2], grip[2];
+} s_xr = { .pointer = -1, .menu_keys = -1, .flight_buttons = -1 };
 
 void TieTestXr_Enable(int eye_width, int eye_height) {
 	s_xr.on = 1;
@@ -596,6 +603,9 @@ int __wrap_Aeron_XrGetHand(int hand, AeronXrHand* out) {
 		return 0;
 	memset(out, 0, sizeof *out);
 	/* Resting hands in front of the seat: "x,y,z,yaw,pitch" overrides. */
+	const int h = hand ? 1 : 0;
+	out->trigger = s_xr.trigger[h];
+	out->grip = s_xr.grip[h];
 	float p[5] = { hand ? 0.15f : -0.15f, -0.35f, -0.35f, hand ? 10.0f : -10.0f, 30.0f };
 	const char* env = SDL_getenv(hand ? "TIE_TEST_XR_RHAND" : "TIE_TEST_XR_LHAND");
 	if (env)
@@ -616,6 +626,113 @@ int __wrap_Aeron_XrGetHand(int hand, AeronXrHand* out) {
 	out->index_touch = -1;
 	out->thumb_touch = -1;
 	return 1;
+}
+
+/* ---- scripted controller input (TieTestXr_* below) ---- */
+
+static void TieTestXr_LogMode(const char* name, int* last, int value) {
+	if (*last != (value != 0)) {
+		*last = value != 0;
+		printf("[tie-test] frame %llu: xr %s %s\n", (unsigned long long)TieTest_Frame(), name, value ? "on" : "off");
+		fflush(stdout);
+	}
+}
+
+void __real_Aeron_XrSetPointerEnabled(int enabled);
+void __wrap_Aeron_XrSetPointerEnabled(int enabled) {
+	if (s_xr.on)
+		TieTestXr_LogMode("pointer", &s_xr.pointer, enabled);
+	__real_Aeron_XrSetPointerEnabled(enabled);
+}
+
+void __real_Aeron_XrSetMenuKeys(int enabled);
+void __wrap_Aeron_XrSetMenuKeys(int enabled) {
+	if (s_xr.on)
+		TieTestXr_LogMode("menu_keys", &s_xr.menu_keys, enabled);
+	__real_Aeron_XrSetMenuKeys(enabled);
+}
+
+void __real_Aeron_XrSetFlightButtons(int enabled);
+void __wrap_Aeron_XrSetFlightButtons(int enabled) {
+	if (s_xr.on)
+		TieTestXr_LogMode("flight_buttons", &s_xr.flight_buttons, enabled);
+	__real_Aeron_XrSetFlightButtons(enabled);
+}
+
+int __real_Aeron_XrPollButton(AeronXrButton* button, int* shifted);
+int __wrap_Aeron_XrPollButton(AeronXrButton* button, int* shifted) {
+	if (!s_xr.on)
+		return __real_Aeron_XrPollButton(button, shifted);
+	if (s_xr.button_count <= 0)
+		return 0;
+	if (button)
+		*button = (AeronXrButton)s_xr.button_queue[0];
+	if (shifted)
+		*shifted = 0;
+	memmove(s_xr.button_queue, s_xr.button_queue + 1, sizeof(int) * (size_t)(--s_xr.button_count));
+	return 1;
+}
+
+static int TieTestXr_TakeLatch(int index) {
+	const int pressed = s_xr.menu_latch[index];
+	s_xr.menu_latch[index] = 0;
+	return pressed;
+}
+
+int __real_Aeron_XrTakeAPressed(void);
+int __wrap_Aeron_XrTakeAPressed(void) { return s_xr.on ? TieTestXr_TakeLatch(0) : __real_Aeron_XrTakeAPressed(); }
+int __real_Aeron_XrTakeMenuBPressed(void);
+int __wrap_Aeron_XrTakeMenuBPressed(void) {
+	return s_xr.on ? TieTestXr_TakeLatch(1) : __real_Aeron_XrTakeMenuBPressed();
+}
+int __real_Aeron_XrTakeMenuXPressed(void);
+int __wrap_Aeron_XrTakeMenuXPressed(void) {
+	return s_xr.on ? TieTestXr_TakeLatch(2) : __real_Aeron_XrTakeMenuXPressed();
+}
+int __real_Aeron_XrTakeMenuYPressed(void);
+int __wrap_Aeron_XrTakeMenuYPressed(void) {
+	return s_xr.on ? TieTestXr_TakeLatch(3) : __real_Aeron_XrTakeMenuYPressed();
+}
+
+float __real_Aeron_XrThrottleLever(void);
+float __wrap_Aeron_XrThrottleLever(void) { return s_xr.on ? s_xr.throttle : __real_Aeron_XrThrottleLever(); }
+void __real_Aeron_XrSetThrottleLever(float value);
+void __wrap_Aeron_XrSetThrottleLever(float value) {
+	if (!s_xr.on) {
+		__real_Aeron_XrSetThrottleLever(value);
+		return;
+	}
+	s_xr.throttle = value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
+}
+
+void __real_Aeron_XrHapticPulse(int hand, float amplitude, int duration_ms);
+void __wrap_Aeron_XrHapticPulse(int hand, float amplitude, int duration_ms) {
+	if (s_xr.on) {
+		printf("[tie-test] frame %llu: xr haptic hand=%d amplitude=%.2f ms=%d\n",
+			   (unsigned long long)TieTest_Frame(), hand, (double)amplitude, duration_ms);
+		fflush(stdout);
+	}
+	__real_Aeron_XrHapticPulse(hand, amplitude, duration_ms);
+}
+
+void TieTestXr_QueueButton(int button) {
+	if (button < 0 || button >= AERON_XR_BUTTON_COUNT)
+		return;
+	if (s_xr.button_count < (int)SDL_arraysize(s_xr.button_queue))
+		s_xr.button_queue[s_xr.button_count++] = button;
+}
+
+void TieTestXr_MenuPress(int index) {
+	if (index >= 0 && index < 4)
+		s_xr.menu_latch[index] = 1;
+}
+
+void TieTestXr_SetThrottle(float value) { __wrap_Aeron_XrSetThrottleLever(value); }
+
+void TieTestXr_SetHandInput(int hand, float trigger, float grip) {
+	const int h = hand ? 1 : 0;
+	s_xr.trigger[h] = trigger;
+	s_xr.grip[h] = grip;
 }
 
 int __real_Aeron_XrGetRenderModel(int hand, AeronXrRenderModel* out);
@@ -750,5 +867,13 @@ int TieTestXr_EndFrame(const char* prefix) {
 	return 0;
 }
 uint64_t TieTestXr_CommittedFrames(void) { return 0; }
+void TieTestXr_QueueButton(int button) { (void)button; }
+void TieTestXr_MenuPress(int index) { (void)index; }
+void TieTestXr_SetThrottle(float value) { (void)value; }
+void TieTestXr_SetHandInput(int hand, float trigger, float grip) {
+	(void)hand;
+	(void)trigger;
+	(void)grip;
+}
 
 #endif
