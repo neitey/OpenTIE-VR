@@ -86,6 +86,9 @@ struct AeronTexture* TieCockpitRenderer_InstrumentAtlas(const TieCockpitRenderer
  * `world_split` records the main target box separately. RenderXrTarget
  * clears `target` and draws the cockpit/HUD (world = false) or only the
  * target box (world = true) into it, outside any other pass. */
+/* OpenTIE-VR: whether the instrument atlas redraws this frame (stereo
+ * pacing, TIE_XR_ATLAS_EVERY); the first call of a frame decides. */
+bool TieCockpitRenderer_XrAtlasDue(TieCockpitRenderer* cg, const struct TieSnapshot* snap);
 void TieCockpitRenderer_SetXrTarget(TieCockpitRenderer* cg, int width, int height, int origin_x, int origin_y,
 								   bool world_split);
 bool TieCockpitRenderer_RenderXrTarget(TieCockpitRenderer* cg, struct AeronCommandBuffer* cmd,

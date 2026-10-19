@@ -162,6 +162,10 @@ struct TieFlightRenderer {
 	AeronRenderTarget* classic_pip_color_rt;
 	AeronDepthTarget* classic_pip_depth_rt;
 	AeronTexture* pip_texture;
+	/* OpenTIE-VR stereo PIP pacing (TIE_XR_PIP_EVERY): what the last PIP
+	 * showed and host frames since. */
+	uint64_t pip_key;
+	uint32_t pip_age;
 	AeronSceneMeshTable pip_scene_table;
 	TieFlightSceneFrame frame;
 	/* Per-frame custom mesh tables borrowed by scene instances until Render. */

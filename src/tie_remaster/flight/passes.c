@@ -18,6 +18,7 @@
 #include "tie_remaster/gpu_debug.h"
 #include "tie_remaster/scene2d/srgb_math.h"
 #include "tie_remaster/vr/vr_hands.h"
+#include "tie_remaster/xr_prof.h"
 
 #include "aeron/aeron.h"
 #include "aeron/log.h"
@@ -407,11 +408,45 @@ static bool TieFlightRenderer_PrepareClassicMeshTables(TieFlightRenderer* g, Aer
 									 g->classic_mesh_tables.count * sizeof(AeronSceneMeshTable)) != 0;
 }
 
+/* OpenTIE-VR stereo: the CMD PIP is seen only with a target on a working CMD
+ * (TieCockpitRenderer_Draw3dcrt), and it changes at the sim rate, not with
+ * the head. So in stereo it renders for a new sim frame / target, at most
+ * every TIE_XR_PIP_EVERY host frames (default 2; 0 = every frame, the old
+ * behaviour), and under the 3D cockpit only when the instrument atlas that
+ * shows it redraws. Flat: every frame it renders. */
+static bool TieFlightRenderer_XrPipDue(TieFlightRenderer* g, const TieSnapshot* snap) {
+	if (!g->xr_active)
+		return true;
+	const char* env = getenv("TIE_XR_PIP_EVERY");
+	const int every = env && env[0] ? atoi(env) : 2;
+	if (every <= 0)
+		return true;
+	if (g->pip_age < UINT32_MAX)
+		g->pip_age++;
+	if (!snap->cockpit.pip_target_present || !(snap->hud.working_subsystems & 0x01u))
+		return false;
+	uint64_t key = 0xcbf29ce484222325ull;
+	const uint32_t parts[] = { snap->flight_frame, snap->mission_load_generation, snap->cockpit.pip_target_slot };
+	const unsigned char* bytes = (const unsigned char*)parts;
+	for (size_t i = 0; i < sizeof parts; ++i)
+		key = (key ^ bytes[i]) * 0x100000001b3ull;
+	bool due = !g->pip_texture || (key != g->pip_key && g->pip_age >= (uint32_t)every);
+	if (due && g->cockpit && TieXwaCockpit_Drawn(snap) && snap->cockpit.view_idx == 0)
+		due = TieCockpitRenderer_XrAtlasDue(g->cockpit, snap);
+	if (due) {
+		g->pip_key = key;
+		g->pip_age = 0;
+	}
+	return due;
+}
+
 static bool TieFlightRenderer_PreparePip(TieFlightRenderer* g, AeronCommandBuffer* cmd,
 										 const TieSnapshot* snap) {
 	if (!g || !cmd || !snap || snap->scene_kind != TIE_SCENE_FLIGHT)
 		return false;
-	g->pip_texture = NULL;
+	const bool pip_due = TieFlightRenderer_XrPipDue(g, snap);
+	if (pip_due)
+		g->pip_texture = NULL;
 	const TieFlightObjectState* fl = NULL;
 	TieFlightObjectState synth_static = { 0 };
 	const uint16_t target_slot = snap->cockpit.pip_target_slot;
@@ -442,6 +477,9 @@ static bool TieFlightRenderer_PreparePip(TieFlightRenderer* g, AeronCommandBuffe
 	}
 	if (!TieFlightRenderer_PrepareClassicMeshTables(g, cmd, snap, fl))
 		return false;
+	if (!pip_due)
+		return true; /* the last PIP image stays */
+	TieXrProf_Count(TIE_XR_PROF_N_PIP);
 
 	float h_half = snap->cockpit.pip_fov_h_half_rad;
 	float v_half = snap->cockpit.pip_fov_v_half_rad;
