@@ -77,7 +77,20 @@ static const char k_settings_template[] =
 	"# Its spot (x,y,z in metres from your head; set by moving it with the left grip):\n"
 	"#XWA_XR_STICK_POS=0.12,-0.70,-0.32\n"
 	"# Glove size (1 = the model's own, large):\n"
-	"#XWA_XR_GLOVE_SCALE=0.85\n";
+	"#XWA_XR_GLOVE_SCALE=0.85\n"
+	"# Performance A/B switches (defaults shown; see the log's tie.perf and\n"
+	"# vkshim lines every 5 / 10 s):\n"
+	"# 3D cockpit instrument atlas size, and redraw at most every Nth frame\n"
+	"# (0 = every frame):\n"
+	"#TIE_XR_ATLAS_SIZE=1024x768\n"
+	"#TIE_XR_ATLAS_EVERY=2\n"
+	"# CMD target picture: at most every Nth frame (0 = every frame):\n"
+	"#TIE_XR_PIP_EVERY=2\n"
+	"# 1 = laser and explosion lights (costly on the headset GPU):\n"
+	"#TIE_XR_POINT_LIGHTS=0\n"
+	"# 0 = no per-pass GPU timing in the log; no CPU frame breakdown:\n"
+	"#XWA_XR_GPU_TIMING=1\n"
+	"#TIE_XR_PROFILE=1\n";
 
 static void quest_load_settings(void) {
 	char path[1100];
@@ -141,6 +154,17 @@ static void quest_xr_defaults(void) {
 	}
 	if (!SDL_getenv("XWA_XR_SHADOWS"))
 		SDL_setenv_unsafe("XWA_XR_SHADOWS", "0", 1);
+	/* Laser and explosion point lights are what saturates the headset's GPU
+	 * in a dogfight (each is shaded per pixel, per eye; OpenXWA-VR turns them
+	 * off too). TIE_XR_POINT_LIGHTS=1 brings them back. */
+	if (!SDL_getenv("TIE_XR_POINT_LIGHTS") && !SDL_getenv("XWA_POINT_LIGHTS"))
+		SDL_setenv_unsafe("TIE_XR_POINT_LIGHTS", "0", 1);
+	Aeron_LogInfo("tie.quest",
+				  "Quest render profile: stereo shadows %s, point lights %s, shading %s; SSAO, motion blur, FSR "
+				  "off in stereo; MSAA from config.yaml (render.msaa_samples, 2)",
+				  SDL_getenv("XWA_XR_SHADOWS"),
+				  SDL_getenv("TIE_XR_POINT_LIGHTS") ? SDL_getenv("TIE_XR_POINT_LIGHTS") : SDL_getenv("XWA_POINT_LIGHTS"),
+				  SDL_getenv("AERON_PBR_SHADER"));
 	if (!SDL_getenv("AERON_PBR_SHADER")) {
 		const char* shading = SDL_getenv("XWA_XR_SHADING");
 		SDL_setenv_unsafe("AERON_PBR_SHADER", shading && strcmp(shading, "full") == 0 ? "full" : "lite", 1);
@@ -166,7 +190,10 @@ static void quest_xr_defaults(void) {
 		Aeron_LogWarn("tie.quest", "foveation: the last start with it did not get going, so it is off for this run");
 		return;
 	}
-	if (fov && (fov[0] == '0' || SDL_strcasecmp(fov, "off") == 0)) {
+	/* With foveation off the shim still times the GPU (XWA_XR_GPU_TIMING=0
+	 * turns that off too, and then it is not loaded at all). */
+	const char* timing = SDL_getenv("XWA_XR_GPU_TIMING");
+	if (fov && (fov[0] == '0' || SDL_strcasecmp(fov, "off") == 0) && timing && timing[0] == '0') {
 		g_shim_guard[0] = '\0';
 		SDL_setenv_unsafe("AERON_TEXTURE_ASTC", "0", 1);
 		return;

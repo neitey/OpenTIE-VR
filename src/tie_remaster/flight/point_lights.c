@@ -7,6 +7,7 @@
 #include "tie_runtime/snapshot/snapshot.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct TieProjectileLightSource {
@@ -193,6 +194,20 @@ static bool TieFlightPointLights_PrepareFrame(TieFlightPointLightFrame* frame, c
 	return g_point_lights.live.enabled && snapshot && origin_world;
 }
 
+/* OpenTIE-VR: TIE_XR_POINT_LIGHTS=0/1 (or OpenXWA-VR's XWA_POINT_LIGHTS)
+ * overrides point_lights.enabled for the laser and explosion lights, read
+ * live. The Quest profile sets 0: each of them is shaded per pixel in both
+ * eyes, which is what saturates the headset's GPU in a dogfight. The training
+ * course's headlight stays (one light, needed to see the course). */
+static bool TieFlightPointLights_DynamicEnabled(void) {
+	const char* env = getenv("TIE_XR_POINT_LIGHTS");
+	if (!(env && (env[0] == '0' || env[0] == '1')))
+		env = getenv("XWA_POINT_LIGHTS");
+	if (env && (env[0] == '0' || env[0] == '1'))
+		return env[0] == '1';
+	return true;
+}
+
 static void TieFlightPointLights_AppendDynamicSources(TieFlightPointLightFrame* frame,
 													  const TieSnapshot* snapshot,
 													  const int32_t origin_world[3]) {
@@ -217,7 +232,7 @@ static void TieFlightPointLights_AppendDynamicSources(TieFlightPointLightFrame* 
 
 void TieFlightPointLights_Derive(TieFlightPointLightFrame* frame, const TieSnapshot* snapshot,
 								 const int32_t origin_world[3]) {
-	if (!TieFlightPointLights_PrepareFrame(frame, snapshot, origin_world))
+	if (!TieFlightPointLights_PrepareFrame(frame, snapshot, origin_world) || !TieFlightPointLights_DynamicEnabled())
 		return;
 	TieFlightPointLights_AppendDynamicSources(frame, snapshot, origin_world);
 }
@@ -230,7 +245,8 @@ void TieFlightPointLights_DerivePrimaryView(TieFlightPointLightFrame* frame, con
 	/* The remaster-only training aid is inserted first so scene-effect
 	 * overflow cannot discard the light needed to navigate the course. */
 	TieFlightPointLights_AppendTrainingHeadlight(frame, snapshot, origin_world);
-	TieFlightPointLights_AppendDynamicSources(frame, snapshot, origin_world);
+	if (TieFlightPointLights_DynamicEnabled())
+		TieFlightPointLights_AppendDynamicSources(frame, snapshot, origin_world);
 }
 
 uint32_t TieFlightPointLights_Submit(AeronScene3D* scene, TieFlightPointLightFrame* frame,
