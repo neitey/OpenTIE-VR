@@ -74,7 +74,8 @@ func TestSkipFileName(t *testing.T) {
 	skip := []string{"TIE95.EXE", "ddraw.dll", "TOPACE10.TFR", "luke.tfr", "game.LNK", "goggame-1234.info", "unins000.dat",
 		"steam_api.dll", "steam_api64.dll", "desktop.ini", "Thumbs.db", ".DS_Store", "x.tmp", "DOSBOX_ICO.ico", "site.url",
 		"dosbox_tiecd.conf", "Manual.pdf", "TieFighterCompatibility.sdb"}
-	keep := []string{"STRINGS.DAT", "TITLE.LFD", "game.ins", "game.fil", "Track02.ogg", "readme.txt", "exefile.dat", "tfr.txt"}
+	keep := []string{"STRINGS.DAT", "TITLE.LFD", "game.ins", "game.fil", "Track02.ogg", "readme.txt", "exefile.dat", "tfr.txt",
+		"ICONS640.ICO", "MAPICONS.ICO"}
 	for _, n := range skip {
 		if !skipFileName(n) {
 			t.Errorf("%q should be skipped", n)

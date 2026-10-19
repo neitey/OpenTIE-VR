@@ -22,7 +22,9 @@ type gameFile struct {
 
 var (
 	skipExact = map[string]bool{"desktop.ini": true, "thumbs.db": true}
-	skipExts  = map[string]bool{".exe": true, ".dll": true, ".tfr": true, ".lnk": true, ".ico": true, ".url": true, ".tmp": true,
+	// Not ".ico": RESOURCE/ICONS640.ICO and MAPICONS.ICO are the map room's
+	// icons (src/tie/maproom.c); DOSBox's DOSBOX_ICO.ico goes by its prefix.
+	skipExts = map[string]bool{".exe": true, ".dll": true, ".tfr": true, ".lnk": true, ".url": true, ".tmp": true,
 		".pdf": true, ".sdb": true}
 	skipPrefixes = []string{"goggame-", "unins", "steam_api", "dosbox"}
 	skipDirs     = map[string]bool{"dosbox": true, "__support": true, "_commonredist": true}
