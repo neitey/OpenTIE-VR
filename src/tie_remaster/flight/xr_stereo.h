@@ -52,9 +52,11 @@ void TieFlightXr_EyeCamera(const AeronSceneCamera* base, const AeronXrView* view
 /* Per-eye flight cameras (depth boost applied) and a camera spanning both
  * eyes (between them, the union of their FOVs) for culling, shadow fitting
  * and camera-facing sprites. `base` is the flat camera built for the eye
- * size; its origin and fit rectangle carry over. */
+ * size; its origin and fit rectangle carry over. near_shift[e] (optional):
+ * how far the depth boost moved eye e (scene units); near geometry such as a
+ * cockpit moves by it to keep its real size. */
 void TieFlightXr_BuildEyes(const TieFlightCamera* base, const AeronXrStereoFrame* frame, TieFlightCamera eyes[2],
-						   TieFlightCamera* both);
+						   TieFlightCamera* both, float near_shift[2][3]);
 
 /* HUD quads. head = 1: the helmet sheet (head-locked); head = 0: the quad fixed
  * in LOCAL space that matches `hud_cam`'s frustum (what was drawn at a pixel

@@ -130,7 +130,7 @@ static void TieFlightXr_FinishCamera(TieFlightCamera* fc, int w, int h) {
 }
 
 void TieFlightXr_BuildEyes(const TieFlightCamera* base, const AeronXrStereoFrame* frame, TieFlightCamera eyes[2],
-						   TieFlightCamera* both) {
+						   TieFlightCamera* both, float near_shift[2][3]) {
 	const float boost = TieFlightXr_DepthBoost();
 	AeronXrView boosted[2] = { frame->views[0], frame->views[1] };
 	AeronXrView span = frame->views[0];
@@ -144,6 +144,12 @@ void TieFlightXr_BuildEyes(const TieFlightCamera* base, const AeronXrStereoFrame
 		eyes[e] = *base;
 		TieFlightXr_EyeCamera(&base->camera, &boosted[e], &eyes[e].camera);
 		TieFlightXr_FinishCamera(&eyes[e], frame->width, frame->height);
+		if (near_shift) {
+			AeronSceneCamera real_eye;
+			TieFlightXr_EyeCamera(&base->camera, &frame->views[e], &real_eye);
+			for (int a = 0; a < 3; a++)
+				near_shift[e][a] = eyes[e].camera.pos[a] - real_eye.pos[a];
+		}
 	}
 	/* One view covering both eyes (their FOVs are asymmetric): culling and
 	 * the shared shadow atlas must see what either eye sees. */

@@ -315,6 +315,10 @@ struct TieFlightRenderer {
 	TieFlightCamera xr_eyes[2];
 	AeronScenePresentChain* xr_present_chain;
 	AeronTextureFormat xr_present_format;
+	/* Near geometry (cockpit) that follows each eye's depth-boost shift. */
+	bool xr_near_valid;
+	AeronSceneMark xr_near_begin, xr_near_end;
+	float xr_near_shift[2][3];
 
 	/* Shared spatial post settings, initialized from the canonical Aeron
 	 * profile and mutable through the debug inspectors. */

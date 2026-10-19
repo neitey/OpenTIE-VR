@@ -80,6 +80,14 @@ bool TieFlightRenderer_RenderFrame(TieFlightRenderer* g, AeronCommandBuffer* cmd
 struct AeronXrStereoFrame;
 void TieFlightRenderer_SetXrFrame(TieFlightRenderer* g, const struct AeronXrStereoFrame* frame);
 bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cmd);
+/* True while the frame being prepared is stereo. */
+bool TieFlightRenderer_XrActive(const TieFlightRenderer* g);
+/* Brackets (AeronScene_Mark) submissions made during PrepareFrame that sit
+ * near the eyes, e.g. a 3D cockpit: with XWA_XR_DEPTH_BOOST > 1 they move
+ * with each eye's boost shift so they keep their real size. */
+struct AeronSceneMark;
+void TieFlightRenderer_XrSetNearRange(TieFlightRenderer* g, const struct AeronSceneMark* begin,
+									  const struct AeronSceneMark* end);
 
 /* Current picture-in-picture texture for the cockpit 3D CRT. The frame
  * preparation path uses the target as an integer world origin and rebuilds

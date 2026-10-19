@@ -714,7 +714,8 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 	const bool xr = g->xr_active;
 	TieFlightCamera xr_span;
 	if (xr)
-		TieFlightXr_BuildEyes(&fcam, &g->xr_frame, g->xr_eyes, &xr_span);
+		TieFlightXr_BuildEyes(&fcam, &g->xr_frame, g->xr_eyes, &xr_span, g->xr_near_shift);
+	g->xr_near_valid = false; /* TieFlightRenderer_XrSetNearRange during this prepare */
 	const TieFlightCamera* render_cam = xr ? &g->xr_eyes[0] : &fcam;
 	const TieFlightCamera* cull_cam = xr ? &xr_span : &fcam;
 
@@ -983,6 +984,16 @@ void TieFlightRenderer_SetXrFrame(TieFlightRenderer* g, const AeronXrStereoFrame
 		memset(&g->xr_frame, 0, sizeof g->xr_frame);
 }
 
+bool TieFlightRenderer_XrActive(const TieFlightRenderer* g) { return g && g->xr_active; }
+
+void TieFlightRenderer_XrSetNearRange(TieFlightRenderer* g, const AeronSceneMark* begin, const AeronSceneMark* end) {
+	if (!g || !begin || !end)
+		return;
+	g->xr_near_begin = *begin;
+	g->xr_near_end = *end;
+	g->xr_near_valid = g->xr_active;
+}
+
 static AeronScenePresentChain* TieFlightRenderer_XrPresentChain(TieFlightRenderer* g, AeronTextureFormat format) {
 	if (g->xr_present_chain && g->xr_present_format == format)
 		return g->xr_present_chain;
@@ -1025,6 +1036,9 @@ static bool TieFlightRenderer_XrOutputEye(TieFlightRenderer* g, AeronCommandBuff
 bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cmd) {
 	if (!g || !cmd || !g->frame.curr || !g->xr_active || !g->frame.xr)
 		return false;
+	const bool shift_near = g->xr_near_valid && TieFlightXr_DepthBoost() != 1.0f;
+	if (shift_near)
+		AeronScene_TranslateRange(g->scene, &g->xr_near_begin, &g->xr_near_end, g->xr_near_shift[0]);
 	TIE_GPU_PUSH(cmd, "Flight scene, left eye");
 	bool ok = AeronScene_Render(g->scene, cmd) != 0 &&
 			  TieFlightRenderer_XrOutputEye(g, cmd, g->xr_frame.eye_targets[0]);
@@ -1035,6 +1049,12 @@ bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cm
 		TIE_GPU_PUSH(cmd, "Flight scene, right eye");
 		AeronScene_SetShadowReuse(g->scene, 1);
 		g->frame.fcam = g->xr_eyes[1];
+		if (shift_near) {
+			const float to_right[3] = { g->xr_near_shift[1][0] - g->xr_near_shift[0][0],
+										g->xr_near_shift[1][1] - g->xr_near_shift[0][1],
+										g->xr_near_shift[1][2] - g->xr_near_shift[0][2] };
+			AeronScene_TranslateRange(g->scene, &g->xr_near_begin, &g->xr_near_end, to_right);
+		}
 		ok = AeronScene_SetCamera(g->scene, &g->xr_eyes[1].camera) && AeronScene_Render(g->scene, cmd) &&
 			 TieFlightRenderer_XrOutputEye(g, cmd, g->xr_frame.eye_targets[1]);
 		TIE_GPU_POP(cmd);
