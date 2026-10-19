@@ -27,10 +27,12 @@
 #include "tie_remaster/flight/mesh_draw.h"
 #include "tie_remaster/flight/render_math.h"
 #include "tie_remaster/flight/renderer.h"
+#include "tie_remaster/flight/xr_stereo.h"
 #include "tie_remaster/flight/xwa_cockpit.h"
 #include "tie_remaster/gpu_debug.h"
 #include "tie_remaster/scene2d/srgb_math.h"
 #include "tie_remaster/scene2d/text.h"
+#include "tie_remaster/xr_prof.h"
 #include "tie_runtime/flight_assets/assets.h"
 #include "tie_runtime/flight_assets/source.h"
 #include "tie_runtime/snapshot/snapshot.h"
@@ -46,9 +48,16 @@
 #define COCKPIT_CHROME_FORMAT AERON_TEXTURE_FORMAT_RGBA16_FLOAT
 
 /* OpenTIE-VR instrument atlas (3D cockpit panels): the whole 4:3 cockpit
- * panel at 3x SVGA, so a 0.25 m CMD panel keeps headset resolution. */
+ * panel. Flat view: 3x SVGA. Headset: 1.6x SVGA (TieCockpitRenderer_AtlasSize):
+ * the panels, 0.9-1.1 m away, then get ~2 atlas texels per eye pixel on a
+ * Quest 3 (~15 px/deg; CMD ~31 texels/deg), all bilinear sampling (no mips)
+ * resolves without shimmer; 3x SVGA was ~3-4 texels per pixel. */
 #define COCKPIT_ATLAS_W 1920
 #define COCKPIT_ATLAS_H 1440
+#define COCKPIT_ATLAS_XR_W 1024
+#define COCKPIT_ATLAS_XR_H 768
+#define COCKPIT_ATLAS_XR_PANELS_W 1536
+#define COCKPIT_ATLAS_XR_PANELS_H 1152
 #define COCKPIT_GROUP_HUD (-1)
 #define COCKPIT_GROUP_NONE (-2)
 
@@ -196,6 +205,14 @@ struct TieCockpitRenderer {
 	AeronDrawList2D* atlas_before_list;
 	AeronDrawList2D* atlas_after_list;
 	bool atlas_drawn;
+	int atlas_w, atlas_h; /* atlas_rt's size */
+	/* Atlas redraw pacing in stereo (TieCockpitRenderer_XrAtlasDue): the
+	 * key of what the last atlas showed, host frames since, and this frame's
+	 * decision (made once, by the PIP or by Prepare). */
+	uint64_t atlas_key;
+	uint32_t atlas_age;
+	bool atlas_due_valid;
+	bool atlas_due;
 	bool pending_xr3d;
 	/* 0 = all widgets, 1 = atlas (skip the screen-HUD cluster), 2 = screen
 	 * HUD cluster only. */
@@ -2990,7 +3007,11 @@ bool TieCockpitRenderer_Prepare(TieCockpitRenderer* cg, AeronCommandBuffer* cmd,
 	 * instrument atlas (full panel view only; other cockpit views keep the
 	 * last atlas), the flight RT gets the screen-space HUD. */
 	if (TieXwaCockpit_Drawn(snap) || (cg->xr_panels && TieXwaCockpit_PanelView(snap))) {
-		if (snap->cockpit.view_idx == 0 &&
+		/* In stereo the atlas redraws only for new instrument data, at most
+		 * every TIE_XR_ATLAS_EVERY host frames (TieCockpitRenderer_XrAtlasDue). */
+		const bool due = TieCockpitRenderer_XrAtlasDue(cg, snap);
+		cg->atlas_due_valid = false;
+		if (snap->cockpit.view_idx == 0 && due &&
 			!TieCockpitRenderer_RenderInstrumentAtlas(cg, cmd, entry, snap, coord_w, coord_h))
 			return false;
 		cg->pending_entry = entry;
@@ -3459,21 +3480,109 @@ static void TieCockpitRenderer_LogInstrumentLayout(const TieCockpitRenderer* cg,
 	}
 }
 
-static bool TieCockpitRenderer_EnsureAtlas(TieCockpitRenderer* cg) {
-	if (cg->atlas_rt && cg->atlas_depth)
+/* TIE_XR_ATLAS_SIZE=WxH (or W, 4:3); default 1024x768 while the headset
+ * presents (stereo and its flat menu view alike, so the atlas is not
+ * recreated when a menu opens), 1920x1440 on the desktop. */
+static void TieCockpitRenderer_AtlasSize(int* w, int* h) {
+	const bool xr = Aeron_XrIsPresenting() != 0;
+	*w = xr ? COCKPIT_ATLAS_XR_W : COCKPIT_ATLAS_W;
+	*h = xr ? COCKPIT_ATLAS_XR_H : COCKPIT_ATLAS_H;
+	/* The cockpit HUD's floating panels are larger and nearer (CMD 0.28 m at
+	 * 0.62 m): 1.5x the texels keep them about one texel per eye pixel. */
+	if (xr && TieFlightXr_HudLayout() == TIE_FLIGHT_XR_HUD_COCKPIT) {
+		*w = COCKPIT_ATLAS_XR_PANELS_W;
+		*h = COCKPIT_ATLAS_XR_PANELS_H;
+	}
+	const char* env = getenv("TIE_XR_ATLAS_SIZE");
+	if (env && env[0]) {
+		int ew = 0, eh = 0;
+		const int n = sscanf(env, "%dx%d", &ew, &eh);
+		if (n >= 1 && ew >= 256 && ew <= 4096) {
+			*w = ew;
+			*h = n == 2 && eh >= 192 && eh <= 4096 ? eh : ew * 3 / 4;
+		}
+	}
+}
+
+static uint64_t TieCockpitRenderer_Fnv(uint64_t h, const void* data, size_t size) {
+	const unsigned char* p = (const unsigned char*)data;
+	for (size_t i = 0; i < size; ++i)
+		h = (h ^ p[i]) * 0x100000001b3ull;
+	return h;
+}
+
+/* What the atlas shows: the cockpit and instrument state, palette, view. */
+static uint64_t TieCockpitRenderer_AtlasKey(const TieCockpitRenderer* cg, const TieSnapshot* snap) {
+	uint64_t h = 0xcbf29ce484222325ull;
+	h = TieCockpitRenderer_Fnv(h, &snap->flight_frame, sizeof snap->flight_frame);
+	h = TieCockpitRenderer_Fnv(h, &snap->mission_load_generation, sizeof snap->mission_load_generation);
+	h = TieCockpitRenderer_Fnv(h, &snap->hud, sizeof snap->hud);
+	h = TieCockpitRenderer_Fnv(h, &snap->cockpit, sizeof snap->cockpit);
+	h = TieCockpitRenderer_Fnv(h, snap->palette, sizeof snap->palette);
+	h = TieCockpitRenderer_Fnv(h, &cg->atlas_w, sizeof cg->atlas_w);
+	return h;
+}
+
+/* TIE_XR_ATLAS_EVERY: in stereo the atlas redraws when what it shows
+ * changed (the sim ticks slower than the headset refreshes) and at most every
+ * Nth host frame (default 2; 1 = on every change; 0 = every frame, the old
+ * behaviour). Flat view: every frame it renders (only on sim frames anyway).
+ * Decided once per frame; the CMD PIP asks first (it is only seen through
+ * the atlas). */
+bool TieCockpitRenderer_XrAtlasDue(TieCockpitRenderer* cg, const TieSnapshot* snap) {
+	if (!cg || !snap)
 		return true;
+	if (cg->atlas_due_valid)
+		return cg->atlas_due;
+	cg->atlas_due_valid = true;
+	if (cg->atlas_age < UINT32_MAX)
+		cg->atlas_age++;
+	const char* env = getenv("TIE_XR_ATLAS_EVERY");
+	const int every = env && env[0] ? atoi(env) : 2;
+	int w, h;
+	TieCockpitRenderer_AtlasSize(&w, &h);
+	const uint64_t key = TieCockpitRenderer_AtlasKey(cg, snap);
+	bool due = true;
+	if (cg->xr_target_w > 0 && every > 0 && cg->atlas_drawn && cg->atlas_w == w && cg->atlas_h == h)
+		due = key != cg->atlas_key && cg->atlas_age >= (uint32_t)every;
+	if (due && snap->cockpit.view_idx == 0) {
+		cg->atlas_key = key;
+		cg->atlas_age = 0;
+	}
+	cg->atlas_due = due;
+	return due;
+}
+
+static bool TieCockpitRenderer_EnsureAtlas(TieCockpitRenderer* cg) {
+	int w, h;
+	TieCockpitRenderer_AtlasSize(&w, &h);
+	if (cg->atlas_rt && cg->atlas_depth && cg->atlas_w == w && cg->atlas_h == h)
+		return true;
+	if (cg->atlas_w != w || cg->atlas_h != h) {
+		/* New size: the atlas restarts (the chrome bake follows the size). */
+		if (cg->atlas_rt)
+			Aeron_DestroyRenderTarget(cg->atlas_rt);
+		if (cg->atlas_depth)
+			Aeron_DestroyDepthTarget(cg->atlas_depth);
+		cg->atlas_rt = NULL;
+		cg->atlas_depth = NULL;
+		cg->atlas_drawn = false;
+		cg->atlas_w = w;
+		cg->atlas_h = h;
+		Aeron_LogInfo("tie.cockpit", "instrument atlas %dx%d", w, h);
+	}
 	if (!cg->atlas_rt)
 		cg->atlas_rt = Aeron_CreateRenderTarget(&(AeronRenderTargetDesc) {
-			.width = COCKPIT_ATLAS_W,
-			.height = COCKPIT_ATLAS_H,
+			.width = w,
+			.height = h,
 			.format = cg->rt_format,
 			.sample_count = AERON_SAMPLE_COUNT_1,
 			.debug_name = "cockpit.instrument_atlas",
 		});
 	if (!cg->atlas_depth)
 		cg->atlas_depth = Aeron_CreateDepthTarget(&(AeronDepthTargetDesc) {
-			.width = COCKPIT_ATLAS_W,
-			.height = COCKPIT_ATLAS_H,
+			.width = w,
+			.height = h,
 			.format = cg->depth_format,
 			.sample_count = AERON_SAMPLE_COUNT_1,
 			.debug_name = "cockpit.instrument_atlas.depth",
@@ -3492,7 +3601,7 @@ static bool TieCockpitRenderer_RenderInstrumentAtlas(TieCockpitRenderer* cg, Aer
 													 int coord_w, int coord_h) {
 	if (!TieCockpitRenderer_EnsureAtlas(cg))
 		return true; /* no panels, the 3D cockpit still draws */
-	const int aw = COCKPIT_ATLAS_W, ah = COCKPIT_ATLAS_H;
+	const int aw = cg->atlas_w, ah = cg->atlas_h;
 	if (!TieCockpitRenderer_ChromeKeyMatches(cg, entry, snap, coord_w, coord_h, aw, ah) &&
 		!TieCockpitRenderer_BakeCockpitChrome(cg, cmd, entry, snap, coord_w, coord_h, aw, ah))
 		return false;
@@ -3529,6 +3638,7 @@ static bool TieCockpitRenderer_RenderInstrumentAtlas(TieCockpitRenderer* cg, Aer
 
 	TieCockpitRenderer_LogInstrumentLayout(cg, entry, snap);
 	cg->atlas_drawn = true;
+	TieXrProf_Count(TIE_XR_PROF_N_ATLAS);
 	return true;
 }
 

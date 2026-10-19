@@ -273,6 +273,115 @@ static void TestXrProfile(void) {
 	CHECK(TieControllerMapping_ThrottleSample(&throttle, &generation));
 }
 
+/* The Quest's Android lists its own Touch controllers as two gamepads
+ * ("Device 0x..."), idle while the XR session owns them. In headset mode
+ * they get no gamepad defaults (0.2.0 gave them, so the first owned
+ * yaw/pitch/roll and the Touch sticks did not steer), saved untouched ones
+ * are dropped, and the XR sticks win over an idle configured pad. */
+static void Ghost(int slot, const char* name, const char* guid, uint32_t id) {
+	AeronControllerSnapshot* d = &g_input.controllers[slot];
+	memset(d, 0, sizeof *d);
+	d->connected = 1;
+	d->kind = AERON_CONTROLLER_KIND_GAMEPAD;
+	d->instance_id = id;
+	snprintf(d->name, sizeof d->name, "%s", name);
+	snprintf(d->guid, sizeof d->guid, "%s", guid);
+	d->gamepad_available_axes = (1u << AERON_GAMEPAD_AXIS_COUNT) - 1u;
+	d->gamepad_available_buttons = 0x1FFFFu;
+}
+
+static void TestHeadsetGhostPads(void) {
+	char error[128] = "";
+	static const char* const g1 = "05000000d0145f14f8000000ce4af46a";
+	static const char* const g2 = "050000002a9463e6cf000000ce4af46a";
+	TieControllerProfile defaults;
+	TieControllerMapping_ClearProfile(&defaults, AERON_CONTROLLER_KIND_GAMEPAD);
+	defaults.mapping.axes[TIE_INPUT_AXIS_YAW] = (TieInputAxisBinding) { AERON_GAMEPAD_AXIS_LEFTX, false, 0.08f };
+	defaults.mapping.axes[TIE_INPUT_AXIS_PITCH] = (TieInputAxisBinding) { AERON_GAMEPAD_AXIS_LEFTY, false, 0.08f };
+	defaults.mapping.axes[TIE_INPUT_AXIS_ROLL] = (TieInputAxisBinding) { AERON_GAMEPAD_AXIS_RIGHTX, false, 0.08f };
+	defaults.bindings[0] = (TieInputActionBinding) {
+		.source = { .kind = AERON_CONTROLLER_DIGITAL_BUTTON, .index = AERON_GAMEPAD_BUTTON_SOUTH, .threshold = 0.5f },
+		.action = TIE_INPUT_ACTION_FIRE_WEAPON,
+	};
+	defaults.binding_count = 1;
+
+	AeronControllerSnapshot* pad = XrPad();
+	Ghost(0, "Device 0x6AF4CED0145F14F8", g1, 2);
+	Ghost(1, "Device 0x6AF4CECF2A9463E6", g2, 3);
+
+	/* Desktop (no headset): both are auto-profiled, the first owns the sticks. */
+	TieControllerMapping_SetHeadset(false);
+	fake.presenting = 0;
+	TieControllerOptions options = { 0 };
+	CHECK(TieControllerMapping_InitializeGamepads(&options, &defaults, &g_input, error, sizeof error));
+	CHECK(options.count == 2);
+	CHECK(TieControllerMapping_IsAutoProfile(&options.models[0].profile, &defaults));
+	CHECK(TieControllerMapping_IsAutoProfile(&options.models[1].profile, &defaults));
+	/* Sorted by GUID: the second device (g2) is the first model and owns the axes. */
+	const int owner = TieControllerMapping_FindModel(&options, g2);
+	const int other = TieControllerMapping_FindModel(&options, g1);
+	CHECK(owner == 0 && other == 1);
+	CHECK(options.models[owner].profile.mapping.axes[TIE_INPUT_AXIS_YAW].source == AERON_GAMEPAD_AXIS_LEFTX);
+	CHECK(options.models[other].profile.mapping.axes[TIE_INPUT_AXIS_YAW].source == -1);
+
+	/* That was 0.2.0 on the Quest: the XR sticks did not steer. Keep the
+	 * old rule here to show it (owned axes skipped when the pad is idle). */
+	CHECK(TieControllerMapping_SetOptions(&options));
+	TieControllerMapping_SetXrFlight(true);
+	pad->gamepad_axes[AERON_GAMEPAD_AXIS_LEFTX] = 32767;
+	pad->gamepad_axes[AERON_GAMEPAD_AXIS_LEFTY] = -32767;
+	pad->gamepad_axes[AERON_GAMEPAD_AXIS_RIGHTX] = 32767;
+	TieControllerMapping_Update(&g_input);
+	int16_t axes[3];
+	uint16_t buttons = 0;
+	TieControllerMapping_Read(axes, 3, &buttons);
+	const TieInputMapping* mapping = TieInput_Mapping();
+	int16_t yaw = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_YAW]);
+	int16_t pitch = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_PITCH]);
+	int16_t roll = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_ROLL]);
+	printf("XR pad beside idle auto-profiled pads: yaw %d pitch %d roll %d\n", yaw, pitch, roll);
+	/* The XR sticks now win over the idle owner. */
+	CHECK(yaw == 127 && pitch == -127 && roll == 127);
+	TieControllerXrDebug debug;
+	TieControllerMapping_XrDebug(&debug);
+	CHECK(debug.slot == AERON_CONTROLLER_MAX - 1 && debug.flight && debug.owned_axes == 7u && debug.xr_axes == 7u);
+	/* A pad that is used (deflected further) keeps its axis. */
+	g_input.controllers[1].gamepad_axes[AERON_GAMEPAD_AXIS_LEFTX] = 32767;
+	pad->gamepad_axes[AERON_GAMEPAD_AXIS_LEFTX] = -16384;
+	TieControllerMapping_Update(&g_input);
+	TieControllerMapping_Read(axes, 3, &buttons);
+	yaw = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_YAW]);
+	CHECK(yaw == 127);
+	g_input.controllers[1].gamepad_axes[AERON_GAMEPAD_AXIS_LEFTX] = 0;
+
+	/* Headset: saved untouched auto profiles are dropped, an edited one
+	 * stays; nothing new is auto-added. */
+	TieControllerMapping_SetHeadset(true);
+	options.models[owner].profile.mapping.axes[TIE_INPUT_AXIS_ROLL].invert = true; /* the player edited it */
+	CHECK(TieControllerMapping_InitializeGamepads(&options, &defaults, &g_input, error, sizeof error));
+	CHECK(options.count == 1 && !strcmp(options.models[0].guid, g2));
+	options.count = 0;
+	CHECK(TieControllerMapping_InitializeGamepads(&options, &defaults, &g_input, error, sizeof error));
+	CHECK(options.count == 0);
+	/* A session presenting counts as headset too. */
+	TieControllerMapping_SetHeadset(false);
+	fake.presenting = 1;
+	CHECK(TieControllerMapping_HeadsetMode());
+	CHECK(TieControllerMapping_InitializeGamepads(&options, &defaults, &g_input, error, sizeof error));
+	CHECK(options.count == 0);
+	fake.presenting = 0;
+
+	/* With no models the XR pad steers alone. */
+	CHECK(TieControllerMapping_SetOptions(&options));
+	pad->gamepad_axes[AERON_GAMEPAD_AXIS_LEFTX] = 32767;
+	TieControllerMapping_Update(&g_input);
+	TieControllerMapping_Read(axes, 3, &buttons);
+	yaw = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_YAW]);
+	pitch = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_PITCH]);
+	CHECK(yaw == 127 && pitch == -127);
+	TieControllerMapping_SetXrFlight(false);
+}
+
 static CraftData g_craft;
 
 static void EnterFlight(void) {
@@ -469,6 +578,7 @@ int main(void) {
 	TestTable();
 	TestThrottleMath();
 	TestXrProfile();
+	TestHeadsetGhostPads();
 	TestFlightFrame();
 	TestThrottleSync();
 	TestHaptics();

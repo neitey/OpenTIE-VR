@@ -152,6 +152,9 @@ int TieApplication_Run(const TieLaunchOptions* launch_options) {
 		fprintf(stderr, "[tie-aeron] Aeron_Init failed\n");
 		return 1;
 	}
+	/* Headset: gamepads Android lists for the Touch controllers must not
+	 * take the sticks away from the XR pad (controller_mapping.c). */
+	TieControllerMapping_SetHeadset(xr_requested != 0);
 	if (!TieQuest_PostInit(&launch_copy)) {
 		Aeron_Shutdown();
 		return 0;

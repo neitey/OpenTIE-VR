@@ -162,6 +162,10 @@ struct TieFlightRenderer {
 	AeronRenderTarget* classic_pip_color_rt;
 	AeronDepthTarget* classic_pip_depth_rt;
 	AeronTexture* pip_texture;
+	/* OpenTIE-VR stereo PIP pacing (TIE_XR_PIP_EVERY): what the last PIP
+	 * showed and host frames since. */
+	uint64_t pip_key;
+	uint32_t pip_age;
 	AeronSceneMeshTable pip_scene_table;
 	TieFlightSceneFrame frame;
 	/* Per-frame custom mesh tables borrowed by scene instances until Render. */
@@ -327,6 +331,11 @@ struct TieFlightRenderer {
 	 * the right eye. */
 	AeronRenderTarget* xr_bloom_right;
 	struct AeronDrawList2D* xr_bloom_blit;
+	/* XWA_XR_DIRECT_OUTPUT: this stereo frame's eyes render straight into
+	 * the headset images (no HDR target, tonemap pass or bloom); the eye
+	 * the direct-output hook draws the hands' alpha for. */
+	bool xr_direct;
+	int xr_direct_eye;
 
 	/* Shared spatial post settings, initialized from the canonical Aeron
 	 * profile and mutable through the debug inspectors. */

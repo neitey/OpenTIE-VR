@@ -16,6 +16,7 @@
 #include "tie_remaster/flight/xwa_cockpit.h"
 #include "tie_remaster/vr/vr_cockpit_hud.h"
 #include "tie_remaster/vr/vr_hands.h"
+#include "tie_remaster/xr_prof.h"
 #include "tie_remaster/integration/snapshot_adapter.h"
 #include "tie_remaster/scene2d/cursor.h"
 #include "tie_remaster/scene2d/cutscene.h"
@@ -795,15 +796,21 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		TieCockpitRenderer_SetXrTarget(flight->cockpit, hud_area[2], hud_area[3], hud_area[0], hud_area[1], xr_split);
 		TieCockpitRenderer_SetXrPanels(flight->cockpit, xr_panels);
 	}
+	uint64_t prof_t = TieXrProf_Now();
 	bool ok = TieFlightRenderer_PrepareFrame(flight->renderer, cmd, TieSnapshot_Previous(), snapshot,
 											 delta_us, host_time_us, paused);
+	prof_t = TieXrProf_Add(TIE_XR_PROF_PREPARE, prof_t);
 	if (ok && flight->cockpit)
 		ok = TieCockpitRenderer_Prepare(flight->cockpit, cmd, snapshot);
+	prof_t = TieXrProf_Add(TIE_XR_PROF_COCKPIT, prof_t);
 	if (Aeron_FatalErrorRequested())
 		ok = false;
 	if (ok && xr) {
 		/* Both eyes, then the cockpit/HUD into the HUD layer(s). */
-		ok = TieFlightRenderer_RenderStereo(flight->renderer, cmd) && xr->hud_target &&
+		TieXrProf_Count(TIE_XR_PROF_N_STEREO);
+		ok = TieFlightRenderer_RenderStereo(flight->renderer, cmd);
+		prof_t = TieXrProf_Add(TIE_XR_PROF_EYES, prof_t);
+		ok = ok && xr->hud_target &&
 			 (!flight->cockpit ||
 			  (TieCockpitRenderer_RenderXrTarget(flight->cockpit, cmd, xr->hud_target, snapshot, false) &&
 			   (!xr_split ||
@@ -814,8 +821,10 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		/* The controller labels' layer (vr_hands.h). */
 		if (ok)
 			TieVrHands_RenderLayers(cmd, xr);
+		prof_t = TieXrProf_Add(TIE_XR_PROF_HUD, prof_t);
 	} else if (ok) {
 		ok = TieFlightRenderer_RenderFrame(flight->renderer, cmd);
+		prof_t = TieXrProf_Add(TIE_XR_PROF_EYES, prof_t);
 	}
 
 	/* VR panels (lap console, side panel, quick wheel): redrawn into their
@@ -830,6 +839,7 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 			panel_n = TieVrConsole_PanelFrame(cmd, xr->card_width, xr->card_height, xr->views, panel_quads);
 			wheel_n = TieVrConsole_WheelFrame(cmd, xr->card_width, xr->card_height, xr->views, wheel_quads);
 		}
+		prof_t = TieXrProf_Add(TIE_XR_PROF_PANELS, prof_t);
 	}
 
 	/* The flat image: the window, or the virtual screen. In stereo only for
@@ -854,10 +864,12 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 			Aeron_RequestFatalRendererError("flight frame recording");
 		return false;
 	}
+	prof_t = TieXrProf_Now();
 	if (!Aeron_SubmitCommandBuffer(cmd)) {
 		Aeron_RequestFatalRendererError("flight command-buffer submission");
 		return false;
 	}
+	(void)TieXrProf_Add(TIE_XR_PROF_SUBMIT, prof_t);
 	if (xr) {
 		/* Helmet: the cockpit/HUD sheet follows the head, the target box sits
 		 * on a far quad fixed in the craft's frame, matching the camera the
@@ -1351,8 +1363,11 @@ static bool TieRemaster_FrameBody(const TieSnapshot* snapshot, int32_t delta_us,
 		if (!stereo && !(in_mission && flight_is_active)) {
 			const bool dimmed = snapshot && (snapshot->scene_kind == TIE_SCENE_CUTSCENE ||
 											 snapshot->scene_kind == TIE_SCENE_FLIGHT_LOADING);
-			(void)TieFlightXrEnv_Render(flight->renderer, g_remaster.assets, g_remaster.host_elapsed_us,
-										!in_mission, dimmed);
+			const uint64_t prof_t = TieXrProf_Now();
+			if (TieFlightXrEnv_Render(flight->renderer, g_remaster.assets, g_remaster.host_elapsed_us, !in_mission,
+									  dimmed))
+				TieXrProf_Count(TIE_XR_PROF_N_ENV);
+			(void)TieXrProf_Add(TIE_XR_PROF_ENV, prof_t);
 		}
 	}
 	/* Stereo shows the flight in the headset; the flat layer only feeds a

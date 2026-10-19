@@ -51,6 +51,8 @@
  *   (the game's flight stick, Aeron_XrSetVirtualStick, moves the xrpad's
  *   right-stick axes like the engine does: logged as "xr vstick")
  *   log <text>, quit
+ *   (env TIE_TEST_GHOST_PADS=N: N idle 'Device 0x...' gamepads in slots 0..,
+ *   as Android lists the Quest's Touch controllers)
  * ------------------------------------------------------------------------ */
 
 enum {
@@ -156,6 +158,9 @@ static struct {
 	uint32_t mouse_pressed, mouse_released;
 	bool pad_used;
 	bool pad_is_xr;
+	/* TIE_TEST_GHOST_PADS=N: N idle gamepads in the first slots, like the
+	 * Quest's Touch controllers that Android also lists as input devices. */
+	int ghost_pads;
 	int16_t pad_axes[AERON_GAMEPAD_AXIS_COUNT];
 	uint32_t pad_buttons;
 	uint32_t pad_prev_buttons;
@@ -598,6 +603,10 @@ bool TieTest_Init(void) {
 	}
 	if (exit_frame && exit_frame[0])
 		g_test.exit_frame = strtoll(exit_frame, NULL, 10);
+	{
+		const char* ghosts = SDL_getenv("TIE_TEST_GHOST_PADS");
+		g_test.ghost_pads = ghosts ? SDL_clamp(SDL_atoi(ghosts), 0, AERON_CONTROLLER_MAX - 1) : 0;
+	}
 	if (capture && capture[0]) {
 		SDL_strlcpy(g_test.capture_dir, capture, sizeof g_test.capture_dir);
 		TieTest_MakeDirs(g_test.capture_dir);
@@ -1033,6 +1042,32 @@ static void TieTest_ApplyGamepad(AeronInputSnapshot* input) {
 	g_test.pad_prev_buttons = g_test.pad_buttons;
 }
 
+/* Idle gamepads as Android lists the Quest's own Touch controllers next to
+ * the engine's XR pad ("Device 0x6AF4CED0145F14F8", 8 axes, 17 buttons;
+ * they report nothing while the XR session owns the controllers). */
+static void TieTest_ApplyGhostPads(AeronInputSnapshot* input) {
+	static const char* const names[] = { "Device 0x6AF4CED0145F14F8", "Device 0x6AF4CECF2A9463E6",
+										 "Device 0x6AF4CECF2A9463E7" };
+	static const char* const guids[] = { "05000000d0145f14f8000000ce4af46a", "050000002a9463e6cf000000ce4af46a",
+										 "050000002a9463e7cf000000ce4af46a" };
+	for (int i = 0; i < g_test.ghost_pads && i < (int)SDL_arraysize(names); ++i) {
+		AeronControllerSnapshot* pad = &input->controllers[i];
+		if (pad->connected && pad->instance_id == 0x7e60u + (uint32_t)i)
+			continue;
+		memset(pad, 0, sizeof *pad);
+		pad->connected = 1;
+		pad->kind = AERON_CONTROLLER_KIND_GAMEPAD;
+		pad->instance_id = 0x7e60u + (uint32_t)i;
+		SDL_strlcpy(pad->name, names[i], sizeof pad->name);
+		SDL_strlcpy(pad->path, "android-ghost", sizeof pad->path);
+		SDL_strlcpy(pad->guid, guids[i], sizeof pad->guid);
+		pad->axis_count = 8;
+		pad->button_count = 17;
+		pad->gamepad_available_axes = (1u << AERON_GAMEPAD_AXIS_COUNT) - 1u;
+		pad->gamepad_available_buttons = (uint32_t)((1ull << AERON_GAMEPAD_BUTTON_COUNT) - 1ull);
+	}
+}
+
 static void TieTest_TrackScene(void) {
 	const TieSnapshot* snapshot = TieSnapshot_Current();
 	const int kind = snapshot ? (int)snapshot->scene_kind : -1;
@@ -1076,6 +1111,8 @@ void TieTest_ApplyInput(AeronInputSnapshot* input) {
 		input->mouse.pressed_buttons |= g_test.mouse_pressed;
 		input->mouse.released_buttons |= g_test.mouse_released;
 	}
+	if (g_test.ghost_pads)
+		TieTest_ApplyGhostPads(input);
 	if (g_test.pad_used)
 		TieTest_ApplyGamepad(input);
 }
