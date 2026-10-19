@@ -319,6 +319,10 @@ struct TieFlightRenderer {
 	bool xr_near_valid;
 	AeronSceneMark xr_near_begin, xr_near_end;
 	float xr_near_shift[2][3];
+	/* The player's hands and flight stick (tie_remaster/vr/vr_hands.h): near
+	 * geometry too, submitted by PrepareFrame. */
+	bool xr_hands_valid;
+	AeronSceneMark xr_hands_begin, xr_hands_end;
 	/* Shared bloom (XWA_XR_BLOOM=1): the left eye's bloom resampled for
 	 * the right eye. */
 	AeronRenderTarget* xr_bloom_right;
