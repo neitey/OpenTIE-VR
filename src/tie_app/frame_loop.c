@@ -30,6 +30,7 @@
 #include "tie_app/quest/voice_commands.h"
 #include "tie_app/quest/vr_voice.h"
 #include "tie_remaster/flight/vr_console.h"
+#include "tie_remaster/xr_prof.h"
 #include "tie_runtime/input/vr_console_game.h"
 #include "tie_app/vr_keyboard.h"
 
@@ -159,7 +160,10 @@ void TieFrameLoop_Run(void) {
 	TieVrConsole_SetVoiceList(TieVoiceCommands_Count, TieVoiceCommands_Label, TieVoiceCommands_Phrase);
 
 	while (TieRuntime_IsActive() && !TieRuntime_ShouldExit() && !Aeron_FatalErrorRequested()) {
+		/* CPU frame breakdown for the VR log (tie_remaster/xr_prof.h). */
+		uint64_t prof_t = TieXrProf_Now();
 		const int32_t delta_us = Aeron_BeginFrame();
+		prof_t = TieXrProf_Add(TIE_XR_PROF_WAIT, prof_t);
 		if (Aeron_FatalErrorRequested())
 			break;
 		if (Aeron_QuitRequested())
@@ -224,8 +228,10 @@ void TieFrameLoop_Run(void) {
 		}
 		if (!menu_open)
 			TieInput_BeginFrame(delta_us);
+		prof_t = TieXrProf_Add(TIE_XR_PROF_INPUT, prof_t);
 		if (!hotkey_frame.paused && !menu_open && !focus_paused)
 			TieRuntime_Tick(delta_us);
+		prof_t = TieXrProf_Add(TIE_XR_PROF_SIM, prof_t);
 		if (TieRuntime_ConsumeSettingsMenuRequest()) {
 			const bool was_open = TieSettings_Open();
 			TieSettings_Show();
@@ -244,8 +250,11 @@ void TieFrameLoop_Run(void) {
 
 		TieClassicLayer_SyncInputExtent();
 		const TieSnapshot* snapshot = TieSnapshot_Current();
+		prof_t = TieXrProf_Add(TIE_XR_PROF_INPUT, prof_t);
+		const uint64_t prof_mark = TieXrProf_Mark();
 		TieFrameLoop_SubmitGameLayers(&previous_output_kind, snapshot, &flight_options, delta_us,
 									  hotkey_frame.paused || menu_open);
+		prof_t = TieXrProf_AddOuter(TIE_XR_PROF_LAYERS, prof_t, prof_mark);
 		{
 			/* The player put the lap console somewhere new / the side panel
 			 * shows another tab: keep it. */
@@ -265,10 +274,12 @@ void TieFrameLoop_Run(void) {
 			break;
 		if (TieTest_Active())
 			TieTest_BeforePresent();
+		prof_t = TieXrProf_Add(TIE_XR_PROF_UI, prof_t);
 		if (!Aeron_Present()) {
 			Aeron_RequestFatalRendererError("frame presentation");
 			break;
 		}
+		prof_t = TieXrProf_Add(TIE_XR_PROF_PRESENT, prof_t);
 		if (TieTest_Active() && TieTest_AfterPresent())
 			TieRuntime_RequestExit();
 
@@ -278,7 +289,10 @@ void TieFrameLoop_Run(void) {
 			if (engine_delay_us < wake_delay_us)
 				wake_delay_us = engine_delay_us;
 		}
+		prof_t = TieXrProf_Now();
 		Aeron_WaitForNextFrame(wake_delay_us);
+		(void)TieXrProf_Add(TIE_XR_PROF_WAIT, prof_t);
+		TieXrProf_FrameEnd();
 	}
 	TieVrVoice_Shutdown();
 	TieClassicLayer_Shutdown();
