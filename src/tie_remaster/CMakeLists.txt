@@ -15,6 +15,7 @@ add_library(tie_remaster STATIC
     flight/render_math.c
     flight/mesh_common.c
     flight/passes.c
+    flight/xr_stereo.c
     flight/pipelines.c
     flight/classic_mesh.c
     flight/hyperstars.c

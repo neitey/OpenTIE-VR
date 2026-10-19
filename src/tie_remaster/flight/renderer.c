@@ -436,6 +436,8 @@ void TieFlightRenderer_Shutdown(TieFlightRenderer* g) {
 		AeronScenePresentChain_Destroy(g->present_chain);
 	if (g->swapchain_present_chain)
 		AeronScenePresentChain_Destroy(g->swapchain_present_chain);
+	if (g->xr_present_chain)
+		AeronScenePresentChain_Destroy(g->xr_present_chain);
 	TieFlightPbr_Shutdown();
 	if (g->mesh_vs)
 		Aeron_DestroyShader(g->mesh_vs);
@@ -818,7 +820,8 @@ AeronTexture* TieFlightRenderer_PipTexture(const TieFlightRenderer* g) { return 
 /* Return the first flight-RT row occupied by the global message bar. */
 static int TieFlightRenderer_BloomMessageBarTopRt(const TieFlightRenderer* g, const TieSnapshot* snap) {
 	TieFlightHudMessageBarGeometry geometry;
-	if (!TieFlightHud_MessageBarGeometry(snap, g->rt_w, g->rt_h, &geometry))
+	/* XR stereo: the message bar is on the HUD layer, not in the eyes. */
+	if (g->frame.xr || !TieFlightHud_MessageBarGeometry(snap, g->rt_w, g->rt_h, &geometry))
 		return g->rt_h;
 	int bar_top_rt = (int)geometry.separator_y;
 	if (bar_top_rt < 0)

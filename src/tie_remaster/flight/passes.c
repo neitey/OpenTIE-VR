@@ -13,11 +13,13 @@
 #include "tie_remaster/flight/renderer_internal.h"
 #include "tie_remaster/flight/sprite_cache.h"
 #include "tie_remaster/flight/stars.h"
+#include "tie_remaster/flight/xr_stereo.h"
 #include "tie_remaster/gpu_debug.h"
 #include "tie_remaster/scene2d/srgb_math.h"
 
 #include "aeron/aeron.h"
 #include "aeron/log.h"
+#include "aeron/scene/bloom.h"
 #include "aeron/scene/world.h"
 
 #include <math.h>
@@ -318,7 +320,8 @@ static void TieFlightRenderer_SceneHookBeforeOpaque(AeronCommandBuffer* cmd, Aer
 
 	if (fr->stars_ready) {
 		float sky_view_proj[16];
-		TieRenderMath_BuildSkyViewProj(&fr->fcam, fr->curr->camera.y_aspect, AeronScene_ViewProj(g->scene),
+		TieRenderMath_BuildSkyViewProj(&fr->fcam, fr->fcam.xr ? 1.0f : fr->curr->camera.y_aspect,
+									   AeronScene_ViewProj(g->scene),
 									   AeronScene_JitteredViewProj(g->scene), sky_view_proj);
 		TieFlightStars_DrawInPass(g->stars, cmd, pass, fr->curr, &fr->fcam, sky_view_proj);
 	}
@@ -363,7 +366,8 @@ static void TieFlightRenderer_SceneHookAfterUpscale(AeronCommandBuffer* cmd, Aer
 	const TieFlightSceneFrame* fr = &g->frame;
 	if (!fr->curr || !pass)
 		return;
-	if (g->cockpit) {
+	/* XR stereo draws the cockpit/HUD into the HUD layers instead. */
+	if (g->cockpit && !fr->xr) {
 		TIE_GPU_MARKER(cmd, "Cockpit and flight HUD");
 		TieCockpitRenderer_RenderInPass(g->cockpit, cmd, pass, AeronScene_SceneRt(g->scene), fr->curr);
 	}
@@ -703,7 +707,18 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 		TieFlightPasses_ViewportRect(fcam.flight_vp_x, fcam.flight_vp_y, fcam.flight_vp_w, fcam.flight_vp_h);
 	fcam.camera.viewport = vp;
 
-	const float* view_proj = fcam.view_proj;
+	/* OpenXR stereo: the eyes render the frame (left now, the right one in
+	 * TieFlightRenderer_RenderStereo); a camera spanning both eyes culls and
+	 * orients the shared submissions. origin_world is the craft camera's in
+	 * every case, so all world-relative submissions serve both eyes. */
+	const bool xr = g->xr_active;
+	TieFlightCamera xr_span;
+	if (xr)
+		TieFlightXr_BuildEyes(&fcam, &g->xr_frame, g->xr_eyes, &xr_span);
+	const TieFlightCamera* render_cam = xr ? &g->xr_eyes[0] : &fcam;
+	const TieFlightCamera* cull_cam = xr ? &xr_span : &fcam;
+
+	const float* view_proj = cull_cam->view_proj;
 
 	/* Post-stack gating. SSAO and motion blur run only in the
 	 * full-fidelity HD style — not classic, not XvT. Whether the
@@ -711,9 +726,12 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 	 * failed chain degrades to the monolithic pass (SSAO) or no blur
 	 * (MB) exactly like the pre-switch pipeline-gate checks did. */
 	const bool hd_full = g->scene_model_backend;
-	const bool mb_on = g->mb_quality != MB_OFF && hd_full;
-	const bool fsr_on = g->fsr_mode != AERON_TEMPORAL_OFF && hd_full && curr->hyperspace.phase == 0;
-	const bool ssao_on = g->ssao.ssao_quality != SSAO_OFF && g->ssao.ssao_intensity > 0.0f && hd_full;
+	/* Stereo re-renders one frame's submissions per eye: no temporal history
+	 * (motion blur, FSR); SSAO only with XWA_XR_SSAO=1. */
+	const bool mb_on = g->mb_quality != MB_OFF && hd_full && !xr;
+	const bool fsr_on = g->fsr_mode != AERON_TEMPORAL_OFF && hd_full && curr->hyperspace.phase == 0 && !xr;
+	const bool ssao_on = g->ssao.ssao_quality != SSAO_OFF && g->ssao.ssao_intensity > 0.0f && hd_full &&
+						 (!xr || TieFlightXr_Env("XWA_XR_SSAO", 0.0f) >= 0.5f);
 
 	/* Build the previous-frame transform context for velocity. A valid
 	 * prev requires the same scene / battle / hyperspace phase —
@@ -783,8 +801,10 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 	 * → forward color with AO → billboards/hyperstars via hooks → MB
 	 * resolve → cockpit tail. */
 	TieFlightRenderer_ConfigureTemporal(g, delta_us, fsr_on ? g->fsr_mode : AERON_TEMPORAL_OFF, mb.enabled);
-	if (!AeronScene_Begin(g->scene, &fcam.camera))
+	if (!AeronScene_Begin(g->scene, &render_cam->camera))
 		return false;
+	if (xr)
+		AeronScene_SetShadowFitCamera(g->scene, &xr_span.camera);
 	int render_w, render_h;
 	AeronScene_RenderDims(g->scene, &render_w, &render_h);
 	TieFlightPointLightFrame point_frame = { 0 };
@@ -795,7 +815,8 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 	 * unshadowed presentation. Full HD uses the snapshot's normalized
 	 * surface-to-light direction. Scene instances are local to the current
 	 * camera origin while cascade snapping retains its absolute position. */
-	if (hd_full && g->shadows.enabled) {
+	const char* xr_shadows = getenv("XWA_XR_SHADOWS");
+	if (hd_full && g->shadows.enabled && !(xr && xr_shadows && xr_shadows[0] == '0')) {
 		const TieFlightShadowSettings* settings = &g->shadows;
 		const AeronSceneDirectionalShadowDesc shadow = {
 				.enabled = 1,
@@ -876,8 +897,9 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 		return false;
 	/* Hook context + registration (idempotent). */
 	g->frame.curr = curr;
-	g->frame.fcam = fcam;
+	g->frame.fcam = *render_cam;
 	g->frame.vp = vp;
+	g->frame.xr = xr;
 	g->frame.stars_ready = stars_ready;
 	g->frame.hyperstars_ready = hyperstars_ready;
 	g->frame.hd_full = hd_full;
@@ -893,14 +915,14 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 	 * style through the scene's SKY and OVERLAY stages. */
 	const TieFlightLegacyRenderConvention legacy_render = curr->legacy_render_convention;
 	if (g->backdrop)
-		TieFlightBackdrop_Submit(g->backdrop, g->scene, cmd, curr, &fcam, legacy_render);
+		TieFlightBackdrop_Submit(g->backdrop, g->scene, cmd, curr, cull_cam, legacy_render);
 	if (g->billboards)
-		TieFlightBillboards_Submit(g->billboards, g->scene, cmd, curr, &fcam, mb.enabled ? &mb : NULL,
+		TieFlightBillboards_Submit(g->billboards, g->scene, cmd, curr, cull_cam, mb.enabled ? &mb : NULL,
 								   legacy_render);
 
 	/* Snapshot → mesh instances (HD only; classic geometry draws via
 	 * the BEFORE_OPAQUE hook instead). */
-	TieFlightRenderer_SceneSubmit(g, curr, view_proj, fcam.camera.pos, &mb);
+	TieFlightRenderer_SceneSubmit(g, curr, view_proj, cull_cam->camera.pos, &mb);
 	TieFlightPointLights_Submit(g->scene, &point_frame, true);
 	if (!TieFlightPointLights_ConfigureScene(g->scene))
 		return false;
@@ -914,7 +936,7 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 		.direct = g->ssao.ssao_direct,
 	};
 	TieFlightPbrPassUniforms frame_pbr;
-	TieFlightPbr_BuildPassUniforms(&frame_pbr, fcam.camera.pos, curr->directional_dir, false, &frame_ao,
+	TieFlightPbr_BuildPassUniforms(&frame_pbr, render_cam->camera.pos, curr->directional_dir, false, &frame_ao,
 								   &point_params);
 	AeronScene_SetFrameUniformData(g->scene, AERON_SHADER_STAGE_FRAGMENT, 1, &frame_pbr, sizeof frame_pbr);
 	AeronScene_SetPbrDebugViews(g->scene,
@@ -947,4 +969,78 @@ bool TieFlightRenderer_RenderFrame(TieFlightRenderer* g, AeronCommandBuffer* cmd
 	 * pass to consume. Bloom runs only in the full-fidelity HD style —
 	 * the classic and XvT styles are post-free. */
 	return !g->frame.hd_full || TieFlightRenderer_ApplyBloom(g, cmd, curr);
+}
+
+/* ===== OpenXR stereo ================================================= */
+
+void TieFlightRenderer_SetXrFrame(TieFlightRenderer* g, const AeronXrStereoFrame* frame) {
+	if (!g)
+		return;
+	g->xr_active = frame != NULL;
+	if (frame)
+		g->xr_frame = *frame;
+	else
+		memset(&g->xr_frame, 0, sizeof g->xr_frame);
+}
+
+static AeronScenePresentChain* TieFlightRenderer_XrPresentChain(TieFlightRenderer* g, AeronTextureFormat format) {
+	if (g->xr_present_chain && g->xr_present_format == format)
+		return g->xr_present_chain;
+	if (g->xr_present_chain)
+		AeronScenePresentChain_Destroy(g->xr_present_chain);
+	g->xr_present_chain = AeronScenePresentChain_Create(format);
+	g->xr_present_format = g->xr_present_chain ? format : AERON_TEXTURE_FORMAT_UNKNOWN;
+	return g->xr_present_chain;
+}
+
+/* Bloom + tonemap of the scene RT just rendered into one eye's target. */
+static bool TieFlightRenderer_XrOutputEye(TieFlightRenderer* g, AeronCommandBuffer* cmd, AeronRenderTarget* target) {
+	g->scene_rt = AeronScene_SceneRt(g->scene);
+	AeronScenePresentChain* chain = TieFlightRenderer_XrPresentChain(g, g->xr_frame.format);
+	AeronRenderTarget* scene_target = g->scene_rt ? g->scene_rt : AeronScene_ColorRt(g->scene);
+	if (!chain || !scene_target || !target)
+		return false;
+	const char* bloom_env = getenv("XWA_XR_BLOOM");
+	const bool bloom_on = g->frame.hd_full && g->bloom && !(bloom_env && bloom_env[0] == '0');
+	if (bloom_on && !TieFlightRenderer_ApplyBloom(g, cmd, g->frame.curr))
+		return false;
+	AeronRenderTarget* bloom_target = bloom_on ? TieFlightRenderer_BloomRt(g) : NULL;
+	AeronRenderPass* pass = Aeron_BeginRenderPass(&(AeronRenderPassDesc) {
+		.color_target = target,
+		.clear_color = 1,
+		.clear_color_rgba = { 0.0f, 0.0f, 0.0f, 1.0f },
+		.command_buffer = cmd,
+		.debug_label = "TIE VR eye tonemap",
+	});
+	if (!pass)
+		return false;
+	static const float tint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	AeronScenePresentChain_Draw(chain, pass, Aeron_RenderTargetGetTexture(scene_target), g->sampler_linear,
+								bloom_target ? Aeron_RenderTargetGetTexture(bloom_target) : NULL,
+								AeronSceneBloom_Intensity(), g->rt_w, g->rt_h, 1.0f, tint, 0);
+	Aeron_EndRenderPass(pass);
+	return true;
+}
+
+bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cmd) {
+	if (!g || !cmd || !g->frame.curr || !g->xr_active || !g->frame.xr)
+		return false;
+	TIE_GPU_PUSH(cmd, "Flight scene, left eye");
+	bool ok = AeronScene_Render(g->scene, cmd) != 0 &&
+			  TieFlightRenderer_XrOutputEye(g, cmd, g->xr_frame.eye_targets[0]);
+	TIE_GPU_POP(cmd);
+	if (ok) {
+		/* Same submissions, right eye camera; the right eye reuses the left
+		 * eye's shadow atlas (fitted to both eyes). Hooks read frame.fcam. */
+		TIE_GPU_PUSH(cmd, "Flight scene, right eye");
+		AeronScene_SetShadowReuse(g->scene, 1);
+		g->frame.fcam = g->xr_eyes[1];
+		ok = AeronScene_SetCamera(g->scene, &g->xr_eyes[1].camera) && AeronScene_Render(g->scene, cmd) &&
+			 TieFlightRenderer_XrOutputEye(g, cmd, g->xr_frame.eye_targets[1]);
+		TIE_GPU_POP(cmd);
+	}
+	if (ok)
+		TieFlightPointLights_CaptureSceneStats(g->scene);
+	g->frame.curr = NULL; /* hooks must not outlive the snapshot */
+	return ok;
 }

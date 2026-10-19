@@ -54,6 +54,15 @@ void TieCockpitRenderer_RenderInPass(TieCockpitRenderer* cg, struct AeronCommand
 									 struct AeronRenderPass* pass, struct AeronRenderTarget* target,
 									 const struct TieSnapshot* snap);
 
+/* OpenXR stereo HUD. With a size set, Prepare records the cockpit and HUD
+ * for an XR HUD target of that size instead of the flight RT (0 x 0 = flat);
+ * `world_split` records the main target box separately. RenderXrTarget
+ * clears `target` and draws the cockpit/HUD (world = false) or only the
+ * target box (world = true) into it, outside any other pass. */
+void TieCockpitRenderer_SetXrTarget(TieCockpitRenderer* cg, int width, int height, bool world_split);
+bool TieCockpitRenderer_RenderXrTarget(TieCockpitRenderer* cg, struct AeronCommandBuffer* cmd,
+									   struct AeronRenderTarget* target, const struct TieSnapshot* snap, bool world);
+
 #ifdef __cplusplus
 }
 #endif

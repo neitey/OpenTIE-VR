@@ -9,6 +9,7 @@
 #include "aeron/scene/mesh.h"
 #include "aeron/scene/present.h"
 #include "aeron/scene/scene3d.h"
+#include "aeron/xr.h"
 #include "tie_remaster/flight/motion_blur.h"
 #include "tie_remaster/flight/render_config.h"
 #include "tie_remaster/flight/render_math.h"
@@ -134,6 +135,9 @@ typedef struct TieFlightSceneFrame {
 	 * chain failed to build, the AO texture stays white and the FS
 	 * term is a no-op, so this needs no feedback from the scene. */
 	bool ssao_on;
+	/* OpenXR stereo frame: the cockpit/HUD hook is skipped (the HUD goes to
+	 * the XR HUD layers) and bloom ignores the message bar. */
+	bool xr;
 } TieFlightSceneFrame;
 
 typedef struct TieFlightClassicMeshTables {
@@ -303,6 +307,14 @@ struct TieFlightRenderer {
 	 * the motion-blur resolve ran (AeronScene_SceneRt). Read by bloom +
 	 * present so they operate on the blurred frame. Set each prep. */
 	AeronRenderTarget* scene_rt;
+
+	/* OpenXR stereo (TieFlightRenderer_SetXrFrame): this frame's views and
+	 * eye targets; the eye cameras PrepareFrame built from them. */
+	bool xr_active;
+	AeronXrStereoFrame xr_frame;
+	TieFlightCamera xr_eyes[2];
+	AeronScenePresentChain* xr_present_chain;
+	AeronTextureFormat xr_present_format;
 
 	/* Shared spatial post settings, initialized from the canonical Aeron
 	 * profile and mutable through the debug inspectors. */

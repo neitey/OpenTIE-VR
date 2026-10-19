@@ -71,6 +71,16 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 
 bool TieFlightRenderer_RenderFrame(TieFlightRenderer* g, AeronCommandBuffer* cmd);
 
+/* OpenXR stereo. SetXrFrame(frame) before PrepareFrame makes that frame
+ * stereo (NULL = flat): PrepareFrame builds the eye cameras from the frame's
+ * views (the renderer's RTs must have the eye size, see EnsureOutputSize),
+ * and RenderStereo then renders both eyes and tonemaps them into the
+ * frame's eye targets, in place of RenderFrame. The cockpit/HUD hook is
+ * skipped in stereo; the caller draws it into the XR HUD target. */
+struct AeronXrStereoFrame;
+void TieFlightRenderer_SetXrFrame(TieFlightRenderer* g, const struct AeronXrStereoFrame* frame);
+bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cmd);
+
 /* Current picture-in-picture texture for the cockpit 3D CRT. The frame
  * preparation path uses the target as an integer world origin and rebuilds
  * its local camera from `pip_back_step` plus `pip_cam_ori`. */

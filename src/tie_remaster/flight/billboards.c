@@ -95,7 +95,9 @@ bool TieFlightBillboards_Submit(TieFlightBillboards* fb, AeronScene3D* scene, Ae
 	/* Construct world corners from the camera's right/down basis at a
 	 * constant eye depth. */
 	float cam_rows[9]; /* world→eye rows: 0 = right, 1 = down, 2 = fwd */
-	TieRenderMath_QuaternionToMat3(snap->camera.ori, cam_rows);
+	/* fcam's orientation equals the snapshot camera's on the flat path; an
+	 * XR eye camera adds the head rotation so sprites face the viewer. */
+	TieRenderMath_QuaternionToMat3(fcam->camera.ori, cam_rows);
 	const float* campos = fcam->camera.pos;
 
 	/* Counting-sort the billboard indices by species_idx so same-atlas

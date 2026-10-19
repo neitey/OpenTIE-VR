@@ -2,11 +2,15 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "aeron/aeron.h"
 #include "aeron/compat/host.h"
+#include "aeron/xr.h"
 #include "aeron/scene/blend_ramp.h"
 #include "aeron/scene/present.h"
 #include "tie_remaster/flight/cockpit/renderer.h"
+#include "tie_remaster/flight/render_math.h"
 #include "tie_remaster/flight/renderer.h"
+#include "tie_remaster/flight/xr_stereo.h"
 #include "tie_remaster/integration/snapshot_adapter.h"
 #include "tie_remaster/scene2d/cursor.h"
 #include "tie_remaster/scene2d/cutscene.h"
@@ -113,6 +117,8 @@ typedef struct TieRemasterFlight {
 	bool rendered;
 	bool force_render;
 	bool render_suspended;
+	/* The last flight render went to the headset in stereo. */
+	bool xr_stereo;
 } TieRemasterFlight;
 
 typedef struct TieRemasterState {
@@ -716,8 +722,16 @@ static bool TieRemaster_RenderScene2dTarget(const TieSnapshot* snapshot, bool fu
 	return true;
 }
 
+/* VR: flight renders in stereo while the headset presents (XWA_XR_STEREO=0
+ * keeps it flat on the virtual screen). */
+static bool TieRemaster_XrStereoWanted(void) {
+	return Aeron_XrIsPresenting() && TieFlightXr_StereoEnabled();
+}
+
+/* `xr`: render this frame in stereo into the headset's eye and HUD targets
+ * (NULL = flat into present_target). */
 static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t delta_us,
-										   uint64_t host_time_us, bool paused) {
+										   uint64_t host_time_us, bool paused, const AeronXrStereoFrame* xr) {
 	TieRemasterFlight* flight = &g_remaster.flight;
 	const TiePresentationLayout* presentation = TiePresentation_Layout();
 	if (!presentation)
@@ -725,10 +739,6 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 	if (flight->render_generation != presentation->render_generation) {
 		if (flight->target_width != presentation->render_width ||
 			flight->target_height != presentation->render_height) {
-			if (!TieFlightRenderer_EnsureOutputSize(flight->renderer, presentation->render_width,
-													presentation->render_height)) {
-				return false;
-			}
 			AeronRenderTarget* new_target = Aeron_CreateRenderTarget(&(AeronRenderTargetDesc) {
 				.width = presentation->render_width,
 				.height = presentation->render_height,
@@ -747,22 +757,47 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		}
 		flight->render_generation = presentation->render_generation;
 	}
+	{
+		/* The scene renders at the presentation size, or at the headset's
+		 * eye size in stereo. */
+		const int want_w = xr ? xr->width : flight->target_width;
+		const int want_h = xr ? xr->height : flight->target_height;
+		int rt_w = 0, rt_h = 0;
+		TieFlightRenderer_GetRtDims(flight->renderer, &rt_w, &rt_h);
+		if ((rt_w != want_w || rt_h != want_h) &&
+			!TieFlightRenderer_EnsureOutputSize(flight->renderer, want_w, want_h))
+			return false;
+	}
 	AeronCommandBuffer* cmd = Aeron_AcquireCommandBuffer();
 	if (!cmd) {
 		Aeron_RequestFatalRendererError("flight command-buffer acquisition");
 		return false;
 	}
 
+	const bool xr_split = xr && xr->hud_world_target && TieFlightXr_HudLayout() == TIE_FLIGHT_XR_HUD_HELMET;
+	TieFlightRenderer_SetXrFrame(flight->renderer, xr);
+	if (flight->cockpit)
+		TieCockpitRenderer_SetXrTarget(flight->cockpit, xr ? xr->hud_width : 0, xr ? xr->hud_height : 0, xr_split);
 	bool ok = TieFlightRenderer_PrepareFrame(flight->renderer, cmd, TieSnapshot_Previous(), snapshot,
 											 delta_us, host_time_us, paused);
 	if (ok && flight->cockpit)
 		ok = TieCockpitRenderer_Prepare(flight->cockpit, cmd, snapshot);
 	if (Aeron_FatalErrorRequested())
 		ok = false;
-	if (ok)
+	if (ok && xr) {
+		/* Both eyes, then the cockpit/HUD into the HUD layer(s). */
+		ok = TieFlightRenderer_RenderStereo(flight->renderer, cmd) && xr->hud_target &&
+			 (!flight->cockpit ||
+			  (TieCockpitRenderer_RenderXrTarget(flight->cockpit, cmd, xr->hud_target, snapshot, false) &&
+			   (!xr_split ||
+				TieCockpitRenderer_RenderXrTarget(flight->cockpit, cmd, xr->hud_world_target, snapshot, true))));
+	} else if (ok) {
 		ok = TieFlightRenderer_RenderFrame(flight->renderer, cmd);
+	}
 
-	if (ok) {
+	/* The flat image: the window, or the virtual screen. In stereo only for
+	 * a desktop mirror (it shows the right eye without the HUD). */
+	if (ok && (!xr || Aeron_HasDesktopMirror())) {
 		AeronRenderPass* pass = Aeron_BeginRenderPass(&(AeronRenderPassDesc) {
 			.color_target = flight->present_target,
 			.clear_color = 1,
@@ -785,6 +820,23 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 	if (!Aeron_SubmitCommandBuffer(cmd)) {
 		Aeron_RequestFatalRendererError("flight command-buffer submission");
 		return false;
+	}
+	if (xr) {
+		/* Helmet: the cockpit/HUD sheet follows the head, the target box sits
+		 * on a far quad fixed in the craft's frame, matching the camera the
+		 * HUD was laid out for. Fixed: everything on one craft-fixed sheet. */
+		TieFlightCamera hud_cam;
+		TieRenderMath_BuildCamera(&hud_cam, &snapshot->camera, xr->hud_width, xr->hud_height);
+		AeronXrHudQuad hud;
+		if (xr_split) {
+			AeronXrHudQuad hud_world;
+			TieFlightXr_HudQuad(&hud_cam, 1, 0, &hud);
+			TieFlightXr_HudQuad(&hud_cam, 0, 1, &hud_world);
+			Aeron_XrStereoCommitHuds(&hud, &hud_world);
+		} else {
+			TieFlightXr_HudQuad(&hud_cam, TieFlightXr_HudLayout() == TIE_FLIGHT_XR_HUD_HELMET, 0, &hud);
+			Aeron_XrStereoCommit(&hud);
+		}
 	}
 	return true;
 }
@@ -1107,7 +1159,8 @@ void TieRemaster_BeginFrame(const AeronInputSnapshot* input) {
 	const TieSnapshot* snapshot = TieSnapshot_Current();
 	bool has_modern_target = TieRemaster_Scene2dActive() || TieRemaster_FlightActive(snapshot);
 	if (input && input->key_pressed[AERON_KEY_TAB] && has_modern_target) {
-		if (input->has_focus && !TieRemaster_ModifierActiveThisFrame(input)) {
+		/* VR stereo keeps the HD view (the classic image is flat). */
+		if (input->has_focus && !TieRemaster_ModifierActiveThisFrame(input) && !TieRemaster_XrStereoWanted()) {
 			const TieRemasterViewMode selected =
 				g_remaster.pending_view_mode_valid ? g_remaster.pending_view_mode : g_remaster.view_mode;
 			const TieRemasterViewMode requested = TieRemaster_NextViewMode(selected);
@@ -1141,6 +1194,18 @@ bool TieRemaster_Frame(const TieSnapshot* snapshot, int32_t delta_us, bool pause
 		!TieRemaster_PreparePendingFlightRenderer(snapshot))
 		return false;
 
+	if (TieRemaster_XrStereoWanted()) {
+		/* VR: HD flight only (stereo needs the modern renderer), no HDR
+		 * window output. */
+		if (!g_remaster.pending_view_mode_valid && g_remaster.view_mode != TIE_REMASTER_VIEW_HD) {
+			g_remaster.view_mode = TIE_REMASTER_VIEW_HD;
+			g_remaster.blend.target = 1.0f;
+			g_remaster.flight.force_render = true;
+		}
+	}
+	if (Aeron_XrIsPresenting() && Aeron_OutputHdrEnabled())
+		(void)Aeron_SetOutputHdr(0);
+
 	if (g_remaster.pending_view_mode_valid &&
 		AeronDx5_GetClassicFlightFrameSerial() != g_remaster.pending_classic_frame_serial) {
 		g_remaster.view_mode = g_remaster.pending_view_mode;
@@ -1152,6 +1217,10 @@ bool TieRemaster_Frame(const TieSnapshot* snapshot, int32_t delta_us, bool pause
 	bool scene2d_is_active = TieRemaster_Scene2dActive();
 	bool flight_is_active =
 		TieRemaster_FlightActive(snapshot) && !TieRemaster_FlightRequiresClassicScreen(snapshot);
+	/* VR: the right controller is the mouse on the virtual screen except in
+	 * flight proper, where its trigger fires. */
+	Aeron_XrSetPointerEnabled(!(snapshot && snapshot->scene_kind == TIE_SCENE_FLIGHT &&
+								!TieRemaster_FlightRequiresClassicScreen(snapshot)));
 	Aeron_BlendRampAdvance(&g_remaster.blend, delta_us, g_remaster.blend.target);
 	float alpha = (scene2d_is_active || flight_is_active) ? g_remaster.blend.alpha : 0.0f;
 
@@ -1182,12 +1251,26 @@ bool TieRemaster_Frame(const TieSnapshot* snapshot, int32_t delta_us, bool pause
 	} else if (!flight_is_active) {
 		flight->render_suspended = false;
 	}
-	if (compose_flight && TieRemaster_FlightRenderDue(snapshot)) {
-		compose_flight =
-			TieRemaster_RenderFlightTarget(snapshot, delta_us, g_remaster.host_elapsed_us, paused);
+	/* VR stereo renders every host frame (the head moves) and not while the
+	 * game is paused by a menu: then everything is on the virtual screen. */
+	AeronXrStereoFrame xr_frame;
+	const bool stereo = compose_flight && !paused && g_remaster.view_mode == TIE_REMASTER_VIEW_HD &&
+						TieRemaster_XrStereoWanted() && Aeron_XrStereoBegin(&xr_frame) && xr_frame.width > 0 &&
+						xr_frame.height > 0 && xr_frame.eye_targets[0] && xr_frame.eye_targets[1];
+	if (stereo != flight->xr_stereo) {
+		flight->xr_stereo = stereo;
+		flight->force_render = true;
+	}
+	if (compose_flight && (stereo || TieRemaster_FlightRenderDue(snapshot))) {
+		compose_flight = TieRemaster_RenderFlightTarget(snapshot, delta_us, g_remaster.host_elapsed_us, paused,
+														stereo ? &xr_frame : NULL);
 		if (compose_flight)
 			TieRemaster_FlightRenderCommitted(snapshot);
 	}
+	/* Stereo shows the flight in the headset; the flat layer only feeds a
+	 * desktop mirror. */
+	if (stereo && !Aeron_HasDesktopMirror())
+		compose_flight = false;
 
 	TieCursorLayerPlacement cursor_placement;
 	const bool cursor_layer_active =

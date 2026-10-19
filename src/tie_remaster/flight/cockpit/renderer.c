@@ -181,6 +181,16 @@ struct TieCockpitRenderer {
 	uint16_t original_font_width;
 	uint8_t original_micro_zero_advance;
 	float original_font_atlas_scale;
+	/* OpenXR stereo (TieCockpitRenderer_SetXrTarget): the lists are recorded
+	 * for the XR HUD target's size, the main target box optionally into its
+	 * own list (the far world-HUD quad), and the 3D CRT composes through a
+	 * pipeline for the HUD target's format. */
+	int xr_target_w, xr_target_h;
+	bool xr_world_split;
+	bool xr_world_ready;
+	AeronDrawList2D* xr_world_list;
+	AeronGraphicsPipeline* xr_pip_pipeline;
+	AeronTextureFormat xr_pip_format;
 };
 
 static AeronTexture* TieCockpitRenderer_LoadKtx2(TieCockpitRenderer* cg, AeronCommandBuffer* cmd,
@@ -537,6 +547,9 @@ void TieCockpitRenderer_Shutdown(TieCockpitRenderer* cg) {
 	AeronDrawList_Destroy(cg->chrome_bake_list);
 	AeronDrawList_Destroy(cg->before_pip_list);
 	AeronDrawList_Destroy(cg->after_pip_list);
+	AeronDrawList_Destroy(cg->xr_world_list);
+	if (cg->xr_pip_pipeline)
+		Aeron_DestroyGraphicsPipeline(cg->xr_pip_pipeline);
 	if (cg->chrome_rt)
 		Aeron_DestroyRenderTarget(cg->chrome_rt);
 	free(cg);
@@ -2779,6 +2792,28 @@ static void TieCockpitRenderer_DrawWidgetsForView(TieCockpitRenderer* cg, AeronC
 	}
 }
 
+/* XR world split: the main target box goes to its own list (begun here,
+ * once per recording). */
+static AeronDrawList2D* TieCockpitRenderer_XrTargetBoxList(TieCockpitRenderer* cg, AeronDrawList2D* fallback,
+														   int rt_w, int rt_h) {
+	if (!cg->xr_world_split || cg->xr_target_w <= 0)
+		return fallback;
+	if (!cg->xr_world_list)
+		cg->xr_world_list = AeronDrawList_Create(512);
+	if (!cg->xr_world_list)
+		return fallback;
+	AeronDrawList_Begin(cg->xr_world_list, NULL, rt_w, rt_h, AERON_DRAWLIST2D_LOAD, NULL);
+	cg->xr_world_ready = true;
+	return cg->xr_world_list;
+}
+
+static bool TieCockpitRenderer_XrPrepareWorldList(TieCockpitRenderer* cg, AeronCommandBuffer* cmd) {
+	if (!cg->xr_world_ready)
+		return true;
+	cg->xr_world_ready = AeronDrawList_Prepare(cg->xr_world_list, cmd) != 0;
+	return cg->xr_world_ready;
+}
+
 static bool TieCockpitRenderer_CockpitRecordLists(TieCockpitRenderer* cg, AeronCommandBuffer* cmd, int rt_w,
 												  int rt_h, const TieSnapshot* snap);
 static bool TieCockpitRenderer_FlightHudRecordLists(TieCockpitRenderer* cg, AeronCommandBuffer* cmd, int rt_w,
@@ -2789,6 +2824,7 @@ bool TieCockpitRenderer_Prepare(TieCockpitRenderer* cg, AeronCommandBuffer* cmd,
 		return false;
 	cg->pending_ready = false;
 	cg->pending_entry = NULL;
+	cg->xr_world_ready = false;
 
 	/* Consume a debug-UI reload request before the entry lookup so the
 	 * active cockpit re-loads from disk this frame (others lazily). */
@@ -2814,6 +2850,10 @@ bool TieCockpitRenderer_Prepare(TieCockpitRenderer* cg, AeronCommandBuffer* cmd,
 	int rt_w = 0, rt_h = 0;
 	if (cg->flight_gpu)
 		TieFlightRenderer_GetRtDims(cg->flight_gpu, &rt_w, &rt_h);
+	if (cg->xr_target_w > 0 && cg->xr_target_h > 0) {
+		rt_w = cg->xr_target_w;
+		rt_h = cg->xr_target_h;
+	}
 	if (rt_w <= 0 || rt_h <= 0) {
 		Aeron_RequestFatalRendererError("flight HUD render-target dimensions");
 		return false;
@@ -2879,6 +2919,7 @@ static bool TieCockpitRenderer_FlightHudRecordLists(TieCockpitRenderer* cg, Aero
 	cg->record_list = cg->before_pip_list;
 	const bool look_1998 = (cg->flight_gpu != NULL) && TieFlightRenderer_UsesSceneModels(cg->flight_gpu);
 	TIE_GPU_MARKER(cmd, "Flight target box");
+	cg->record_list = TieCockpitRenderer_XrTargetBoxList(cg, cg->before_pip_list, rt_w, rt_h);
 	TieCockpitRenderer_DrawMainTargetBox(cg, cmd, NULL, NULL, rt_w, rt_h, snap, look_1998);
 
 	cg->record_list = cg->after_pip_list;
@@ -2888,6 +2929,7 @@ static bool TieCockpitRenderer_FlightHudRecordLists(TieCockpitRenderer* cg, Aero
 
 	bool ok = AeronDrawList_Prepare(cg->before_pip_list, cmd) != 0;
 	ok = AeronDrawList_Prepare(cg->after_pip_list, cmd) != 0 && ok;
+	ok = TieCockpitRenderer_XrPrepareWorldList(cg, cmd) && ok;
 	TIE_GPU_POP(cmd);
 	if (!ok)
 		Aeron_RequestFatalRendererError("flight HUD draw-list preparation");
@@ -2925,7 +2967,9 @@ static bool TieCockpitRenderer_CockpitRecordLists(TieCockpitRenderer* cg, AeronC
 	 * false=1995 (hollow rect, fixed coord/48). */
 	const bool look_1998 = (cg->flight_gpu != NULL) && TieFlightRenderer_UsesSceneModels(cg->flight_gpu);
 	TIE_GPU_MARKER(cmd, "Flight target box");
+	cg->record_list = TieCockpitRenderer_XrTargetBoxList(cg, cg->before_pip_list, rt_w, rt_h);
 	TieCockpitRenderer_DrawMainTargetBox(cg, cmd, NULL, entry, rt_w, rt_h, snap, look_1998);
+	cg->record_list = cg->before_pip_list;
 
 	/* Static cockpit chrome — base bitmap + damage cracks + subsystem
 	 * covers. These change only on view/craft switch, mirror toggle, or a
@@ -3043,6 +3087,7 @@ static bool TieCockpitRenderer_CockpitRecordLists(TieCockpitRenderer* cg, AeronC
 					  cg->draw_phase_asset_io_count);
 	bool ok = AeronDrawList_Prepare(cg->before_pip_list, cmd) != 0;
 	ok = AeronDrawList_Prepare(cg->after_pip_list, cmd) != 0 && ok;
+	ok = TieCockpitRenderer_XrPrepareWorldList(cg, cmd) && ok;
 	TIE_GPU_POP(cmd); /* "Cockpit HUD" */
 	if (!ok)
 		Aeron_RequestFatalRendererError("cockpit draw-list preparation");
@@ -3064,4 +3109,79 @@ void TieCockpitRenderer_RenderInPass(TieCockpitRenderer* cg, AeronCommandBuffer*
 	}
 
 	AeronDrawList_RenderIntoPass(cg->after_pip_list, cmd, pass, target);
+}
+
+void TieCockpitRenderer_SetXrTarget(TieCockpitRenderer* cg, int width, int height, bool world_split) {
+	if (!cg)
+		return;
+	cg->xr_target_w = width > 0 && height > 0 ? width : 0;
+	cg->xr_target_h = width > 0 && height > 0 ? height : 0;
+	cg->xr_world_split = world_split && cg->xr_target_w > 0;
+}
+
+/* The 3D CRT compose pipeline for an XR HUD target (its format, no depth). */
+static AeronGraphicsPipeline* TieCockpitRenderer_XrPipPipeline(TieCockpitRenderer* cg, AeronTextureFormat format) {
+	if (cg->xr_pip_pipeline && cg->xr_pip_format == format)
+		return cg->xr_pip_pipeline;
+	if (cg->xr_pip_pipeline)
+		Aeron_DestroyGraphicsPipeline(cg->xr_pip_pipeline);
+	cg->xr_pip_pipeline = NULL;
+	if (!cg->pip_vs || !cg->pip_fs)
+		return NULL;
+	AeronGraphicsPipelineDesc info = {
+		.vertex_shader = cg->pip_vs,
+		.fragment_shader = cg->pip_fs,
+		.primitive_type = AERON_PRIMITIVE_TRIANGLE_STRIP,
+		.cull_mode = AERON_CULL_NONE,
+		.color_format = format,
+		.sample_count = AERON_SAMPLE_COUNT_1,
+		.blend = {
+			.enabled = 1,
+			.src_color = AERON_BLEND_ONE,
+			.dst_color = AERON_BLEND_ONE_MINUS_SRC_ALPHA,
+			.color_op = AERON_BLEND_OP_ADD,
+			.src_alpha = AERON_BLEND_ONE,
+			.dst_alpha = AERON_BLEND_ONE_MINUS_SRC_ALPHA,
+			.alpha_op = AERON_BLEND_OP_ADD,
+		},
+	};
+	cg->xr_pip_pipeline = Aeron_CreateGraphicsPipeline(&info);
+	cg->xr_pip_format = format;
+	return cg->xr_pip_pipeline;
+}
+
+bool TieCockpitRenderer_RenderXrTarget(TieCockpitRenderer* cg, AeronCommandBuffer* cmd, AeronRenderTarget* target,
+									   const TieSnapshot* snap, bool world) {
+	if (!cg || !cmd || !target || !snap)
+		return false;
+	AeronRenderPass* pass = Aeron_BeginRenderPass(&(AeronRenderPassDesc) {
+		.color_target = target,
+		.clear_color = 1,
+		.clear_color_rgba = { 0.0f, 0.0f, 0.0f, 0.0f },
+		.command_buffer = cmd,
+		.debug_label = "TIE VR HUD",
+	});
+	if (!pass)
+		return false;
+	if (world) {
+		if (cg->xr_world_ready)
+			AeronDrawList_RenderIntoPass(cg->xr_world_list, cmd, pass, target);
+	} else if (cg->pending_ready) {
+		AeronDrawList_RenderIntoPass(cg->before_pip_list, cmd, pass, target);
+		const TieHudInstrument* pip = &snap->hud.instruments[2];
+		TieCockpitRendererHudWidgetKind kind = (TieCockpitRendererHudWidgetKind)hud_widget_kind[2];
+		AeronTexture* texture = Aeron_RenderTargetGetTexture(target);
+		AeronGraphicsPipeline* xr_pipeline =
+			texture ? TieCockpitRenderer_XrPipPipeline(cg, Aeron_TextureGetFormat(texture)) : NULL;
+		if (xr_pipeline && cg->pending_entry && TieCockpitCommon_InstrumentActive(pip) &&
+			TieCockpitRenderer_ViewAllowsWidget(snap->cockpit.view_idx, 2, kind)) {
+			AeronGraphicsPipeline* flat_pipeline = cg->pip_pipeline;
+			cg->pip_pipeline = xr_pipeline;
+			TieCockpitRenderer_Draw3dcrt(cg, pass, cg->pending_entry, snap);
+			cg->pip_pipeline = flat_pipeline;
+		}
+		AeronDrawList_RenderIntoPass(cg->after_pip_list, cmd, pass, target);
+	}
+	Aeron_EndRenderPass(pass);
+	return true;
 }
