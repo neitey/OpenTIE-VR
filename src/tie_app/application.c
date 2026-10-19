@@ -152,7 +152,10 @@ int TieApplication_Run(const TieLaunchOptions* launch_options) {
 		fprintf(stderr, "[tie-aeron] Aeron_Init failed\n");
 		return 1;
 	}
-	TieQuest_PostInit();
+	if (!TieQuest_PostInit(&launch_copy)) {
+		Aeron_Shutdown();
+		return 0;
+	}
 	/* Activation is asynchronous on macOS. Request it before the remaining
 	 * synchronous startup work, then service the events queued by Aeron_Init. */
 	Aeron_RaiseWindow();

@@ -28,6 +28,7 @@ set(TIE_APP_SOURCES
     setup/installation_ui.c
     setup/setup.c
     quest/quest_app.c
+    quest/error_screen.c
     quest/quest_app.h
     test/test_harness.c
     test/test_harness.h

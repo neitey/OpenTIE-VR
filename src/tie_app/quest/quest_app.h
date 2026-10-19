@@ -19,8 +19,10 @@ extern "C" {
  * when they exist. Returns 1 when VR should be requested. */
 int TieQuest_PreInit(TieLaunchOptions* launch);
 
-/* After Aeron_Init: shim check, pilots copied by the PC launcher. */
-void TieQuest_PostInit(void);
+/* After Aeron_Init: shim check, in-headset fatal-error screen, pilots copied
+ * by the PC launcher; with no game files on the headset, a screen that says
+ * how to copy them. Returns 0 when the player chose to quit there. */
+int TieQuest_PostInit(TieLaunchOptions* launch);
 
 /* Once per host frame (foveation shim log and start guard). */
 void TieQuest_Frame(void);

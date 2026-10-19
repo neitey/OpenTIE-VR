@@ -23,6 +23,7 @@
 
 #include "aeron/vfs.h"
 #include "tie_app/quest/crash_report.h"
+#include "tie_app/quest/error_screen.h"
 #include "tie_app/quest/xr_tier.h"
 
 static char s_external[1024];
@@ -162,8 +163,7 @@ static void quest_xr_defaults(void) {
 		g_shim_guard[0] = '\0';
 		SDL_setenv_unsafe("AERON_TEXTURE_ASTC", "0", 1);
 		SDL_setenv_unsafe("XWA_XR_FOVEATION", "0", 1);
-		TieQuest_SaveSetting("XWA_XR_FOVEATION", "0");
-		Aeron_LogWarn("tie.quest", "foveation: the last start with it failed, so it is now off");
+		Aeron_LogWarn("tie.quest", "foveation: the last start with it did not get going, so it is off for this run");
 		return;
 	}
 	if (fov && (fov[0] == '0' || SDL_strcasecmp(fov, "off") == 0)) {
@@ -237,11 +237,14 @@ static void quest_game_folders(TieLaunchOptions* launch) {
 	 * 600 MB): a TIE95 folder without it (copy cut short) would stop the
 	 * game at start, so it is left out and TIE98 is used alone. */
 	if (!launch->tie95_data && quest_dir_has_files(s_tie95)) {
-		static const char* const images[] = { "game.fil", "GAME.FIL", "game.ins", "GAME.INS", "game.gog", "GAME.GOG" };
+		/* game.ins (the cue sheet) only points at the image: the image itself
+		 * (game.fil on Steam, game.gog on GOG) must be there in full. */
+		static const char* const images[] = { "game.fil", "GAME.FIL", "game.gog", "GAME.GOG" };
 		int found = 0;
 		for (size_t i = 0; i < sizeof images / sizeof images[0] && !found; ++i) {
+			struct stat st;
 			snprintf(path, sizeof path, "%s/%s", s_tie95, images[i]);
-			found = access(path, R_OK) == 0;
+			found = stat(path, &st) == 0 && S_ISREG(st.st_mode) && st.st_size > 100l * 1024 * 1024;
 		}
 		if (found)
 			launch->tie95_data = s_tie95;
@@ -331,7 +334,7 @@ static void quest_extract_resources(TieLaunchOptions* launch) {
 		int count = 0;
 		char* save = NULL;
 		for (char* line = strtok_r(list, "\r\n", &save); line; line = strtok_r(NULL, "\r\n", &save)) {
-			if (!line[0] || strstr(line, ".."))
+			if (!line[0] || line[0] == '#' || strstr(line, ".."))
 				continue;
 			size_t size = 0;
 			void* data = SDL_LoadFile(line, &size);
@@ -380,7 +383,12 @@ int TieQuest_PreInit(TieLaunchOptions* launch) {
 	return 1;
 }
 
-void TieQuest_PostInit(void) {
+int TieQuest_PostInit(TieLaunchOptions* launch) {
+	/* The Vulkan device came up through the shim: the start proved itself. */
+	if (g_shim_guard[0]) {
+		remove(g_shim_guard);
+		g_shim_guard[0] = '\0';
+	}
 	if (g_shim_take_log) {
 		int (*seen)(void) = NULL;
 		void* shim = dlopen("libopenxwa_vkshim.so", RTLD_NOW | RTLD_LOCAL | RTLD_NOLOAD);
@@ -392,7 +400,25 @@ void TieQuest_PostInit(void) {
 									  "foveation, no ASTC textures");
 		}
 	}
+	/* OS message boxes can't be seen in the headset. */
+	Aeron_SetFatalErrorHandler(TieErrorScreen_FatalHandler);
 	quest_import_pilots();
+	/* No game copied yet: say how, and look again when asked. */
+	while (launch && !launch->tie98_data && !launch->tie95_data) {
+		char message[1600];
+		snprintf(message, sizeof message,
+				 "TIE Fighter's game files are not on the headset yet.\n\n"
+				 "On your Windows PC, run OpenTIE-VR-Launcher.exe (in the OpenTIE-VR download) with the "
+				 "headset connected by USB. It copies your TIE Fighter Special Edition (Steam or GOG) and, if "
+				 "installed, X-Wing Alliance's three TIE cockpits to this folder:\n%s\n\n"
+				 "Then choose Check Again.",
+				 s_external);
+		const int choice = TieErrorScreen_Run("OpenTIE-VR: game files needed", message, "Check Again", 0);
+		if (choice != TIE_ERROR_SCREEN_RETRY)
+			return 0;
+		quest_game_folders(launch);
+	}
+	return 1;
 }
 
 void TieQuest_Frame(void) {
@@ -452,13 +478,23 @@ const char* TieQuest_ExternalDir(void) {
 
 #else /* desktop */
 
+#include "tie_app/quest/error_screen.h"
+
 int TieQuest_PreInit(TieLaunchOptions* launch) {
 	(void)launch;
 	const char* xr = SDL_getenv("AERON_XR");
 	return xr && xr[0] == '1';
 }
 
-void TieQuest_PostInit(void) {}
+int TieQuest_PostInit(TieLaunchOptions* launch) {
+	(void)launch;
+	/* Desktop test of the headset's message screen (no game files case). */
+	const char* test = SDL_getenv("TIE_TEST_ERROR_SCREEN");
+	if (test && test[0] == '1')
+		return TieErrorScreen_Run("OpenTIE-VR: game files needed", "Test of the in-headset message screen.",
+								  "Check Again", 0) == TIE_ERROR_SCREEN_RETRY;
+	return 1;
+}
 
 void TieQuest_Frame(void) {}
 

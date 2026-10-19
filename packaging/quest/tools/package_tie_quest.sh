@@ -58,7 +58,8 @@ EOF
 EXTRA=""
 for f in "$BUILD"/shaders/*.spv; do EXTRA="$EXTRA assets/shaders/$(basename "$f")=$f"; done
 # App resources, plus the list the app extracts them by (quest_app.c).
-: > stage/resources.lst
+# First line: what makes a new APK re-extract them (version + content hash).
+echo "# $VER $CODE $(cd "$BUILD" && find resources -type f | sort | xargs sha256sum | sha256sum | cut -c1-16)" > stage/resources.lst
 while IFS= read -r f; do
   rel=${f#$BUILD/}; EXTRA="$EXTRA assets/$rel=$f"; echo "$rel" >> stage/resources.lst
 done < <(find "$BUILD/resources" -type f | sort)

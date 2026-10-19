@@ -6,6 +6,9 @@
 
 #include "aeron/aeron.h"
 #include "aeron/scene/ui_file_picker.h"
+#include "aeron/log.h"
+
+#include <SDL3/SDL_platform_defines.h>
 
 #include <ctype.h>
 #include <stdio.h>
@@ -544,8 +547,16 @@ TieSetupResult TieSetup_ResolveInstallations(TieUi* ui, AeronVfs* application_vf
 	if (tie95_override && tie95_override[0]) {
 		out->has_tie95 = TieInstallation_Open(&out->tie95, TIE_GAME_VERSION_TIE95, tie95_override,
 											  resource_root, error, error_capacity);
+#if defined(SDL_PLATFORM_ANDROID)
+		/* The headset's own game folders (quest_app.c) may hold a copy cut
+		 * short: play with what is complete instead of stopping. */
+		if (!out->has_tie95)
+			Aeron_LogWarn("tie.config", "TIE95 folder left out: %s", error);
+		else
+#else
 		if (!out->has_tie95)
 			return TIE_SETUP_ERROR;
+#endif
 		setup.tie95_from_override = true;
 	} else {
 		out->has_tie95 =
@@ -555,10 +566,16 @@ TieSetupResult TieSetup_ResolveInstallations(TieUi* ui, AeronVfs* application_vf
 	if (tie98_override && tie98_override[0]) {
 		out->has_tie98 = TieInstallation_Open(&out->tie98, TIE_GAME_VERSION_TIE98, tie98_override,
 											  resource_root, error, error_capacity);
+#if defined(SDL_PLATFORM_ANDROID)
+		if (!out->has_tie98)
+			Aeron_LogWarn("tie.config", "TIE98 folder left out: %s", error);
+		else
+#else
 		if (!out->has_tie98) {
 			TieInstallation_SetClose(out);
 			return TIE_SETUP_ERROR;
 		}
+#endif
 		setup.tie98_from_override = true;
 	} else {
 		out->has_tie98 =
