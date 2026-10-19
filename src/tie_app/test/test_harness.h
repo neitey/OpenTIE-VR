@@ -73,6 +73,13 @@ void TieTestXr_SetHead(const float yaw_pitch_roll_deg[3], const float position_m
  * `prefix` is non-NULL; then clears the per-frame commit state. Returns the
  * number of images written. */
 int TieTestXr_EndFrame(const char* prefix);
+/* Scripted XR controller input: a flight-button press for
+ * Aeron_XrPollButton (AeronXrButton), a menu latch (0 A, 1 B, 2 X, 3 Y) for
+ * Aeron_XrTake*Pressed, the throttle lever (0..1), a hand's trigger/grip. */
+void TieTestXr_QueueButton(int button);
+void TieTestXr_MenuPress(int index);
+void TieTestXr_SetThrottle(float value);
+void TieTestXr_SetHandInput(int hand, float trigger, float grip);
 /* Frames on which stereo was committed so far. */
 uint64_t TieTestXr_CommittedFrames(void);
 

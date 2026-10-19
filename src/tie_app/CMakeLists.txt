@@ -108,7 +108,18 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
         Aeron_XrStereoCommitBackdrop
         Aeron_XrVirtualScreenGeometry
         Aeron_XrGetHand
-        Aeron_XrGetRenderModel)
+        Aeron_XrGetRenderModel
+        Aeron_XrSetPointerEnabled
+        Aeron_XrSetMenuKeys
+        Aeron_XrSetFlightButtons
+        Aeron_XrPollButton
+        Aeron_XrTakeAPressed
+        Aeron_XrTakeMenuBPressed
+        Aeron_XrTakeMenuXPressed
+        Aeron_XrTakeMenuYPressed
+        Aeron_XrThrottleLever
+        Aeron_XrSetThrottleLever
+        Aeron_XrHapticPulse)
     target_compile_definitions(tie PRIVATE TIE_TEST_WRAP=1)
     foreach(symbol IN LISTS TIE_TEST_WRAPPED_SYMBOLS)
         target_link_options(tie PRIVATE "LINKER:--wrap=${symbol}")
