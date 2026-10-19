@@ -775,9 +775,12 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 	}
 
 	const bool xr_split = xr && xr->hud_world_target && TieFlightXr_HudLayout() == TIE_FLIGHT_XR_HUD_HELMET;
+	int hud_area[4] = { 0, 0, 0, 0 };
+	if (xr)
+		TieFlightXr_HudArea(xr->hud_width, xr->hud_height, hud_area);
 	TieFlightRenderer_SetXrFrame(flight->renderer, xr);
 	if (flight->cockpit)
-		TieCockpitRenderer_SetXrTarget(flight->cockpit, xr ? xr->hud_width : 0, xr ? xr->hud_height : 0, xr_split);
+		TieCockpitRenderer_SetXrTarget(flight->cockpit, hud_area[2], hud_area[3], hud_area[0], hud_area[1], xr_split);
 	bool ok = TieFlightRenderer_PrepareFrame(flight->renderer, cmd, TieSnapshot_Previous(), snapshot,
 											 delta_us, host_time_us, paused);
 	if (ok && flight->cockpit)
@@ -825,16 +828,16 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		/* Helmet: the cockpit/HUD sheet follows the head, the target box sits
 		 * on a far quad fixed in the craft's frame, matching the camera the
 		 * HUD was laid out for. Fixed: everything on one craft-fixed sheet. */
-		TieFlightCamera hud_cam;
-		TieRenderMath_BuildCamera(&hud_cam, &snapshot->camera, xr->hud_width, xr->hud_height);
+		const int w = xr->hud_width, h = xr->hud_height;
 		AeronXrHudQuad hud;
 		if (xr_split) {
 			AeronXrHudQuad hud_world;
-			TieFlightXr_HudQuad(&hud_cam, 1, 0, &hud);
-			TieFlightXr_HudQuad(&hud_cam, 0, 1, &hud_world);
+			TieFlightXr_HudQuadForArea(&snapshot->camera, w, h, hud_area, 1, 0, &hud);
+			TieFlightXr_HudQuadForArea(&snapshot->camera, w, h, hud_area, 0, 1, &hud_world);
 			Aeron_XrStereoCommitHuds(&hud, &hud_world);
 		} else {
-			TieFlightXr_HudQuad(&hud_cam, TieFlightXr_HudLayout() == TIE_FLIGHT_XR_HUD_HELMET, 0, &hud);
+			TieFlightXr_HudQuadForArea(&snapshot->camera, w, h, hud_area,
+									   TieFlightXr_HudLayout() == TIE_FLIGHT_XR_HUD_HELMET, 0, &hud);
 			Aeron_XrStereoCommit(&hud);
 		}
 	}

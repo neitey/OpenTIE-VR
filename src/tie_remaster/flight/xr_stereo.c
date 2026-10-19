@@ -180,6 +180,29 @@ void TieFlightXr_BuildEyes(const TieFlightCamera* base, const AeronXrStereoFrame
 	TieFlightXr_FinishCamera(both, frame->width, frame->height);
 }
 
+void TieFlightXr_HudArea(int target_w, int target_h, int area[4]) {
+	area[0] = 0;
+	area[1] = 0;
+	area[2] = target_w;
+	area[3] = target_h;
+	if (target_w > 0 && target_h > 0 && target_w * 3 < target_h * 4) {
+		area[3] = target_w * 3 / 4;
+		area[1] = (target_h - area[3]) / 2;
+	}
+}
+
+void TieFlightXr_HudQuadForArea(const struct TieCameraState* camera, int target_w, int target_h, const int area[4],
+								int head, int world_far, AeronXrHudQuad* out) {
+	TieFlightCamera hud_cam;
+	TieRenderMath_BuildCamera(&hud_cam, camera, area[2], area[3]);
+	TieFlightXr_HudQuad(&hud_cam, head, world_far, out);
+	/* The area is centred in the target; the quad shows the whole target. */
+	if (area[2] > 0 && area[3] > 0) {
+		out->size[0] *= (float)target_w / (float)area[2];
+		out->size[1] *= (float)target_h / (float)area[3];
+	}
+}
+
 void TieFlightXr_HudQuad(const TieFlightCamera* hc, int head, int world_far, AeronXrHudQuad* out) {
 	const float th = tanf(hc->h_half_rad);
 	const float tv = tanf(hc->v_half_rad);

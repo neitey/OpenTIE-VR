@@ -186,6 +186,7 @@ struct TieCockpitRenderer {
 	 * own list (the far world-HUD quad), and the 3D CRT composes through a
 	 * pipeline for the HUD target's format. */
 	int xr_target_w, xr_target_h;
+	int xr_origin_x, xr_origin_y;
 	bool xr_world_split;
 	bool xr_world_ready;
 	AeronDrawList2D* xr_world_list;
@@ -2807,6 +2808,16 @@ static AeronDrawList2D* TieCockpitRenderer_XrTargetBoxList(TieCockpitRenderer* c
 	return cg->xr_world_list;
 }
 
+/* The lists land at the XR origin of the HUD target (before Prepare). */
+static void TieCockpitRenderer_XrApplyOrigin(TieCockpitRenderer* cg) {
+	if (cg->xr_target_w <= 0)
+		return;
+	AeronDrawList_SetOrigin(cg->before_pip_list, cg->xr_origin_x, cg->xr_origin_y);
+	AeronDrawList_SetOrigin(cg->after_pip_list, cg->xr_origin_x, cg->xr_origin_y);
+	if (cg->xr_world_ready)
+		AeronDrawList_SetOrigin(cg->xr_world_list, cg->xr_origin_x, cg->xr_origin_y);
+}
+
 static bool TieCockpitRenderer_XrPrepareWorldList(TieCockpitRenderer* cg, AeronCommandBuffer* cmd) {
 	if (!cg->xr_world_ready)
 		return true;
@@ -2927,6 +2938,7 @@ static bool TieCockpitRenderer_FlightHudRecordLists(TieCockpitRenderer* cg, Aero
 	TieCockpitRenderer_DrawMessageBar(cg, cmd, NULL, snap);
 	cg->record_list = NULL;
 
+	TieCockpitRenderer_XrApplyOrigin(cg);
 	bool ok = AeronDrawList_Prepare(cg->before_pip_list, cmd) != 0;
 	ok = AeronDrawList_Prepare(cg->after_pip_list, cmd) != 0 && ok;
 	ok = TieCockpitRenderer_XrPrepareWorldList(cg, cmd) && ok;
@@ -3085,6 +3097,7 @@ static bool TieCockpitRenderer_CockpitRecordLists(TieCockpitRenderer* cg, AeronC
 	if (cg->draw_phase_asset_io_count != asset_io_before)
 		Aeron_LogWarn("tie.cockpit", "asset I/O occurred while recording cockpit draw commands (%u total)",
 					  cg->draw_phase_asset_io_count);
+	TieCockpitRenderer_XrApplyOrigin(cg);
 	bool ok = AeronDrawList_Prepare(cg->before_pip_list, cmd) != 0;
 	ok = AeronDrawList_Prepare(cg->after_pip_list, cmd) != 0 && ok;
 	ok = TieCockpitRenderer_XrPrepareWorldList(cg, cmd) && ok;
@@ -3111,11 +3124,14 @@ void TieCockpitRenderer_RenderInPass(TieCockpitRenderer* cg, AeronCommandBuffer*
 	AeronDrawList_RenderIntoPass(cg->after_pip_list, cmd, pass, target);
 }
 
-void TieCockpitRenderer_SetXrTarget(TieCockpitRenderer* cg, int width, int height, bool world_split) {
+void TieCockpitRenderer_SetXrTarget(TieCockpitRenderer* cg, int width, int height, int origin_x, int origin_y,
+								   bool world_split) {
 	if (!cg)
 		return;
 	cg->xr_target_w = width > 0 && height > 0 ? width : 0;
 	cg->xr_target_h = width > 0 && height > 0 ? height : 0;
+	cg->xr_origin_x = cg->xr_target_w ? origin_x : 0;
+	cg->xr_origin_y = cg->xr_target_w ? origin_y : 0;
 	cg->xr_world_split = world_split && cg->xr_target_w > 0;
 }
 
@@ -3176,6 +3192,9 @@ bool TieCockpitRenderer_RenderXrTarget(TieCockpitRenderer* cg, AeronCommandBuffe
 		if (xr_pipeline && cg->pending_entry && TieCockpitCommon_InstrumentActive(pip) &&
 			TieCockpitRenderer_ViewAllowsWidget(snap->cockpit.view_idx, 2, kind)) {
 			AeronGraphicsPipeline* flat_pipeline = cg->pip_pipeline;
+			const AeronRectI area = { cg->xr_origin_x, cg->xr_origin_y, cg->xr_target_w, cg->xr_target_h };
+			Aeron_SetViewport(pass, &area);
+			Aeron_SetScissor(pass, &area);
 			cg->pip_pipeline = xr_pipeline;
 			TieCockpitRenderer_Draw3dcrt(cg, pass, cg->pending_entry, snap);
 			cg->pip_pipeline = flat_pipeline;

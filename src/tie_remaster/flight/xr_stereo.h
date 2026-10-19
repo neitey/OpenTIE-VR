@@ -65,6 +65,14 @@ void TieFlightXr_BuildEyes(const TieFlightCamera* base, const AeronXrStereoFrame
  * distance (fixed layout). */
 void TieFlightXr_HudQuad(const TieFlightCamera* hud_cam, int head, int world_far, AeronXrHudQuad* out);
 
+/* The area of a HUD target the 4:3 cockpit/HUD is laid out in: the whole
+ * target when it is at least 4:3, else a centred full-width 4:3 band (the
+ * flat layout would crop the sides, where the sensors are). area = x, y, w, h. */
+void TieFlightXr_HudArea(int target_w, int target_h, int area[4]);
+/* HudQuad for a HUD laid out in `area` of a target_w x target_h target. */
+void TieFlightXr_HudQuadForArea(const struct TieCameraState* camera, int target_w, int target_h, const int area[4],
+								int head, int world_far, AeronXrHudQuad* out);
+
 #ifdef __cplusplus
 }
 #endif
