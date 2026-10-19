@@ -1111,6 +1111,11 @@ static void register_idraw_Pilot_Name(Input* input, Rect* frame, Rect* clip, int
 	caret_color = 0;
 	if (xinpattr_Is_Input_Active(&btn->header) && (int)strlen(btn->name) < TIE_PILOT_NAME_MAX && xio_Blink())
 		caret_color = xstyle_Get_Style_Down_Color();
+#ifdef TIE_MODERN
+	/* The pilot name takes typed keys: the VR keyboard shows while it is live. */
+	if (xinpattr_Is_Input_Active(&btn->header))
+		TieInput_MarkTextEntry();
+#endif
 
 	caret_y = frame->top + TIE_FRONTEND_EDITION(7, xfont_Get_FontID_Height(3) + 1);
 	xpaint_Horiz_Clipped_Line(frame->left + str_width + 4, caret_y, 5, caret_color);

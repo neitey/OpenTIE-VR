@@ -8,6 +8,8 @@ set(TIE_APP_SOURCES
     main.c
     midi_resources.c
     ui.c
+    vr_keyboard.c
+    vr_keyboard.h
     config/app_config.c
     config/keyboard_config.c
     config/controller_config.c
