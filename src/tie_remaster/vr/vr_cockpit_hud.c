@@ -52,13 +52,13 @@ typedef struct CkSpec {
 static const CkSpec k_spec_tie[CK_COUNT] = {
 	[CK_POD_L] = { -37.0f, 1.0f, 0.75f, 0.20f, 0.20f, 0.0f },
 	[CK_POD_R] = { 37.0f, 1.0f, 0.75f, 0.20f, 0.20f, 0.0f },
-	[CK_MSG] = { 0.0f, -9.0f, 0.95f, 0.0f, 0.0f, 0.0030f },
+	[CK_MSG] = { 0.0f, -9.0f, 0.95f, 0.0f, 0.0f, 0.0022f },
 	[CK_THREAT] = { 0.0f, -18.5f, 0.70f, 0.24f, 0.05f, 0.0f },
-	[CK_CMD] = { 0.0f, -30.0f, 0.62f, 0.26f, 0.20f, 0.0f },
+	[CK_CMD] = { 0.0f, -30.0f, 0.62f, 0.28f, 0.21f, 0.0f },
 	[CK_POWER_L] = { -40.0f, -16.0f, 0.72f, 0.06f, 0.16f, 0.0f },
 	[CK_POWER_R] = { 40.0f, -16.0f, 0.72f, 0.06f, 0.16f, 0.0f },
 	[CK_GAUGES_L] = { -27.0f, -29.0f, 0.62f, 0.13f, 0.13f, 0.0f },
-	[CK_GAUGES_R] = { 27.0f, -29.0f, 0.62f, 0.13f, 0.15f, 0.0f },
+	[CK_GAUGES_R] = { 27.0f, -29.0f, 0.62f, 0.13f, 0.19f, 0.0f },
 };
 
 /* Gunboat / missile boat (COMBATSIMCOCKPIT): a wider, flatter canopy and a
@@ -66,13 +66,13 @@ static const CkSpec k_spec_tie[CK_COUNT] = {
 static const CkSpec k_spec_sim[CK_COUNT] = {
 	[CK_POD_L] = { -36.0f, 4.0f, 0.78f, 0.20f, 0.20f, 0.0f },
 	[CK_POD_R] = { 36.0f, 4.0f, 0.78f, 0.20f, 0.20f, 0.0f },
-	[CK_MSG] = { 0.0f, -8.0f, 0.95f, 0.0f, 0.0f, 0.0030f },
+	[CK_MSG] = { 0.0f, -8.0f, 0.95f, 0.0f, 0.0f, 0.0022f },
 	[CK_THREAT] = { 0.0f, -17.0f, 0.72f, 0.24f, 0.05f, 0.0f },
-	[CK_CMD] = { 0.0f, -28.0f, 0.64f, 0.26f, 0.20f, 0.0f },
+	[CK_CMD] = { 0.0f, -28.0f, 0.64f, 0.28f, 0.21f, 0.0f },
 	[CK_POWER_L] = { -40.0f, -14.0f, 0.74f, 0.06f, 0.16f, 0.0f },
 	[CK_POWER_R] = { 40.0f, -14.0f, 0.74f, 0.06f, 0.16f, 0.0f },
 	[CK_GAUGES_L] = { -27.0f, -27.0f, 0.64f, 0.13f, 0.13f, 0.0f },
-	[CK_GAUGES_R] = { 27.0f, -27.0f, 0.64f, 0.13f, 0.15f, 0.0f },
+	[CK_GAUGES_R] = { 27.0f, -27.0f, 0.64f, 0.13f, 0.19f, 0.0f },
 };
 
 /* 2D cockpit mode (no cockpit model, open space around): TIE's own screen
@@ -80,13 +80,13 @@ static const CkSpec k_spec_sim[CK_COUNT] = {
 static const CkSpec k_spec_2d[CK_COUNT] = {
 	[CK_POD_L] = { -33.0f, 14.0f, 0.80f, 0.20f, 0.20f, 0.0f },
 	[CK_POD_R] = { 33.0f, 14.0f, 0.80f, 0.20f, 0.20f, 0.0f },
-	[CK_MSG] = { 0.0f, -10.0f, 0.95f, 0.0f, 0.0f, 0.0030f },
+	[CK_MSG] = { 0.0f, -10.0f, 0.95f, 0.0f, 0.0f, 0.0022f },
 	[CK_THREAT] = { 0.0f, -18.0f, 0.72f, 0.24f, 0.05f, 0.0f },
-	[CK_CMD] = { 0.0f, -29.0f, 0.64f, 0.26f, 0.20f, 0.0f },
+	[CK_CMD] = { 0.0f, -29.0f, 0.64f, 0.28f, 0.21f, 0.0f },
 	[CK_POWER_L] = { -38.0f, -6.0f, 0.75f, 0.06f, 0.16f, 0.0f },
 	[CK_POWER_R] = { 38.0f, -6.0f, 0.75f, 0.06f, 0.16f, 0.0f },
 	[CK_GAUGES_L] = { -28.0f, -27.0f, 0.64f, 0.13f, 0.13f, 0.0f },
-	[CK_GAUGES_R] = { 28.0f, -27.0f, 0.64f, 0.13f, 0.15f, 0.0f },
+	[CK_GAUGES_R] = { 28.0f, -27.0f, 0.64f, 0.13f, 0.19f, 0.0f },
 };
 
 /* Short ids for the saved layout. */
@@ -104,6 +104,15 @@ static const char* const k_ids[CK_COUNT] = {
 /* Padding around the instruments' boxes, atlas UV (about 3 classic px). */
 #define CK_PAD_U 0.005f
 #define CK_PAD_V 0.0065f
+
+/* Extra padding per panel (UV): the art frames around the drawn gauges. */
+static const float k_pad[CK_COUNT][2] = {
+	[CK_CMD] = { 0.012f, 0.0f },
+	[CK_POWER_L] = { 0.004f, 0.006f },
+	[CK_POWER_R] = { 0.004f, 0.006f },
+	[CK_GAUGES_L] = { 0.030f, 0.028f },
+	[CK_GAUGES_R] = { 0.012f, 0.012f },
+};
 
 static struct {
 	/* Latched atlas rectangles (UV, grow-only per mission and cockpit). */
@@ -453,11 +462,20 @@ int TieVrCockpitHud_RenderContent(AeronCommandBuffer* cmd, const AeronXrStereoFr
 		if (b->drawn)
 			ck_union(now[p], &now_valid[p], b->drawn_uv);
 	}
+	/* The CMD's readouts stand out of their anchors' boxes (text): the panel
+	 * is made symmetric about the CRT, which is. */
+	if (now_valid[CK_CMD] && boxes[TIE_HUDI_CMD_3D_CRT].valid) {
+		const float half = fmaxf(cmd_cu - now[CK_CMD][0], now[CK_CMD][2] - cmd_cu);
+		now[CK_CMD][0] = cmd_cu - half;
+		now[CK_CMD][2] = cmd_cu + half;
+	}
 	for (int p = 0; p < CK_COUNT; ++p) {
 		if (!now_valid[p])
 			continue;
-		float r[4] = { fmaxf(0.0f, now[p][0] - CK_PAD_U), fmaxf(0.0f, now[p][1] - CK_PAD_V),
-					   fminf(1.0f, now[p][2] + CK_PAD_U), fminf(1.0f, now[p][3] + CK_PAD_V) };
+		/* The gauges' frames are panel art around what the instruments draw. */
+		const float pu = CK_PAD_U + k_pad[p][0], pv = CK_PAD_V + k_pad[p][1];
+		float r[4] = { fmaxf(0.0f, now[p][0] - pu), fmaxf(0.0f, now[p][1] - pv), fminf(1.0f, now[p][2] + pu),
+					   fminf(1.0f, now[p][3] + pv) };
 		if (r[2] - r[0] < 0.004f || r[3] - r[1] < 0.004f)
 			continue;
 		int latched = s_ck.latched_valid[p];
