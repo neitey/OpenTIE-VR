@@ -1,8 +1,10 @@
 #include "tie_runtime/input/controller_mapping.h"
+#include "aeron/aeron.h"
 #include "aeron/log.h"
 #include "tie_runtime/input/keyboard_mapping.h"
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Physical holds are independent even when several instances share a profile. */
@@ -26,6 +28,8 @@ static struct {
 	 * model claims it: built-in profile, own hold state. */
 	ControllerInstance xr;
 	bool xr_flight;
+	bool headset;
+	TieControllerXrDebug xr_debug;
 } g_controller;
 
 /* Identity Aeron gives its virtual Touch gamepad (aeron/src/xr_input.c). */
@@ -71,6 +75,14 @@ const TieControllerProfile* TieControllerMapping_XrProfile(void) {
 
 void TieControllerMapping_SetXrFlight(bool flight) { g_controller.xr_flight = flight; }
 
+void TieControllerMapping_SetHeadset(bool headset) { g_controller.headset = headset; }
+bool TieControllerMapping_HeadsetMode(void) { return g_controller.headset || Aeron_XrIsPresenting(); }
+
+void TieControllerMapping_XrDebug(TieControllerXrDebug* out) {
+	if (out)
+		*out = g_controller.xr_debug;
+}
+
 static bool TieControllerMapping_SameSource(const AeronControllerDigitalSource* left,
 											const AeronControllerDigitalSource* right) {
 	return left->kind == right->kind && left->index == right->index &&
@@ -92,6 +104,31 @@ static bool TieControllerMapping_ProfileEqual(const TieControllerProfile* left,
 		const TieInputActionBinding* b = &right->bindings[index];
 		if (a->action != b->action || !TieControllerMapping_SameSource(&a->source, &b->source) ||
 			a->source.threshold != b->source.threshold)
+			return false;
+	}
+	return true;
+}
+
+bool TieControllerMapping_IsAutoProfile(const TieControllerProfile* profile, const TieControllerProfile* defaults) {
+	if (!profile || !defaults || profile->binding_count != defaults->binding_count)
+		return false;
+	for (int axis = 0; axis < TIE_INPUT_AXIS_COUNT; ++axis) {
+		const TieInputAxisBinding* a = &profile->mapping.axes[axis];
+		const TieInputAxisBinding* b = &defaults->mapping.axes[axis];
+		/* InitializeGamepads leaves an axis an earlier model owns at -1. */
+		if ((a->source != b->source && a->source != -1) || a->invert != b->invert || a->deadzone != b->deadzone)
+			return false;
+	}
+	/* Bindings in any order (a saved model reloads in the config's order). */
+	for (size_t index = 0; index < profile->binding_count; ++index) {
+		const TieInputActionBinding* a = &profile->bindings[index];
+		bool found = false;
+		for (size_t j = 0; j < defaults->binding_count && !found; ++j) {
+			const TieInputActionBinding* b = &defaults->bindings[j];
+			found = a->action == b->action && TieControllerMapping_SameSource(&a->source, &b->source) &&
+					a->source.threshold == b->source.threshold;
+		}
+		if (!found)
 			return false;
 	}
 	return true;
@@ -277,6 +314,31 @@ bool TieControllerMapping_InitializeGamepads(TieControllerOptions* options,
 		memmove(m, m + 1, (options->count - i - 1) * sizeof *m);
 		--options->count;
 		break;
+	}
+	/* Headset: the Quest's Android lists its own Touch controllers as two
+	 * gamepads ("Device 0x...") that report nothing while the XR session
+	 * owns them. Given the gamepad defaults (0.2.0 did that and saved them)
+	 * the first one owned yaw/pitch/roll, so the XR pad's sticks no longer
+	 * steered (throttle and fire, not in the defaults' axes, still worked).
+	 * Here no gamepad gets the defaults on its own, and untouched
+	 * auto-configured ones are dropped; a real pad is added in Settings >
+	 * Controllers. */
+	if (TieControllerMapping_HeadsetMode()) {
+		for (size_t i = 0; i < options->count;) {
+			TieControllerModel* m = &options->models[i];
+			if (m->kind != AERON_CONTROLLER_KIND_GAMEPAD || !strcmp(m->guid, TIE_XR_PAD_GUID) ||
+				!TieControllerMapping_IsAutoProfile(&m->profile, defaults)) {
+				++i;
+				continue;
+			}
+			Aeron_LogInfo("tie.input",
+						  "headset: dropped the auto-configured gamepad '%s' (the Touch controllers fly; "
+						  "add a real gamepad in Settings > Controllers)",
+						  m->name);
+			memmove(m, m + 1, (options->count - i - 1) * sizeof *m);
+			--options->count;
+		}
+		return true;
 	}
 	for (int slot = 0; slot < AERON_CONTROLLER_MAX; ++slot) {
 		const AeronControllerSnapshot* d = &input->controllers[slot];
@@ -511,10 +573,24 @@ static void SampleAnalog(size_t index, const AeronControllerSnapshot* d, TieInpu
  * pointer, and Landru would also move its cursor with them). */
 static void SampleXrPad(const AeronInputSnapshot* input, unsigned owned_axes, TieInputMapping* mapping) {
 	const AeronControllerSnapshot* pad = NULL;
+	TieControllerXrDebug* debug = &g_controller.xr_debug;
+	memset(debug, 0, sizeof *debug);
+	debug->slot = -1;
+	debug->flight = g_controller.xr_flight;
+	debug->owned_axes = owned_axes;
+	debug->models = g_controller.options.count;
 	for (int i = 0; i < AERON_CONTROLLER_MAX && !pad; ++i)
-		if (TieControllerMapping_IsXrPad(&input->controllers[i]) &&
-			TieControllerMapping_FindModel(&g_controller.options, input->controllers[i].guid) < 0)
-			pad = &input->controllers[i];
+		if (TieControllerMapping_IsXrPad(&input->controllers[i])) {
+			debug->slot = i;
+			debug->leftx = input->controllers[i].gamepad_axes[AERON_GAMEPAD_AXIS_LEFTX];
+			debug->lefty = input->controllers[i].gamepad_axes[AERON_GAMEPAD_AXIS_LEFTY];
+			debug->rightx = input->controllers[i].gamepad_axes[AERON_GAMEPAD_AXIS_RIGHTX];
+			debug->lever = input->controllers[i].gamepad_axes[AERON_GAMEPAD_AXIS_RIGHT_TRIGGER];
+			if (TieControllerMapping_FindModel(&g_controller.options, input->controllers[i].guid) < 0)
+				pad = &input->controllers[i];
+			else
+				debug->claimed = true;
+		}
 	const TieControllerProfile* profile = TieControllerMapping_XrProfile();
 	if (!pad || pad->instance_id != g_controller.xr.id)
 		ReleaseState(&g_controller.xr, profile);
@@ -522,10 +598,29 @@ static void SampleXrPad(const AeronInputSnapshot* input, unsigned owned_axes, Ti
 		return;
 	g_controller.xr.id = pad->instance_id;
 	g_controller.present = true;
-	unsigned mask = (1u << TIE_INPUT_AXIS_THROTTLE);
+	/* The throttle lever only where no configured model drives the
+	 * throttle. In flight the sticks also on an axis a configured model
+	 * owns, whichever is deflected further this frame, so a connected pad or
+	 * HOTAS that is not being used never takes the Touch sticks away. */
+	unsigned mask = (1u << TIE_INPUT_AXIS_THROTTLE) & ~owned_axes;
+	const unsigned steer = (1u << TIE_INPUT_AXIS_YAW) | (1u << TIE_INPUT_AXIS_PITCH) | (1u << TIE_INPUT_AXIS_ROLL);
+	int16_t owner_axes[3];
+	TieInputAxisBinding owner_bindings[3];
+	if (g_controller.xr_flight) {
+		mask |= steer;
+		memcpy(owner_axes, g_controller.axes, sizeof owner_axes);
+		for (int axis = 0; axis < 3; ++axis)
+			owner_bindings[axis] = mapping->axes[axis];
+	}
+	SampleProfileAnalog(profile, AERON_CONTROLLER_KIND_GAMEPAD, pad, mapping, mask);
 	if (g_controller.xr_flight)
-		mask |= (1u << TIE_INPUT_AXIS_YAW) | (1u << TIE_INPUT_AXIS_PITCH) | (1u << TIE_INPUT_AXIS_ROLL);
-	SampleProfileAnalog(profile, AERON_CONTROLLER_KIND_GAMEPAD, pad, mapping, mask & ~owned_axes);
+		for (int axis = 0; axis < 3; ++axis) {
+			if ((owned_axes & (1u << axis)) && abs(owner_axes[axis]) >= abs(g_controller.axes[axis])) {
+				g_controller.axes[axis] = owner_axes[axis];
+				mapping->axes[axis] = owner_bindings[axis];
+			} else
+				debug->xr_axes |= 1u << axis;
+		}
 	SampleProfileDigital(&g_controller.xr, profile, pad);
 }
 
@@ -599,6 +694,7 @@ void TieControllerMapping_Update(const AeronInputSnapshot* input) {
 		}
 	}
 	SampleXrPad(input, owned_axes, &mapping);
+	memcpy(g_controller.xr_debug.axes, g_controller.axes, sizeof g_controller.xr_debug.axes);
 	if (!g_controller.throttle_valid) {
 		g_controller.throttle_instance = 0;
 		TieInput_ResetThrottle();

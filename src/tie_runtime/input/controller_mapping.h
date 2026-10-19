@@ -67,6 +67,31 @@ bool TieControllerMapping_IsXrPad(const AeronControllerSnapshot* device);
 const TieControllerProfile* TieControllerMapping_XrProfile(void);
 /* Whether the XR pad's sticks steer (flight) this frame; set by vr_controls. */
 void TieControllerMapping_SetXrFlight(bool flight);
+/* Headset mode (VR requested at startup; a presenting session counts too).
+ * The Quest's Android also lists its own Touch controllers as gamepads
+ * ("Device 0x..."): in headset mode connected gamepads are not given the
+ * gamepad defaults automatically (the player adds a real pad in Settings >
+ * Controllers), saved untouched auto-configured gamepad models are dropped,
+ * and the XR pad's sticks steer even on an axis another model owns when
+ * they are deflected further. */
+void TieControllerMapping_SetHeadset(bool headset);
+bool TieControllerMapping_HeadsetMode(void);
+/* True for a profile the defaults gave a connected gamepad and nobody edited
+ * since (the defaults, possibly with axes left to an earlier model). */
+bool TieControllerMapping_IsAutoProfile(const TieControllerProfile* profile, const TieControllerProfile* defaults);
+
+/* Diagnostics: the XR pad as the last TieControllerMapping_Update saw it. */
+typedef struct TieControllerXrDebug {
+	int slot;            /* controller slot of the XR pad, -1 none */
+	bool claimed;        /* a configured model owns the XR pad's GUID */
+	bool flight;         /* sticks steer this frame */
+	int16_t leftx, lefty, rightx, lever;
+	unsigned owned_axes; /* logical axes configured models drive (bit = TieInputAxis) */
+	unsigned xr_axes;    /* logical axes the XR pad drove */
+	size_t models;       /* configured models */
+	int16_t axes[3];     /* logical yaw/pitch/roll handed to Landru */
+} TieControllerXrDebug;
+void TieControllerMapping_XrDebug(TieControllerXrDebug* out);
 
 bool TieControllerMapping_SetOptions(const TieControllerOptions* options);
 void TieControllerMapping_Suspend(void);
