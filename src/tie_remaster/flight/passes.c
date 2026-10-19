@@ -14,6 +14,7 @@
 #include "tie_remaster/flight/sprite_cache.h"
 #include "tie_remaster/flight/stars.h"
 #include "tie_remaster/flight/xr_stereo.h"
+#include "tie_remaster/flight/xwa_cockpit.h"
 #include "tie_remaster/gpu_debug.h"
 #include "tie_remaster/scene2d/srgb_math.h"
 #include "tie_remaster/vr/vr_hands.h"
@@ -694,6 +695,8 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 
 	if (!TieFlightRenderer_PrepareMissionAssets(g, cmd, curr))
 		return false;
+	/* OpenTIE-VR: X-Wing Alliance 3D cockpit for the player's craft. */
+	TieXwaCockpit_Prepare(cmd, g->assets, curr);
 
 	/* Build view-projection + viewport rects. The helper preserves the
 	 * captured classic aperture's focal scale while extending the
@@ -926,6 +929,14 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 	/* Snapshot → mesh instances (HD only; classic geometry draws via
 	 * the BEFORE_OPAQUE hook instead). */
 	TieFlightRenderer_SceneSubmit(g, curr, view_proj, cull_cam->camera.pos, &mb);
+	if (g->scene_model_backend) {
+		/* OpenTIE-VR: the 3D cockpit and its instrument panels, the near
+		 * range a stereo frame keeps at real size with depth boost. */
+		const AeronSceneMark cockpit_begin = AeronScene_Mark(g->scene);
+		TieXwaCockpit_Submit(g->scene, curr, g->cockpit);
+		const AeronSceneMark cockpit_end = AeronScene_Mark(g->scene);
+		TieFlightRenderer_XrSetNearRange(g, &cockpit_begin, &cockpit_end);
+	}
 	/* VR: the player's hands (controllers or gloves) and the flight stick,
 	 * near geometry hanging off the seated head (the craft camera). */
 	g->xr_hands_valid = false;

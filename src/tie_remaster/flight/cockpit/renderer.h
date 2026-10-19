@@ -9,6 +9,7 @@
 struct AeronCommandBuffer;
 struct AeronRenderPass;
 struct AeronRenderTarget;
+struct AeronTexture;
 struct TieSnapshot;
 struct TieScene2dTextRenderer;
 struct TieFlightRenderer;
@@ -53,6 +54,31 @@ bool TieCockpitRenderer_Prepare(TieCockpitRenderer* cg, struct AeronCommandBuffe
 void TieCockpitRenderer_RenderInPass(TieCockpitRenderer* cg, struct AeronCommandBuffer* cmd,
 									 struct AeronRenderPass* pass, struct AeronRenderTarget* target,
 									 const struct TieSnapshot* snap);
+
+/* 3D cockpit (OpenTIE-VR): while TieXwaCockpit_Drawn(snap), Prepare draws the
+ * cockpit panel (TIE's instruments over its own panel art) into an offscreen
+ * instrument atlas instead of the flight RT, and the flight RT gets only the
+ * screen-space HUD (target box, gunsight, message bar). The atlas regions
+ * below are shown as panels on the 3D cockpit model. */
+typedef enum TieCockpitPanelId {
+	TIE_COCKPIT_PANEL_SENSOR_FWD = 0,
+	TIE_COCKPIT_PANEL_SENSOR_REAR,
+	TIE_COCKPIT_PANEL_CMD,
+	TIE_COCKPIT_PANEL_GAUGES_L,
+	TIE_COCKPIT_PANEL_GAUGES_R,
+	TIE_COCKPIT_PANEL_COUNT
+} TieCockpitPanelId;
+
+typedef struct TieCockpitPanelSource {
+	bool valid;
+	float uv[4];  /* u0, v0, u1, v1 in the atlas texture */
+	float aspect; /* displayed width / height */
+} TieCockpitPanelSource;
+
+/* The atlas texture (NULL when no atlas was drawn this frame) and the panel
+ * rectangles in it. */
+struct AeronTexture* TieCockpitRenderer_InstrumentAtlas(const TieCockpitRenderer* cg,
+														TieCockpitPanelSource out[TIE_COCKPIT_PANEL_COUNT]);
 
 /* OpenXR stereo HUD. With a size set, Prepare records the cockpit and HUD
  * for an area of that size at (origin_x, origin_y) of the XR HUD target
