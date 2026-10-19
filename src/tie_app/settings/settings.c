@@ -21,6 +21,7 @@
 #include "tie_app/setup/installation_ui.h"
 #include "tie_remaster/remaster.h"
 #include "tie_runtime/input/controller_mapping.h"
+#include "tie_runtime/runtime/briefing_review.h"
 #include "tie_runtime/runtime/runtime.h"
 
 typedef enum TiePathPickerTarget {
@@ -43,6 +44,7 @@ enum {
 	SETTINGS_PAGE_KEYBOARD,
 	SETTINGS_PAGE_MOUSE,
 	SETTINGS_PAGE_VR,
+	SETTINGS_PAGE_BRIEFING,
 };
 
 static struct {
@@ -56,6 +58,7 @@ static struct {
 	bool captures_keyboard;
 	int exit_confirmation_open;
 	int page;
+	bool briefing_fresh; /* goals captured since the menu opened */
 	char error[512];
 	AeronUiFilePicker* path_picker;
 	TiePathPickerTarget path_picker_target;
@@ -340,6 +343,7 @@ void TieSettings_Show(void) {
 	if (!g_settings.available || g_settings.open)
 		return;
 	g_settings.open = true;
+	g_settings.briefing_fresh = false;
 	g_settings.captures_controller = false;
 	g_settings.captures_keyboard = false;
 	g_settings.error[0] = '\0';
@@ -899,6 +903,79 @@ static void TieSettings_AudioPage(AeronUiContext* ui) {
 	TieSettings_LaunchRestartNotice(ui);
 }
 
+/* Wrapped paragraphs of `text` (one per line). */
+static void TieSettings_HelpParagraphs(AeronUiContext* ui, const char* text) {
+	char line[1024];
+	bool first = true;
+	while (text && *text) {
+		const char* end = strchr(text, '\n');
+		const size_t n = end ? (size_t)(end - text) : strlen(text);
+		const size_t copy = n < sizeof line - 1 ? n : sizeof line - 1;
+		memcpy(line, text, copy);
+		line[copy] = '\0';
+		if (line[0]) {
+			if (!first)
+				AeronUi_Spacer(ui, 4.0f);
+			AeronUi_Help(ui, line);
+			first = false;
+		}
+		text = end ? end + 1 : NULL;
+	}
+}
+
+/* In flight (VR): the mission briefing and goals, after OpenXWA-VR's
+ * pause-menu "Review Briefing". */
+static void TieSettings_BriefingPage(AeronUiContext* ui) {
+	const TieBriefingReview* review = TieBriefingReview_Get(!g_settings.briefing_fresh);
+	g_settings.briefing_fresh = true;
+	if (!review) {
+		AeronUi_Help(ui, "No mission briefing for this flight.");
+		return;
+	}
+	char header[200];
+	snprintf(header, sizeof header, "%s%s%s", review->mission, review->title[0] ? " - " : "", review->title);
+	AeronUi_Header(ui, header);
+	if (review->captions[0])
+		TieSettings_HelpParagraphs(ui, review->captions);
+	else
+		AeronUi_Help(ui, "The mission file has no briefing text.");
+	if (review->goals[0]) {
+		AeronUi_Spacer(ui, 8.0f);
+		AeronUi_Header(ui, "Mission Goals");
+		char line[256];
+		const char* text = review->goals;
+		while (*text) {
+			const char* end = strchr(text, '\n');
+			const size_t n = end ? (size_t)(end - text) : strlen(text);
+			const size_t copy = n < sizeof line - 1 ? n : sizeof line - 1;
+			memcpy(line, text, copy);
+			line[copy] = '\0';
+			if (line[0] == '\001')
+				AeronUi_Label(ui, line + 1);
+			else if (line[0])
+				AeronUi_Help(ui, line);
+			if (!end)
+				break;
+			text = end + 1;
+		}
+	}
+	for (int person = 0; person < 2; ++person) {
+		bool any = false;
+		for (int i = 0; i < review->qa_count; ++i) {
+			const TieBriefingReviewQa* qa = &review->qa[i];
+			if (qa->secret_order != (person == 1))
+				continue;
+			if (!any) {
+				AeronUi_Spacer(ui, 8.0f);
+				AeronUi_Header(ui, person ? "Secret Order" : "Flight Officer");
+				any = true;
+			}
+			AeronUi_Label(ui, qa->question);
+			TieSettings_HelpParagraphs(ui, qa->answer);
+		}
+	}
+}
+
 static void TieSettings_DrawExitConfirmation(AeronUiContext* ui) {
 	if (!AeronUi_BeginModal(ui, "EXIT GAME", &g_settings.exit_confirmation_open, NULL))
 		return;
@@ -916,10 +993,24 @@ static void TieSettings_DrawExitConfirmation(AeronUiContext* ui) {
 }
 
 void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
-	static const char* const pages[] = { "Game", "Video", "Audio", "Controller", "Keyboard", "Mouse", "VR" };
-	const int page_count = TieVrOptions_Available() ? 7 : 6;
 	if (!g_settings.available || !g_settings.open || !input)
 		return;
+	/* Tab titles and the page each tab shows: VR and (in flight) Briefing
+	 * are optional, so a tab index is not always a page id. */
+	const char* pages[8] = { "Game", "Video", "Audio", "Controller", "Keyboard", "Mouse" };
+	int page_ids[8] = { SETTINGS_PAGE_GAME,       SETTINGS_PAGE_VIDEO,    SETTINGS_PAGE_AUDIO,
+						SETTINGS_PAGE_CONTROLLER, SETTINGS_PAGE_KEYBOARD, SETTINGS_PAGE_MOUSE };
+	int page_count = 6;
+	if (TieVrOptions_Available()) {
+		pages[page_count] = "VR";
+		page_ids[page_count++] = SETTINGS_PAGE_VR;
+	}
+	if (TieBriefingReview_Available()) {
+		pages[page_count] = "Briefing";
+		page_ids[page_count++] = SETTINGS_PAGE_BRIEFING;
+	}
+	if (g_settings.page >= page_count)
+		g_settings.page = 0;
 	AeronUi_BeginFrame(g_settings.ui, &(AeronUiFrameDesc) {
 										  .input = input,
 										  .dt_seconds = dt_seconds,
@@ -933,10 +1024,13 @@ void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
 		if (previous_page != g_settings.page) {
 			TieControllerSettings_CancelCapture(&g_settings.controller, g_settings.ui);
 			TieKeyboardSettings_CancelCapture(&g_settings.keyboard, g_settings.ui);
+			g_settings.briefing_fresh = false;
 		}
-		if (g_settings.page == SETTINGS_PAGE_GAME)
+		const int page_id = g_settings.page >= 0 && g_settings.page < page_count ? page_ids[g_settings.page]
+																				 : SETTINGS_PAGE_GAME;
+		if (page_id == SETTINGS_PAGE_GAME)
 			TieSettings_GamePage(g_settings.ui);
-		else if (g_settings.page == SETTINGS_PAGE_VIDEO) {
+		else if (page_id == SETTINGS_PAGE_VIDEO) {
 			/* Keep the tab ending, separator and Close row outside the scroll view. */
 			const float footer_reserve = 83.0f;
 			const float scroll_height = AeronUi_AvailableHeight(g_settings.ui) - footer_reserve;
@@ -946,19 +1040,26 @@ void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
 					AeronUi_Error(g_settings.ui, g_settings.error);
 				AeronUi_EndScroll(g_settings.ui);
 			}
-		} else if (g_settings.page == SETTINGS_PAGE_AUDIO)
+		} else if (page_id == SETTINGS_PAGE_AUDIO)
 			TieSettings_AudioPage(g_settings.ui);
-		else if (g_settings.page == SETTINGS_PAGE_CONTROLLER) {
+		else if (page_id == SETTINGS_PAGE_CONTROLLER) {
 			AeronUi_PushId(g_settings.ui, SETTINGS_PAGE_CONTROLLER);
 			TieControllerSettings_Draw(&g_settings.controller, g_settings.ui, input);
 			AeronUi_PopId(g_settings.ui);
-		} else if (g_settings.page == SETTINGS_PAGE_KEYBOARD) {
+		} else if (page_id == SETTINGS_PAGE_KEYBOARD) {
 			AeronUi_PushId(g_settings.ui, SETTINGS_PAGE_KEYBOARD);
 			TieKeyboardSettings_Draw(&g_settings.keyboard, g_settings.ui);
 			AeronUi_PopId(g_settings.ui);
-		} else if (g_settings.page == SETTINGS_PAGE_MOUSE)
+		} else if (page_id == SETTINGS_PAGE_MOUSE)
 			TieSettings_MousePage(g_settings.ui);
-		else if (g_settings.page == SETTINGS_PAGE_VR) {
+		else if (page_id == SETTINGS_PAGE_BRIEFING) {
+			const float footer_reserve = 83.0f;
+			const float scroll_height = AeronUi_AvailableHeight(g_settings.ui) - footer_reserve;
+			if (AeronUi_BeginScroll(g_settings.ui, "Mission Briefing", scroll_height)) {
+				TieSettings_BriefingPage(g_settings.ui);
+				AeronUi_EndScroll(g_settings.ui);
+			}
+		} else if (page_id == SETTINGS_PAGE_VR) {
 			const float footer_reserve = 83.0f;
 			const float scroll_height = AeronUi_AvailableHeight(g_settings.ui) - footer_reserve;
 			if (AeronUi_BeginScroll(g_settings.ui, "VR Settings", scroll_height)) {
@@ -967,10 +1068,10 @@ void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
 			}
 		}
 		AeronUi_EndTabBar(g_settings.ui);
-		if (g_settings.page != SETTINGS_PAGE_VIDEO && g_settings.error[0])
+		if (page_id != SETTINGS_PAGE_VIDEO && g_settings.error[0])
 			AeronUi_Error(g_settings.ui, g_settings.error);
 		AeronUi_Separator(g_settings.ui);
-		if (g_settings.page == SETTINGS_PAGE_GAME) {
+		if (page_id == SETTINGS_PAGE_GAME) {
 			AeronUi_BeginColumns(g_settings.ui, 2, NULL);
 			if (AeronUi_Button(g_settings.ui, "Exit Game"))
 				g_settings.exit_confirmation_open = 1;
@@ -981,12 +1082,12 @@ void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
 		} else if (AeronUi_Button(g_settings.ui, "Close")) {
 			(void)TieSettings_SettingsClose();
 		}
-		if (g_settings.open && g_settings.page == SETTINGS_PAGE_CONTROLLER) {
+		if (g_settings.open && page_id == SETTINGS_PAGE_CONTROLLER) {
 			AeronUi_PushId(g_settings.ui, SETTINGS_PAGE_CONTROLLER);
 			TieControllerSettings_DrawModals(&g_settings.controller, g_settings.ui, input, g_settings.config);
 			AeronUi_PopId(g_settings.ui);
 		}
-		if (g_settings.open && g_settings.page == SETTINGS_PAGE_KEYBOARD) {
+		if (g_settings.open && page_id == SETTINGS_PAGE_KEYBOARD) {
 			AeronUi_PushId(g_settings.ui, SETTINGS_PAGE_KEYBOARD);
 			TieKeyboardSettings_DrawModals(&g_settings.keyboard, g_settings.ui, g_settings.config);
 			AeronUi_PopId(g_settings.ui);

@@ -270,7 +270,10 @@ uint32_t TieVrControls_Frame(bool settings_open, bool host_paused) {
 						!replayviewmode && !TieFlightPause_IsActive() && pstate.player_craft != NULL;
 	g_vr.flight = flight;
 
-	TieVrControls_SetPointer(flight ? 0 : 1);
+	/* The launch hold (game pause before a mission) waits for the trigger:
+	 * no menu pointer there, the cockpit stays clear to look around. */
+	const bool launch_hold = flight_scene && !settings_open && !host_paused && TieFlightLaunch_HoldActive();
+	TieVrControls_SetPointer(flight || launch_hold ? 0 : 1);
 	TieVrControls_SetButtons(settings_open ? 0 : 1);
 	TieControllerMapping_SetXrFlight(flight);
 

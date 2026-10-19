@@ -92,6 +92,7 @@ void* goalallfgstring; /* const char *     "all FG"                */
 #endif
 
 #include <stdint.h>
+#include <string.h>
 
 /* --- Module-owned globals (watdbg: goals.c) -------------------------- */
 
@@ -138,6 +139,262 @@ int32_t goalsCount[3];
 // GLOBAL: TIE95 0xD4B9C
 // GLOBAL: TIE98 0x5FE860
 int32_t goalsCompletedCount[3];
+
+/* PORT: the goal list of goals_missiongoalsroom (unchanged), split out so
+ * goals_capturetext can run it with outchar redirected (VR in-flight
+ * briefing page). Returns the cursor y after the last line. */
+static int16_t goals_renderlist(int16_t cur_y) {
+	uint16_t category;
+
+	festring_settextcolor(0x4E);
+	for (category = 0; category < 3; category++) {
+		goalsCompletedCount[category] = 0;
+		goalsCount[category] = 0;
+	}
+
+	for (category = 0; category < 3; category++) {
+		uint16_t status_prio;
+
+		for (status_prio = 0; status_prio < 3; status_prio++) {
+			int16_t title_pending = 1;
+
+			/* -- Category-level mission status + complete cache --- */
+			uint16_t goal_status;
+			uint16_t cat_complete_cache;
+			const EMissionGoal* g;
+			const ECondStruct* a;
+			const ECondStruct* b;
+			int16_t fg_idx;
+
+			if (category == 0) {
+				goal_status = mission.primary_global;
+				cat_complete_cache = mission.primary_complete;
+			} else if (category == 1) {
+				goal_status = mission.secondary_global;
+				cat_complete_cache = mission.secondary_complete;
+			} else { /* category == 2 (bonus) */
+				goal_status = mission.bonus_global;
+				if (!showbonusgoals && goal_status != 1)
+					goal_status = 0;
+				cat_complete_cache = mission.bonus_complete;
+			}
+
+			g = &cut[category];
+			a = &g->subcond[0];
+			b = &g->subcond[1];
+
+			/* -- Category subconditions --------------------------- */
+			if (g->or_joined == 1) {
+				/* OR-joined pair: render on one line. */
+				if (a->cond == 9 || b->cond == 9) {
+					if (cat_complete_cache == 1 || goal_status != 1) {
+						if (cat_complete_cache == 1)
+							goal_status = 1;
+					} else {
+						goal_status = 4;
+					}
+				}
+				if (category == 2 && !showbonusgoals && (goal_status == 4 || goal_status == 2)) {
+					goal_status = 0;
+					if (status_prio == 2)
+						goalsCount[category]++;
+				}
+
+				if (goal_status == goalstatusorder[status_prio]) {
+					if (a->cond != 10 && a->cond != 0) {
+						{
+							festring_setcursor(0, cur_y);
+							if (outchar)
+								outchar('\n');
+							festring_setcursor(0, cur_y);
+							festring_settextcolor(0x46);
+							festring_outstringcenter(
+								((const uint8_t**)goaltitlestrings)[3u * category + status_prio]);
+							cur_y = (int16_t)(cur_y + fontheight);
+						}
+						title_pending = 0;
+						festring_setcursor(6, cur_y);
+						festring_settextcolor((uint8_t)(goalstatuscolor[status_prio] + 1));
+						cur_y =
+							(int16_t)(cur_y + goals_outputgoal(a->id, a->cond, a->type, goal_status, a->pct));
+						goalsCount[category]++;
+						if (status_prio == 2)
+							goalsCompletedCount[category]++;
+					}
+
+					if (b->cond != 10 && b->cond != 0) {
+						if (a->cond != 10 && a->cond != 0) {
+							/* Center the "OR" joiner on its own line. */
+							festring_setcursor(6, cur_y);
+							if (outchar)
+								outchar('\n');
+							festring_setcursor(6, cur_y);
+							festring_settextcolor(0x43);
+							festring_outstringcenter(((const uint8_t**)goaloperatorstrings)[g->or_joined]);
+							cur_y = (int16_t)(cur_y + fontheight);
+						}
+						festring_setcursor(6, cur_y);
+						festring_settextcolor((uint8_t)(goalstatuscolor[status_prio] + 1));
+						cur_y =
+							(int16_t)(cur_y + goals_outputgoal(b->id, b->cond, b->type, goal_status, b->pct));
+						goalsCount[category]++;
+						if (status_prio == 2)
+							goalsCompletedCount[category]++;
+					}
+				}
+			} else {
+				/* Independent subconditions: evaluate + render each. */
+				uint16_t pri_calc = (uint16_t)score_checkcondition(a->cond, a->type, a->id, a->pct, 0);
+				uint16_t sec_calc;
+
+				if (a->cond == 10)
+					pri_calc = 0;
+				if (a->cond == 9) {
+					if (cat_complete_cache == 1 || pri_calc != 1) {
+						if (cat_complete_cache == 1)
+							pri_calc = 1;
+					} else {
+						pri_calc = 4;
+					}
+				}
+				if (category == 2 && !showbonusgoals && (pri_calc == 4 || pri_calc == 2)) {
+					pri_calc = 0;
+					if (status_prio == 2)
+						goalsCount[category]++;
+				}
+
+				if (pri_calc == goalstatusorder[status_prio] && a->cond != 10 && a->cond != 0) {
+					{
+						festring_setcursor(0, cur_y);
+						if (outchar)
+							outchar('\n');
+						festring_setcursor(0, cur_y);
+						festring_settextcolor(0x46);
+						festring_outstringcenter(
+							((const uint8_t**)goaltitlestrings)[3u * category + status_prio]);
+						cur_y = (int16_t)(cur_y + fontheight);
+					}
+					title_pending = 0;
+					festring_setcursor(6, cur_y);
+					festring_settextcolor((uint8_t)(goalstatuscolor[status_prio] + 1));
+					cur_y = (int16_t)(cur_y + goals_outputgoal(a->id, a->cond, a->type, pri_calc, a->pct));
+					goalsCount[category]++;
+					if (status_prio == 2)
+						goalsCompletedCount[category]++;
+				}
+
+				sec_calc = (uint16_t)score_checkcondition(b->cond, b->type, b->id, b->pct, 0);
+				if (b->cond == 10)
+					sec_calc = 0;
+				if (b->cond == 9) {
+					if (cat_complete_cache == 1 || sec_calc != 1) {
+						if (cat_complete_cache == 1)
+							sec_calc = 1;
+					} else {
+						sec_calc = 4;
+					}
+				}
+				if (category == 2 && !showbonusgoals && (sec_calc == 4 || sec_calc == 2)) {
+					sec_calc = 0;
+					if (status_prio == 2)
+						goalsCount[category]++;
+				}
+				goal_status = sec_calc;
+
+				if (sec_calc == goalstatusorder[status_prio] && b->cond != 10 && b->cond != 0) {
+					if (title_pending) {
+						{
+							festring_setcursor(0, cur_y);
+							if (outchar)
+								outchar('\n');
+							festring_setcursor(0, cur_y);
+							festring_settextcolor(0x46);
+							festring_outstringcenter(
+								((const uint8_t**)goaltitlestrings)[3u * category + status_prio]);
+							cur_y = (int16_t)(cur_y + fontheight);
+						}
+						title_pending = 0;
+					}
+					festring_setcursor(6, cur_y);
+					festring_settextcolor((uint8_t)(goalstatuscolor[status_prio] + 1));
+					cur_y = (int16_t)(cur_y + goals_outputgoal(b->id, b->cond, b->type, sec_calc, b->pct));
+					goalsCount[category]++;
+					if (status_prio == 2)
+						goalsCompletedCount[category]++;
+				}
+			}
+
+			/* -- Per-FG goals in this (category, status_prio) cell - */
+			for (fg_idx = 0; fg_idx < mission_file_header.num_fg; fg_idx++) {
+				/* Watcom unaligned-dword pattern: binary reads
+				 * dword at fg.link_flag and shifts right 24, which
+				 * extracts the byte at offset +3 = `difficulty`. */
+				uint16_t fg_status;
+				uint16_t fg_cond;
+				uint8_t fg_pct;
+
+				if ((diffmask[mission.difficulty] & fgdiffmask[fg_array[fg_idx].difficulty]) == 0)
+					continue;
+
+				if (category == 0) {
+					fg_status = fgstatus[fg_idx].primary_status;
+					fg_cond = fg_array[fg_idx].pri_win_cond;
+					fg_pct = fg_array[fg_idx].pri_win_pct;
+				} else if (category == 1) {
+					fg_status = fgstatus[fg_idx].secondary_status;
+					fg_cond = fg_array[fg_idx].sec_win_cond;
+					fg_pct = fg_array[fg_idx].sec_win_pct;
+				} else { /* bonus */
+					fg_cond = fg_array[fg_idx].bonus_cond;
+					fg_status = fgstatus[fg_idx].fg_complete;
+					if (fg_array[fg_idx].bonus_points < 0)
+						fg_status = 0;
+					if (!showbonusgoals && (fg_status == 4 || fg_status == 2)) {
+						fg_status = 0;
+						if (status_prio == 2)
+							goalsCount[category]++;
+					}
+					fg_pct = fg_array[fg_idx].bonus_pct;
+				}
+
+				if (fg_cond == 9 && fgstatus[fg_idx].counts[FG_COUNT_HYPERSPACED] !=
+										fgstatus[fg_idx].counts[FG_COUNT_TOTAL]) {
+					if (cat_complete_cache == 1 || fg_status != 1) {
+						if (cat_complete_cache == 1)
+							fg_status = 1;
+					} else {
+						fg_status = 4;
+					}
+				}
+
+				if (fg_cond != 0 && fg_cond != 10 && fg_status == goalstatusorder[status_prio]) {
+					if (title_pending) {
+						{
+							festring_setcursor(0, cur_y);
+							if (outchar)
+								outchar('\n');
+							festring_setcursor(0, cur_y);
+							festring_settextcolor(0x46);
+							festring_outstringcenter(
+								((const uint8_t**)goaltitlestrings)[3u * category + status_prio]);
+							cur_y = (int16_t)(cur_y + fontheight);
+						}
+						title_pending = 0;
+					}
+					festring_setcursor(6, cur_y);
+					festring_settextcolor(goalstatuscolor[status_prio]);
+					cur_y = (int16_t)(cur_y + goals_outputgoal((uint16_t)fg_idx, fg_cond,
+															   /*target_type=*/1, fg_status,
+															   (uint16_t)percentcon[fg_pct]));
+					goalsCount[category]++;
+					if (status_prio == 2)
+						goalsCompletedCount[category]++;
+				}
+			}
+		}
+	}
+	return cur_y;
+}
 
 /* Scrollable primary, secondary, bonus, and flight-group objectives display.
  * Mission-end conditions remain incomplete until end_flag is set. Returns
@@ -233,259 +490,8 @@ int32_t goals_missiongoalsroom(void) {
 				FlightSurface_Lock();
 			{
 				int16_t cur_y = scroll_y;
-				uint16_t category;
 
-				festring_settextcolor(0x4E);
-				for (category = 0; category < 3; category++) {
-					goalsCompletedCount[category] = 0;
-					goalsCount[category] = 0;
-				}
-
-				for (category = 0; category < 3; category++) {
-					uint16_t status_prio;
-
-					for (status_prio = 0; status_prio < 3; status_prio++) {
-						int16_t title_pending = 1;
-
-						/* -- Category-level mission status + complete cache --- */
-						uint16_t goal_status;
-						uint16_t cat_complete_cache;
-						const EMissionGoal* g;
-						const ECondStruct* a;
-						const ECondStruct* b;
-						int16_t fg_idx;
-
-						if (category == 0) {
-							goal_status = mission.primary_global;
-							cat_complete_cache = mission.primary_complete;
-						} else if (category == 1) {
-							goal_status = mission.secondary_global;
-							cat_complete_cache = mission.secondary_complete;
-						} else { /* category == 2 (bonus) */
-							goal_status = mission.bonus_global;
-							if (!showbonusgoals && goal_status != 1)
-								goal_status = 0;
-							cat_complete_cache = mission.bonus_complete;
-						}
-
-						g = &cut[category];
-						a = &g->subcond[0];
-						b = &g->subcond[1];
-
-						/* -- Category subconditions --------------------------- */
-						if (g->or_joined == 1) {
-							/* OR-joined pair: render on one line. */
-							if (a->cond == 9 || b->cond == 9) {
-								if (cat_complete_cache == 1 || goal_status != 1) {
-									if (cat_complete_cache == 1)
-										goal_status = 1;
-								} else {
-									goal_status = 4;
-								}
-							}
-							if (category == 2 && !showbonusgoals && (goal_status == 4 || goal_status == 2)) {
-								goal_status = 0;
-								if (status_prio == 2)
-									goalsCount[category]++;
-							}
-
-							if (goal_status == goalstatusorder[status_prio]) {
-								if (a->cond != 10 && a->cond != 0) {
-									{
-										festring_setcursor(0, cur_y);
-										if (outchar)
-											outchar('\n');
-										festring_setcursor(0, cur_y);
-										festring_settextcolor(0x46);
-										festring_outstringcenter(
-											((const uint8_t**)goaltitlestrings)[3u * category + status_prio]);
-										cur_y = (int16_t)(cur_y + fontheight);
-									}
-									title_pending = 0;
-									festring_setcursor(6, cur_y);
-									festring_settextcolor((uint8_t)(goalstatuscolor[status_prio] + 1));
-									cur_y = (int16_t)(cur_y + goals_outputgoal(a->id, a->cond, a->type,
-																			   goal_status, a->pct));
-									goalsCount[category]++;
-									if (status_prio == 2)
-										goalsCompletedCount[category]++;
-								}
-
-								if (b->cond != 10 && b->cond != 0) {
-									if (a->cond != 10 && a->cond != 0) {
-										/* Center the "OR" joiner on its own line. */
-										festring_setcursor(6, cur_y);
-										if (outchar)
-											outchar('\n');
-										festring_setcursor(6, cur_y);
-										festring_settextcolor(0x43);
-										festring_outstringcenter(
-											((const uint8_t**)goaloperatorstrings)[g->or_joined]);
-										cur_y = (int16_t)(cur_y + fontheight);
-									}
-									festring_setcursor(6, cur_y);
-									festring_settextcolor((uint8_t)(goalstatuscolor[status_prio] + 1));
-									cur_y = (int16_t)(cur_y + goals_outputgoal(b->id, b->cond, b->type,
-																			   goal_status, b->pct));
-									goalsCount[category]++;
-									if (status_prio == 2)
-										goalsCompletedCount[category]++;
-								}
-							}
-						} else {
-							/* Independent subconditions: evaluate + render each. */
-							uint16_t pri_calc =
-								(uint16_t)score_checkcondition(a->cond, a->type, a->id, a->pct, 0);
-							uint16_t sec_calc;
-
-							if (a->cond == 10)
-								pri_calc = 0;
-							if (a->cond == 9) {
-								if (cat_complete_cache == 1 || pri_calc != 1) {
-									if (cat_complete_cache == 1)
-										pri_calc = 1;
-								} else {
-									pri_calc = 4;
-								}
-							}
-							if (category == 2 && !showbonusgoals && (pri_calc == 4 || pri_calc == 2)) {
-								pri_calc = 0;
-								if (status_prio == 2)
-									goalsCount[category]++;
-							}
-
-							if (pri_calc == goalstatusorder[status_prio] && a->cond != 10 && a->cond != 0) {
-								{
-									festring_setcursor(0, cur_y);
-									if (outchar)
-										outchar('\n');
-									festring_setcursor(0, cur_y);
-									festring_settextcolor(0x46);
-									festring_outstringcenter(
-										((const uint8_t**)goaltitlestrings)[3u * category + status_prio]);
-									cur_y = (int16_t)(cur_y + fontheight);
-								}
-								title_pending = 0;
-								festring_setcursor(6, cur_y);
-								festring_settextcolor((uint8_t)(goalstatuscolor[status_prio] + 1));
-								cur_y = (int16_t)(cur_y + goals_outputgoal(a->id, a->cond, a->type, pri_calc,
-																		   a->pct));
-								goalsCount[category]++;
-								if (status_prio == 2)
-									goalsCompletedCount[category]++;
-							}
-
-							sec_calc = (uint16_t)score_checkcondition(b->cond, b->type, b->id, b->pct, 0);
-							if (b->cond == 10)
-								sec_calc = 0;
-							if (b->cond == 9) {
-								if (cat_complete_cache == 1 || sec_calc != 1) {
-									if (cat_complete_cache == 1)
-										sec_calc = 1;
-								} else {
-									sec_calc = 4;
-								}
-							}
-							if (category == 2 && !showbonusgoals && (sec_calc == 4 || sec_calc == 2)) {
-								sec_calc = 0;
-								if (status_prio == 2)
-									goalsCount[category]++;
-							}
-							goal_status = sec_calc;
-
-							if (sec_calc == goalstatusorder[status_prio] && b->cond != 10 && b->cond != 0) {
-								if (title_pending) {
-									{
-										festring_setcursor(0, cur_y);
-										if (outchar)
-											outchar('\n');
-										festring_setcursor(0, cur_y);
-										festring_settextcolor(0x46);
-										festring_outstringcenter(
-											((const uint8_t**)goaltitlestrings)[3u * category + status_prio]);
-										cur_y = (int16_t)(cur_y + fontheight);
-									}
-									title_pending = 0;
-								}
-								festring_setcursor(6, cur_y);
-								festring_settextcolor((uint8_t)(goalstatuscolor[status_prio] + 1));
-								cur_y = (int16_t)(cur_y + goals_outputgoal(b->id, b->cond, b->type, sec_calc,
-																		   b->pct));
-								goalsCount[category]++;
-								if (status_prio == 2)
-									goalsCompletedCount[category]++;
-							}
-						}
-
-						/* -- Per-FG goals in this (category, status_prio) cell - */
-						for (fg_idx = 0; fg_idx < mission_file_header.num_fg; fg_idx++) {
-							/* Watcom unaligned-dword pattern: binary reads
-							 * dword at fg.link_flag and shifts right 24, which
-							 * extracts the byte at offset +3 = `difficulty`. */
-							uint16_t fg_status;
-							uint16_t fg_cond;
-							uint8_t fg_pct;
-
-							if ((diffmask[mission.difficulty] & fgdiffmask[fg_array[fg_idx].difficulty]) == 0)
-								continue;
-
-							if (category == 0) {
-								fg_status = fgstatus[fg_idx].primary_status;
-								fg_cond = fg_array[fg_idx].pri_win_cond;
-								fg_pct = fg_array[fg_idx].pri_win_pct;
-							} else if (category == 1) {
-								fg_status = fgstatus[fg_idx].secondary_status;
-								fg_cond = fg_array[fg_idx].sec_win_cond;
-								fg_pct = fg_array[fg_idx].sec_win_pct;
-							} else { /* bonus */
-								fg_cond = fg_array[fg_idx].bonus_cond;
-								fg_status = fgstatus[fg_idx].fg_complete;
-								if (fg_array[fg_idx].bonus_points < 0)
-									fg_status = 0;
-								if (!showbonusgoals && (fg_status == 4 || fg_status == 2)) {
-									fg_status = 0;
-									if (status_prio == 2)
-										goalsCount[category]++;
-								}
-								fg_pct = fg_array[fg_idx].bonus_pct;
-							}
-
-							if (fg_cond == 9 && fgstatus[fg_idx].counts[FG_COUNT_HYPERSPACED] !=
-													fgstatus[fg_idx].counts[FG_COUNT_TOTAL]) {
-								if (cat_complete_cache == 1 || fg_status != 1) {
-									if (cat_complete_cache == 1)
-										fg_status = 1;
-								} else {
-									fg_status = 4;
-								}
-							}
-
-							if (fg_cond != 0 && fg_cond != 10 && fg_status == goalstatusorder[status_prio]) {
-								if (title_pending) {
-									{
-										festring_setcursor(0, cur_y);
-										if (outchar)
-											outchar('\n');
-										festring_setcursor(0, cur_y);
-										festring_settextcolor(0x46);
-										festring_outstringcenter(
-											((const uint8_t**)goaltitlestrings)[3u * category + status_prio]);
-										cur_y = (int16_t)(cur_y + fontheight);
-									}
-									title_pending = 0;
-								}
-								festring_setcursor(6, cur_y);
-								festring_settextcolor(goalstatuscolor[status_prio]);
-								cur_y = (int16_t)(cur_y + goals_outputgoal((uint16_t)fg_idx, fg_cond,
-																		   /*target_type=*/1, fg_status,
-																		   (uint16_t)percentcon[fg_pct]));
-								goalsCount[category]++;
-								if (status_prio == 2)
-									goalsCompletedCount[category]++;
-							}
-						}
-					}
-				}
+				cur_y = goals_renderlist(cur_y);
 
 				content_height = (int16_t)(cur_y - scroll_y - fontheight);
 
@@ -904,3 +910,86 @@ uint16_t goals_outputspeciesname(uint16_t species_idx, int16_t plural_flag) {
 	outchar(plural_flag ? 's' : ' ');
 	return wrap;
 }
+
+#ifdef TIE_MODERN
+/* ====================================================================
+ * goals_capturetext (port): the goals room's list as plain text
+ * ==================================================================== */
+
+static struct {
+	char* out;
+	size_t len;
+	size_t cap;
+	int16_t last_y;
+} goals_capture;
+
+static void goals_capture_put(char ch) {
+	if (goals_capture.len + 1 >= goals_capture.cap)
+		return;
+	if (ch == '\n') {
+		/* At most one blank line in a row, none at the start. */
+		if (goals_capture.len == 0 ||
+			(goals_capture.len >= 2 && goals_capture.out[goals_capture.len - 1] == '\n' &&
+			 goals_capture.out[goals_capture.len - 2] == '\n'))
+			return;
+	}
+	goals_capture.out[goals_capture.len++] = ch;
+	goals_capture.out[goals_capture.len] = '\0';
+}
+
+static void goals_capture_char(int ch) {
+	/* The room moves the cursor instead of printing line breaks. */
+	if (cursory != goals_capture.last_y) {
+		if (goals_capture.len && goals_capture.out[goals_capture.len - 1] != '\n')
+			goals_capture_put('\n');
+		goals_capture.last_y = cursory;
+	}
+	if (ch == '\n') {
+		goals_capture_put('\n');
+		return;
+	}
+	if (ch < 0x20 || ch >= 0x7F)
+		return;
+	/* A category title is centred; goal lines start at x 6. */
+	if ((goals_capture.len == 0 || goals_capture.out[goals_capture.len - 1] == '\n') && cursorx != 6)
+		goals_capture_put('\001');
+	goals_capture_put((char)ch);
+}
+
+size_t goals_capturetext(char* out, size_t capacity) {
+	if (!out || capacity == 0)
+		return 0;
+	out[0] = '\0';
+	if (!condstrings || !condverbstrings || !percentstrings || !goaltitlestrings || !goaloperatorstrings ||
+		!goal_of_string || !goal_ofall_string || !goal_group_string)
+		return 0;
+	const OutCharFunc saved_outchar = outchar;
+	const int16_t saved_x = cursorx, saved_y = cursory;
+	const uint8_t saved_color = textcolor;
+	const uint8_t saved_bonus = showbonusgoals;
+	int32_t saved_count[3], saved_completed[3];
+	memcpy(saved_count, goalsCount, sizeof saved_count);
+	memcpy(saved_completed, goalsCompletedCount, sizeof saved_completed);
+
+	goals_capture.out = out;
+	goals_capture.len = 0;
+	goals_capture.cap = capacity;
+	goals_capture.last_y = 0;
+	showbonusgoals = (uint8_t)(mission.mission_mode != 4);
+	cursorx = 0;
+	cursory = 0;
+	outchar = goals_capture_char;
+	(void)goals_renderlist(0);
+
+	outchar = saved_outchar;
+	cursorx = saved_x;
+	cursory = saved_y;
+	textcolor = saved_color;
+	showbonusgoals = saved_bonus;
+	memcpy(goalsCount, saved_count, sizeof saved_count);
+	memcpy(goalsCompletedCount, saved_completed, sizeof saved_completed);
+	while (goals_capture.len && (out[goals_capture.len - 1] == '\n' || out[goals_capture.len - 1] == ' '))
+		out[--goals_capture.len] = '\0';
+	return goals_capture.len;
+}
+#endif

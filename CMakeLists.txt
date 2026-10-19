@@ -374,6 +374,8 @@ set(TIE_RUNTIME_SOURCES
     src/tie_runtime/runtime/flight_task.h
     src/tie_runtime/runtime/flight_requests.c
     src/tie_runtime/runtime/flight_requests.h
+    src/tie_runtime/runtime/briefing_review.c
+    src/tie_runtime/runtime/briefing_review.h
     src/tie_runtime/runtime/shell_task.c
     src/tie_runtime/runtime/shell_task.h
     src/tie_runtime/timing/flight_clock.c

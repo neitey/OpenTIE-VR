@@ -18,6 +18,7 @@
 
 #include "tie/score.h" /* GoalTargetType enum (shared with SCORE) */
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -80,6 +81,13 @@ extern void* goalgenusstrings;    /* const char *[16] genus-category      */
 extern void* goalallfgstring;     /* const char *     "all FG"            */
 
 int32_t goals_missiongoalsroom(void);
+
+#ifdef TIE_MODERN
+/* PORT: the goals room's list (titles and goal lines with their live
+ * status) as plain text, one line per goal, for the VR in-flight briefing
+ * page. Only valid while a mission flight is loaded. Returns the length. */
+size_t goals_capturetext(char* out, size_t capacity);
+#endif
 
 #ifdef __cplusplus
 }

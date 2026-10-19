@@ -1,0 +1,22 @@
+# VR launch hold ("Pull the trigger to launch") and the in-flight Briefing page,
+# with the fake headset:
+#   run.sh <build> tools/vrtest/scripts/launch.txt <out> TIE_TEST_XR=1 XWA_HANGAR_PROMPT=1
+# The mission waits at its first frame (clock 0:00, prompt in the message bar) while
+# the head looks around; Esc + Q opens the settings' last tab (Briefing); the right
+# trigger then launches and the sim runs.
+0 mission HF1W
+0 wait scene flight timeout=4000
++20 capture held                 # held first frame, launch prompt
++2 head 30 -15                   # look around while holding
++8 capture held_look
++2 head 0 0
++2 key Escape                    # settings over the held flight
++6 key q                         # Q wraps to the last tab: Briefing
++8 capture briefing
++2 key Escape
++6 capture held_after_menu       # still held: the menu keys did not launch
++2 xrhand right 1                # pull the trigger
++4 xrhand right 0
++1 wait flying 5 timeout=2000
++1 capture launched
++2 quit

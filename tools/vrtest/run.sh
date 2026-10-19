@@ -16,13 +16,15 @@
 #   TIE98=".../STAR WARS Tie Fighter/remastered"
 #   TIE_TEST_TIE95=1            also pass the TIE95 collectors CD folder
 #   TIE_XWA_COCKPITS            XWA FlightModels folder (cockpit OPTs)
+#   XWA_HANGAR_PROMPT=0         no VR launch hold before a mission ("wait flying" would
+#                               never finish under TIE_TEST_XR=1); 1 tests the hold
 #
 # Every run gets a fresh HOME, so no pilot or config.yaml leaks between runs.
 # Exit status: the game's (0 ok, 3 a script 'wait' timed out, 4 killed by a signal from
 # outside, 124 wall timeout).
 set -eu
 if [ $# -lt 3 ]; then
-	sed -n '2,22p' "$0"
+	sed -n '2,24p' "$0"
 	exit 2
 fi
 BUILD=$(cd "$1" && pwd)
@@ -47,6 +49,8 @@ for assignment in "$@"; do
 		*) echo "run.sh: not VAR=value: $assignment" >&2; exit 2 ;;
 	esac
 done
+
+export XWA_HANGAR_PROMPT=${XWA_HANGAR_PROMPT:-0}
 
 if [ "${TIE_TEST_FAST:-1}" != 0 ]; then
 	# Cheap flight rendering for SwiftShader: no MSAA/SSAO/shadows/motion blur.
