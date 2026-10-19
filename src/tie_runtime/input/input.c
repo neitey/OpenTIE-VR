@@ -517,6 +517,7 @@ void TieInput_ReadJoystick(int port, int16_t* axes, int n_axes, uint16_t* out_bu
 		TieControllerMapping_Read(axes, n_axes, out_buttons);
 		if (pointer_buttons_blocked && out_buttons)
 			*out_buttons = 0;
+		TieFlightLaunch_FilterButtons(out_buttons);
 	} else {
 		if (axes && n_axes > 0)
 			memset(axes, 0, (size_t)n_axes * sizeof *axes);

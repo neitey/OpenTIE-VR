@@ -1,6 +1,7 @@
 #include "tie/msg.h"
 #ifdef TIE_MODERN
 #include "tie_runtime/input/vr_text.h"
+#include "tie_runtime/runtime/flight_requests.h"
 #include "tie_runtime/storage/string_table.h"
 #endif
 #include "tie/create.h"
@@ -223,7 +224,9 @@ void msg_messageprintf(uint16_t template_id) {
 	/* Walk the template string, expanding '*' and '&N' opcodes into body[]. */
 #ifdef TIE_MODERN
 	/* VR: prompts name the controller controls instead of keys. */
-	if (template_id == MSG_PAUSED && TieVrText_PauseMessage())
+	if (template_id == MSG_PAUSED && TieFlightLaunch_Message())
+		tpl = (const uint8_t*)TieFlightLaunch_Message();
+	else if (template_id == MSG_PAUSED && TieVrText_PauseMessage())
 		tpl = (const uint8_t*)TieVrText_PauseMessage();
 	else if (template_id == MSG_MISSILE_WARNING_PROMPT && TieVrText_MissileWarningMessage())
 		tpl = (const uint8_t*)TieVrText_MissileWarningMessage();
@@ -290,6 +293,8 @@ void msg_messageprintf(uint16_t template_id) {
 	/* VR: "Press ['T']" / "Hit [Space Bar]" in mission and system messages
 	 * -> the controller control (display text only; no-op off the headset). */
 	TieVrText_RewriteMessage(entry.body, sizeof entry.body);
+	if (template_id == MSG_PAUSED)
+		TieFlightLaunch_CenterBody(entry.body, sizeof entry.body);
 #endif
 
 	/* msg_type from the raw template prefix byte, clamped >=8 -> 6. */

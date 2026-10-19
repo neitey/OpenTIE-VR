@@ -156,7 +156,14 @@ static LandruTaskStepResult flight_mission_step(void* self) {
 		return LANDRU_TASK_STEP_CONTINUE;
 	}
 
-	return flight_step_frame();
+	const LandruTaskStepResult result = flight_step_frame();
+	/* VR launch hold: the first frame of a new mission is on screen. */
+	if (result != LANDRU_TASK_STEP_YIELD && !replayviewmode && !mission.end_flag &&
+		TieFlightLaunch_TakeArmed()) {
+		TieFlightLaunch_EnterHold();
+		return LANDRU_TASK_STEP_FRAME_COMPLETE;
+	}
+	return result;
 }
 
 static uint64_t flight_task_next_wake_delay_us(const void* self) {
@@ -208,6 +215,7 @@ void TieFlightRuntime_ResetTiming(void) {
 
 bool TieFlightRuntime_PrepareSimulator(int replay_mode) {
 	TieFlightRuntime_ResetTiming();
+	TieFlightLaunch_Arm(replay_mode == 0);
 
 	TieSnapshotBuilder_SetSceneKind(TIE_SCENE_FLIGHT_LOADING);
 	const bool display_active = replay_mode ? TieClassicDisplay_ActivateFlightMode((uint16_t)flightResolution)

@@ -9,6 +9,7 @@
  * pushes the corresponding task after tie_doframe returns. */
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -54,6 +55,29 @@ bool TieFlightRequest_ConsumeReplayViewer(void);
 void TieFlightPause_Enter(void);
 void TieFlightPause_Service(void);
 bool TieFlightPause_IsActive(void);
+
+/* VR launch hold, after OpenXWA-VR's "Press Any Key to Launch"
+ * (XWA_HANGAR_PROMPT): in the headset a mission would otherwise start
+ * while the player is still settling in. TieFlightRuntime_PrepareSimulator
+ * arms it for a mission flight (not film playback); the flight task takes
+ * the arm after the mission's first frame and enters the game's own pause
+ * with a launch prompt in the message bar (sim, mission clock and music
+ * stopped; the scene and cockpit keep rendering, so the player can look
+ * around). Any new key, controller button, trigger or click launches.
+ * Enabled = XWA_HANGAR_PROMPT (0 off, anything else on) or, unset, while
+ * a headset presents. */
+bool TieFlightLaunch_Enabled(void);
+void TieFlightLaunch_Arm(bool armed);
+bool TieFlightLaunch_TakeArmed(void);
+void TieFlightLaunch_EnterHold(void);
+bool TieFlightLaunch_HoldActive(void);
+/* Message-bar text for MSG_PAUSED while the hold is on, else NULL; and the
+ * centring pad applied to the expanded body (msg.c). */
+const char* TieFlightLaunch_Message(void);
+/* The trigger that launched does not also fire: joystick buttons read as
+ * released until they all are (TieInput_ReadJoystick). */
+void TieFlightLaunch_FilterButtons(uint16_t* buttons);
+void TieFlightLaunch_CenterBody(char* body, size_t size);
 
 #ifdef __cplusplus
 }
