@@ -108,6 +108,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
         Aeron_XrStereoCommitBackdrop
         Aeron_XrVirtualScreenGeometry
         Aeron_XrGetHand
+        Aeron_XrPointerHit
         Aeron_XrGetRenderModel
         Aeron_XrSetPointerEnabled
         Aeron_XrSetMenuKeys

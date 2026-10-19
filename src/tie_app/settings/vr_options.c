@@ -48,6 +48,10 @@ static const char* const k_fov_labels[] = { "Off", "Low", "Medium", "High" };
 static const char* const k_fov_values[] = { "0", "low", "medium", "high" };
 static const char* const k_voice_labels[] = { "Off", "Double-Tap Thumb Rest", "Hold Thumb Rest" };
 static const char* const k_voice_values[] = { "0", "doubletap", "hold" };
+static const char* const k_env_labels[] = { "Imperial Fleet", "Stars Only", "Off" };
+static const char* const k_env_values[] = { "1", "0", "off" };
+static const char* const k_env_bright_labels[] = { "Dim", "Medium", "Bright" };
+static const char* const k_env_bright_values[] = { "0.5", "0.8", "1.0" };
 static const char* const k_screen_labels[] = { "2.5 m", "3.2 m", "4 m" };
 static const char* const k_screen_values[] = { "2.5", "3.2", "4.0" };
 
@@ -68,6 +72,10 @@ static const TieVrOptionRow k_rows[] = {
 	{ "XWA_XR_VOICE", "Voice Commands", k_voice_labels, k_voice_values, 3, 1, false,
 	  "In flight: double-tap a thumb rest (or hold it), then speak, e.g. \"attack my target\", \"next target\", "
 	  "\"full throttle\", \"lasers to shields\", \"cover me\"." },
+	{ "XWA_XR_ENVIRONMENT", "Menu Scene", k_env_labels, k_env_values, 3, 0, false,
+	  "What surrounds the menu screen: a Star Destroyer and TIE fighters in space, or just stars." },
+	{ "XWA_XR_ENV_BRIGHTNESS", "Menu Scene Brightness", k_env_bright_labels, k_env_bright_values, 3, 1, false,
+	  NULL },
 	{ "AERON_XR_RESOLUTION_SCALE", "Resolution", k_res_labels, k_res_values, 4, 2, true, NULL },
 	{ "AERON_XR_REFRESH_RATE", "Refresh Rate", k_refresh_labels, k_refresh_values, 4, 0, true, NULL },
 	{ "XWA_XR_FOVEATION", "Foveation", k_fov_labels, k_fov_values, 4, 1, true,
@@ -77,7 +85,7 @@ static const TieVrOptionRow k_rows[] = {
 
 enum { TIE_VR_ROW_COUNT = (int)(sizeof k_rows / sizeof k_rows[0]) };
 /* Rows from here on apply after a restart (AERON_XR_RESOLUTION_SCALE ...). */
-enum { TIE_VR_FIRST_HEADSET_ROW = 10 };
+enum { TIE_VR_FIRST_HEADSET_ROW = 12 };
 
 static bool s_restart_needed;
 

@@ -628,6 +628,29 @@ int __wrap_Aeron_XrGetHand(int hand, AeronXrHand* out) {
 	return 1;
 }
 
+/* The right hand's aim ray on the fake virtual screen (2.1 m ahead, 2.1 m
+ * wide, 4:3), while the game has the pointer on (as the engine does). */
+int __real_Aeron_XrPointerHit(float out[3]);
+int __wrap_Aeron_XrPointerHit(float out[3]) {
+	if (!s_xr.on)
+		return __real_Aeron_XrPointerHit(out);
+	AeronXrHand hand;
+	if (s_xr.pointer != 1 || !out || !__wrap_Aeron_XrGetHand(1, &hand))
+		return 0;
+	static const float forward[3] = { 0.0f, 0.0f, -1.0f };
+	float dir[3];
+	TieTestXr_Rotate(hand.orientation, forward, dir);
+	if (dir[2] > -1.0e-4f)
+		return 0;
+	const float t = (-2.1f - hand.position[2]) / dir[2];
+	if (t <= 0.0f)
+		return 0;
+	out[0] = hand.position[0] + dir[0] * t;
+	out[1] = hand.position[1] + dir[1] * t;
+	out[2] = -2.1f;
+	return SDL_fabsf(out[0]) <= 1.05f && SDL_fabsf(out[1]) <= 1.05f * 1080.0f / 1440.0f;
+}
+
 /* ---- scripted controller input (TieTestXr_* below) ---- */
 
 static void TieTestXr_LogMode(const char* name, int* last, int value) {
@@ -837,6 +860,8 @@ int TieTestXr_EndFrame(const char* prefix) {
 				written += TieTestXr_SaveTarget(s_xr.hud[1], s_xr.eye_w, s_xr.eye_h, prefix, "hud_world", 0);
 			if (aux_used)
 				written += TieTestXr_SaveTarget(s_xr.hud[2], s_xr.eye_w, s_xr.eye_h, prefix, "hud_aux", 0);
+			if (c->beam_count > 0)
+				written += TieTestXr_SaveTarget(s_xr.beam, 128, 512, prefix, "beam", 0);
 			for (int w = 0; w < AERON_XR_PANEL_COUNT; ++w)
 				if (c->layer_count[w] || (w == AERON_XR_PANEL_CONSOLE && c->console) ||
 					(w == AERON_XR_PANEL_CARD && c->card))

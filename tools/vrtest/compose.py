@@ -8,7 +8,7 @@ usage: compose.py <capture prefix> [...]
 writes <prefix>_comp_left.png, <prefix>_comp_right.png and <prefix>_comp_sbs.png
 
 Approximations: blending in sRGB, nearest sampling, head-locked quads rigidly
-attached (no follow smoothing). Needs numpy and Pillow.
+attached (no follow smoothing), beams flat (no soft edge filtering). Needs numpy and Pillow.
 """
 import math
 import sys
@@ -119,7 +119,7 @@ def compose(prefix, eye_index, views, layers, images):
                 if kind == "hud_panel":
                     img = images.get("hud_aux" if int(kv.get("source", [0])[0]) == 1 else "hud")
                 elif kind == "beam":
-                    continue  # beam target is not captured
+                    img = images.get("beam")
                 else:
                     img = images.get(kind)
                 if img is None:
@@ -157,7 +157,7 @@ def main():
                 layers.append((tok[0], parse_kv(tok[1:])))
         images = {}
         for name in ("eye_left", "eye_right", "hud", "hud_world", "hud_aux", "console", "card", "card2", "frame",
-                     "labels", "window"):
+                     "labels", "window", "beam"):
             img = load("%s_%s.png" % (prefix, name))
             if img is not None:
                 images[name] = img
