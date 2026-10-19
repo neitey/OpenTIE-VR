@@ -25,7 +25,10 @@ set(TIE_APP_SOURCES
     setup/installation_ui.c
     setup/setup.c
     quest/quest_app.c
-    quest/quest_app.h)
+    quest/quest_app.h
+    test/test_harness.c
+    test/test_harness.h
+    test/test_wrap.c)
 if(ANDROID)
     list(APPEND TIE_APP_SOURCES quest/xr_tier.c quest/crash_report.c)
 endif()
@@ -69,6 +72,36 @@ else()
     target_compile_definitions(tie PRIVATE TIE_GPU_DEBUG_LABELS=0)
 endif()
 tie_enable_warnings(tie)
+
+# Headless test harness (src/tie_app/test): window capture and a fake XR
+# headset need link-time wraps (GNU ld / lld). Inert unless TIE_TEST_* is set.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
+    set(TIE_TEST_WRAPPED_SYMBOLS
+        SDL_ClaimWindowForGPUDevice
+        SDL_WaitAndAcquireGPUSwapchainTexture
+        SDL_SubmitGPUCommandBuffer
+        Aeron_XrIsPresenting
+        Aeron_XrIsUnfocused
+        Aeron_XrStereoBegin
+        Aeron_XrStereoPanelTarget
+        Aeron_XrStereoCommit
+        Aeron_XrStereoCommitHuds
+        Aeron_XrStereoCommitPanels
+        Aeron_XrStereoCommitConsole
+        Aeron_XrStereoCommitCard
+        Aeron_XrStereoCommitPanelLayer
+        Aeron_XrStereoCommitEyeOverlay
+        Aeron_XrStereoCommitEyeOverlayRect
+        Aeron_XrStereoCommitBeams
+        Aeron_XrStereoCommitBackdrop
+        Aeron_XrVirtualScreenGeometry
+        Aeron_XrGetHand
+        Aeron_XrGetRenderModel)
+    target_compile_definitions(tie PRIVATE TIE_TEST_WRAP=1)
+    foreach(symbol IN LISTS TIE_TEST_WRAPPED_SYMBOLS)
+        target_link_options(tie PRIVATE "LINKER:--wrap=${symbol}")
+    endforeach()
+endif()
 
 add_dependencies(tie flight_shaders)
 
