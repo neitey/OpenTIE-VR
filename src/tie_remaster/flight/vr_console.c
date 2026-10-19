@@ -4,6 +4,7 @@
  * the content is TIE Fighter's. */
 
 #include "tie_remaster/flight/vr_console.h"
+#include "tie_remaster/vr/vr_hands.h"
 
 #include "aeron/aeron.h"
 #include "aeron/log.h"
@@ -1777,8 +1778,8 @@ static void vw_update(const AeronXrView views[2]) {
 		if (!s_vw.grip_held)
 			return;
 		if (!was_held) {
-			/* A squeeze on a panel's handle is theirs. */
-			s_vw.vetoed = s_vc.grip_capture[hand] || s_vc.grip_capture_prev[hand] ||
+			/* A squeeze on a panel's handle or the flight stick is theirs. */
+			s_vw.vetoed = s_vc.grip_capture[hand] || s_vc.grip_capture_prev[hand] || TieVrHands_GripCaptured(hand) ||
 						  s_vc.lap.grab_hand == hand + 1 || s_vc.lap.hover_side[hand] ||
 						  s_vc.card.place.grab_hand == hand + 1 || s_vc.card.place.hover_side[hand];
 			s_vw.held_s = 0.0f;
@@ -2877,9 +2878,12 @@ void TieVrConsole_EndFrame(void) {
 		 * is not passed on to the game. */
 		const int trigger = s_vc.hands[h].captured || s_vp.captured[h] || (s_vw.open && h == s_vw.hand);
 		Aeron_XrCaptureTrigger(h, trigger);
-		s_vc.grip_capture_prev[h] = s_vc.grip_capture[h];
-		owned[h] = s_vc.grip_capture[h] != 0;
-		Aeron_XrCaptureGrip(h, s_vc.grip_capture[h]);
+		/* Grips at a panel's handle (vr_hands applies them with the flight
+		 * stick's in its EndFrame, which runs next). */
+		if (s_vc.grip_capture[h])
+			TieVrHands_CaptureGrip(h);
+		owned[h] = TieVrHands_GripCaptured(h) != 0;
+		s_vc.grip_capture_prev[h] = owned[h];
 		s_vc.grip_capture[h] = 0;
 	}
 	TieVrControls_SetConsoleState(s_vw.open != 0, owned);

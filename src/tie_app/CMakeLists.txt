@@ -112,7 +112,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
         Aeron_XrGetHand
         Aeron_XrGetRenderModel
         Aeron_XrCaptureTrigger
-        Aeron_XrCaptureGrip
         Aeron_XrSetPointerEnabled
         Aeron_XrSetMenuKeys
         Aeron_XrSetFlightButtons
@@ -123,7 +122,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
         Aeron_XrTakeMenuYPressed
         Aeron_XrThrottleLever
         Aeron_XrSetThrottleLever
-        Aeron_XrHapticPulse)
+        Aeron_XrHapticPulse
+        Aeron_XrSetVirtualStick
+        Aeron_XrCaptureGrip
+        Aeron_XrLocateRenderModel)
     target_compile_definitions(tie PRIVATE TIE_TEST_WRAP=1)
     foreach(symbol IN LISTS TIE_TEST_WRAPPED_SYMBOLS)
         target_link_options(tie PRIVATE "LINKER:--wrap=${symbol}")

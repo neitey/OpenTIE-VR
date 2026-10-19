@@ -50,6 +50,8 @@ static const char* const k_voice_labels[] = { "Off", "Double-Tap Thumb Rest", "H
 static const char* const k_voice_values[] = { "0", "doubletap", "hold" };
 static const char* const k_screen_labels[] = { "2.5 m", "3.2 m", "4 m" };
 static const char* const k_screen_values[] = { "2.5", "3.2", "4.0" };
+static const char* const k_hands_labels[] = { "Controllers", "Pilot Gloves", "Off" };
+static const char* const k_hands_values[] = { "controllers", "gloves", "off" };
 
 static const TieVrOptionRow k_rows[] = {
 	{ "TIE_XR_COCKPIT", "Cockpit", k_cockpit_labels, k_cockpit_values, 2, 0, false,
@@ -62,6 +64,13 @@ static const TieVrOptionRow k_rows[] = {
 	  "Lower makes the cockpit and ships feel bigger." },
 	{ "XWA_XR_DEPTH_BOOST", "Depth Boost", k_depth_labels, k_depth_values, 3, 0, false,
 	  "More stereo depth for ships at combat range." },
+	{ "XWA_XR_HANDS", "Hands", k_hands_labels, k_hands_values, 3, 0, false,
+	  "What your hands are in flight: the controllers, or flight gloves." },
+	{ "XWA_XR_CONTROLLER_LABELS", "Controller Labels", k_off_on, k_0_1, 2, 1, false,
+	  "Look at a controller, buttons towards you: labels show what each button does." },
+	{ "XWA_XR_FLIGHT_STICK", "Flight Stick", k_off_on, k_0_1, 2, 0, false,
+	  "A stick right of the seat: grab it with the right grip and fly with it (the thumbstick still works). "
+	  "The left grip moves it." },
 	{ "XWA_XR_AUTO_PAUSE", "Pause When Headset Is Off", k_off_on, k_0_1, 2, 1, false, NULL },
 	{ "AERON_XR_INVERT_PITCH", "Invert Pitch", k_off_on, k_0_1, 2, 0, false, NULL },
 	{ "AERON_XR_LEFT_HANDED", "Left-Handed Controls", k_off_on, k_0_1, 2, 0, false, NULL },
@@ -83,8 +92,6 @@ static const TieVrOptionRow k_rows[] = {
 };
 
 enum { TIE_VR_ROW_COUNT = (int)(sizeof k_rows / sizeof k_rows[0]) };
-/* Rows from here on apply after a restart (AERON_XR_RESOLUTION_SCALE ...). */
-enum { TIE_VR_FIRST_HEADSET_ROW = 13 };
 
 static bool s_restart_needed;
 
@@ -136,14 +143,16 @@ void TieVrOptions_Draw(AeronUiContext* ui) {
 	AeronUi_Header(ui, "Virtual Reality");
 	for (int i = 0; i < TIE_VR_ROW_COUNT; ++i) {
 		const TieVrOptionRow* row = &k_rows[i];
-		if (i == TIE_VR_FIRST_HEADSET_ROW) {
+		/* The rows that apply after a restart come last, under their own
+		 * header. */
+		if (row->restart && (i == 0 || !k_rows[i - 1].restart)) {
 			AeronUi_Spacer(ui, 8.0f);
 			AeronUi_Header(ui, "Headset (restart to apply)");
 		}
 		int index = TieVrOptions_Current(row);
 		if (AeronUi_Selector(ui, row->label, &index, row->labels, row->count))
 			TieVrOptions_Set(row, index);
-		if (row->help && i < TIE_VR_FIRST_HEADSET_ROW)
+		if (row->help && !row->restart)
 			AeronUi_Help(ui, row->help);
 		if (strcmp(row->key, "XWA_XR_CONSOLE") == 0) {
 			const char* pose = SDL_getenv("XWA_XR_CONSOLE_POSE");
@@ -159,6 +168,9 @@ void TieVrOptions_Draw(AeronUiContext* ui) {
 			TieVrOptions_Set(&k_rows[i], k_rows[i].default_index);
 		SDL_setenv_unsafe("XWA_XR_CONSOLE_POSE", "", 1);
 		TieQuest_SaveSetting("XWA_XR_CONSOLE_POSE", "");
+		/* The flight stick back to its own spot. */
+		SDL_unsetenv_unsafe("XWA_XR_STICK_POS");
+		TieQuest_SaveSetting("XWA_XR_STICK_POS", "");
 	}
 	if (s_restart_needed)
 		AeronUi_Error(ui, "Some changes will take effect after restarting the game.");

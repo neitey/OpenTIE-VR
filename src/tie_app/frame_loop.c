@@ -15,6 +15,7 @@
 #include "tie_app/settings/flight_options.h"
 #include "tie_app/settings/settings.h"
 #include "tie_remaster/remaster.h"
+#include "tie_remaster/vr/vr_hands.h"
 #include "tie_runtime/display/classic_display.h"
 #include "tie_runtime/display/classic_framebuffer.h"
 #include "tie_runtime/flight_assets/service.h"
@@ -114,6 +115,10 @@ static void TieFrameLoop_SubmitGameLayers(TieClassicOutputKind* previous_output_
 		TieClassicLayer_Submit(corrected_vga);
 	TieRemaster_Frame(snapshot, delta_us, paused);
 	TieFlightMarker_Submit(snapshot);
+	/* The VR flight stick was moved by hand: keep its spot. */
+	char stick_pos[64];
+	if (TieVrHands_TakeStickPlacement(stick_pos, (int)sizeof stick_pos))
+		TieQuest_SaveSetting("XWA_XR_STICK_POS", stick_pos);
 }
 
 static void TieFrameLoop_DiscoverControllers(const AeronInputSnapshot* input) {
@@ -226,7 +231,6 @@ void TieFrameLoop_Run(void) {
 		const TieSnapshot* snapshot = TieSnapshot_Current();
 		TieFrameLoop_SubmitGameLayers(&previous_output_kind, snapshot, &flight_options, delta_us,
 									  hotkey_frame.paused || menu_open);
-		TieVrConsole_EndFrame();
 		{
 			/* The player put the lap console somewhere new / the side panel
 			 * shows another tab: keep it. */

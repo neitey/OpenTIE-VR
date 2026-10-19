@@ -1,0 +1,19 @@
+# VR hands (run with TIE_TEST_XR=1; XWA_XR_HANDS=gloves for the gloves):
+# controllers + flight stick in view, labels of the right controller when
+# looked at, then the right hand takes the stick and pushes it forward/right.
+# Expect "xr vstick active=1 x=0.44 y=0.92" in the log and the view turning.
+0 mission HF1W
+0 xrpad
+0 wait flying 5 timeout=4000
++1 capture hands
++1 head -15 -40
++8 capture labels
++1 head 0 -35
++1 xrpose right 0.12 -0.46 -0.40 0 0
++3 xrhand right 0 1
++3 capture grabbed
++1 xrpose right 0.15 -0.46 -0.46 0 0
++12 capture pushed
++1 xrhand right 0 0
++4 capture released
++2 quit

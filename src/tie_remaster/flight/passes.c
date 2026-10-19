@@ -16,6 +16,7 @@
 #include "tie_remaster/flight/xr_stereo.h"
 #include "tie_remaster/gpu_debug.h"
 #include "tie_remaster/scene2d/srgb_math.h"
+#include "tie_remaster/vr/vr_hands.h"
 
 #include "aeron/aeron.h"
 #include "aeron/log.h"
@@ -925,6 +926,15 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 	/* Snapshot → mesh instances (HD only; classic geometry draws via
 	 * the BEFORE_OPAQUE hook instead). */
 	TieFlightRenderer_SceneSubmit(g, curr, view_proj, cull_cam->camera.pos, &mb);
+	/* VR: the player's hands (controllers or gloves) and the flight stick,
+	 * near geometry hanging off the seated head (the craft camera). */
+	g->xr_hands_valid = false;
+	if (xr) {
+		g->xr_hands_begin = AeronScene_Mark(g->scene);
+		TieVrHands_Submit(g->scene, cmd, &fcam.camera, TieFlightXr_UnitsPerMeter(), &g->xr_frame);
+		g->xr_hands_end = AeronScene_Mark(g->scene);
+		g->xr_hands_valid = true;
+	}
 	TieFlightPointLights_Submit(g->scene, &point_frame, true);
 	if (!TieFlightPointLights_ConfigureScene(g->scene))
 		return false;
@@ -1115,16 +1125,29 @@ static bool TieFlightRenderer_XrOutputEye(TieFlightRenderer* g, AeronCommandBuff
 	static const float tint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 	AeronScenePresentChain_Draw(chain, pass, Aeron_RenderTargetGetTexture(scene_target), g->sampler_linear,
 								bloom_tex, AeronSceneBloom_Intensity(), g->rt_w, g->rt_h, 1.0f, tint, 0);
+	/* The eye's alpha for the hands' overlay over the HUD layers. */
+	AeronDrawList2D* hands_alpha = TieVrHands_EyeAlpha(eye);
+	if (hands_alpha)
+		AeronDrawList_RenderIntoPass(hands_alpha, cmd, pass, target);
 	Aeron_EndRenderPass(pass);
 	return true;
+}
+
+/* Moves the near geometry (cockpit, hands) by `d` scene units: each eye's
+ * depth-boost shift keeps it at its real size. */
+static void TieFlightRenderer_XrShiftNear(TieFlightRenderer* g, const float d[3]) {
+	if (g->xr_near_valid)
+		AeronScene_TranslateRange(g->scene, &g->xr_near_begin, &g->xr_near_end, d);
+	if (g->xr_hands_valid)
+		AeronScene_TranslateRange(g->scene, &g->xr_hands_begin, &g->xr_hands_end, d);
 }
 
 bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cmd) {
 	if (!g || !cmd || !g->frame.curr || !g->xr_active || !g->frame.xr)
 		return false;
-	const bool shift_near = g->xr_near_valid && TieFlightXr_DepthBoost() != 1.0f;
+	const bool shift_near = (g->xr_near_valid || g->xr_hands_valid) && TieFlightXr_DepthBoost() != 1.0f;
 	if (shift_near)
-		AeronScene_TranslateRange(g->scene, &g->xr_near_begin, &g->xr_near_end, g->xr_near_shift[0]);
+		TieFlightRenderer_XrShiftNear(g, g->xr_near_shift[0]);
 	TIE_GPU_PUSH(cmd, "Flight scene, left eye");
 	bool ok = AeronScene_Render(g->scene, cmd) != 0 &&
 			  TieFlightRenderer_XrOutputEye(g, cmd, 0);
@@ -1132,6 +1155,7 @@ bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cm
 	if (ok) {
 		/* Same submissions, right eye camera; the right eye reuses the left
 		 * eye's shadow atlas (fitted to both eyes). Hooks read frame.fcam. */
+		TieVrHands_FinishRightEye(cmd); /* its hand mask, filled meanwhile */
 		TIE_GPU_PUSH(cmd, "Flight scene, right eye");
 		AeronScene_SetShadowReuse(g->scene, 1);
 		g->frame.fcam = g->xr_eyes[1];
@@ -1139,7 +1163,7 @@ bool TieFlightRenderer_RenderStereo(TieFlightRenderer* g, AeronCommandBuffer* cm
 			const float to_right[3] = { g->xr_near_shift[1][0] - g->xr_near_shift[0][0],
 										g->xr_near_shift[1][1] - g->xr_near_shift[0][1],
 										g->xr_near_shift[1][2] - g->xr_near_shift[0][2] };
-			AeronScene_TranslateRange(g->scene, &g->xr_near_begin, &g->xr_near_end, to_right);
+			TieFlightRenderer_XrShiftNear(g, to_right);
 		}
 		ok = AeronScene_SetCamera(g->scene, &g->xr_eyes[1].camera) && AeronScene_Render(g->scene, cmd) &&
 			 TieFlightRenderer_XrOutputEye(g, cmd, 1);

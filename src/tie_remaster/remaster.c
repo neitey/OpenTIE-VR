@@ -12,6 +12,7 @@
 #include "tie_remaster/flight/renderer.h"
 #include "tie_remaster/flight/vr_console.h"
 #include "tie_remaster/flight/xr_stereo.h"
+#include "tie_remaster/vr/vr_hands.h"
 #include "tie_remaster/integration/snapshot_adapter.h"
 #include "tie_remaster/scene2d/cursor.h"
 #include "tie_remaster/scene2d/cutscene.h"
@@ -795,6 +796,9 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 			  (TieCockpitRenderer_RenderXrTarget(flight->cockpit, cmd, xr->hud_target, snapshot, false) &&
 			   (!xr_split ||
 				TieCockpitRenderer_RenderXrTarget(flight->cockpit, cmd, xr->hud_world_target, snapshot, true))));
+		/* The controller labels' layer (vr_hands.h). */
+		if (ok)
+			TieVrHands_RenderLayers(cmd, xr);
 	} else if (ok) {
 		ok = TieFlightRenderer_RenderFrame(flight->renderer, cmd);
 	}
@@ -845,8 +849,8 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 		 * HUD was laid out for. Fixed: everything on one craft-fixed sheet. */
 		const int w = xr->hud_width, h = xr->hud_height;
 		AeronXrHudQuad hud;
+		AeronXrHudQuad hud_world;
 		if (xr_split) {
-			AeronXrHudQuad hud_world;
 			TieFlightXr_HudQuadForArea(&snapshot->camera, w, h, hud_area, 1, 0, &hud);
 			TieFlightXr_HudQuadForArea(&snapshot->camera, w, h, hud_area, 0, 1, &hud_world);
 			Aeron_XrStereoCommitHuds(&hud, &hud_world);
@@ -855,9 +859,18 @@ static bool TieRemaster_RenderFlightTarget(const TieSnapshot* snapshot, int32_t 
 									   TieFlightXr_HudLayout() == TIE_FLIGHT_XR_HUD_HELMET, 0, &hud);
 			Aeron_XrStereoCommit(&hud);
 		}
+		/* The hands in front of the HUD, the controller labels. */
+		TieVrHands_CommitLayers(&hud, xr_split ? &hud_world : NULL, xr);
+		/* The VR panels; the hands come out in front of them next frame. */
 		Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_CONSOLE, console_quads, console_n);
 		Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_CARD, panel_quads, panel_n);
 		Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_CARD2, wheel_quads, wheel_n);
+		for (int i = 0; i < console_n; ++i)
+			TieVrHands_AddPanelLayer(&console_quads[i]);
+		for (int i = 0; i < panel_n; ++i)
+			TieVrHands_AddPanelLayer(&panel_quads[i]);
+		for (int i = 0; i < wheel_n; ++i)
+			TieVrHands_AddPanelLayer(&wheel_quads[i]);
 	}
 	return true;
 }
@@ -1206,9 +1219,23 @@ void TieRemaster_BeginFrame(const AeronInputSnapshot* input) {
 	}
 }
 
+static bool TieRemaster_FrameBody(const TieSnapshot* snapshot, int32_t delta_us, bool paused);
+
 bool TieRemaster_Frame(const TieSnapshot* snapshot, int32_t delta_us, bool paused) {
 	if (!g_remaster.initialized)
 		return true;
+	TieVrHands_BeginFrame();
+	const bool ok = TieRemaster_FrameBody(snapshot, delta_us, paused);
+	/* The VR panels hand their grips to vr_hands (applied in its EndFrame)
+	 * and let go of what they did not show this frame. */
+	TieVrConsole_EndFrame();
+	/* Without a stereo flight frame (menus, flat flight) the hands hide and
+	 * let go of the flight stick. */
+	TieVrHands_EndFrame();
+	return ok;
+}
+
+static bool TieRemaster_FrameBody(const TieSnapshot* snapshot, int32_t delta_us, bool paused) {
 	if (delta_us > 0)
 		g_remaster.host_elapsed_us += (uint32_t)delta_us;
 	if (!TieRemaster_PrepareLoadingFlightAssets(snapshot) ||
@@ -1377,6 +1404,7 @@ void TieRemaster_Shutdown(void) {
 	if (!g_remaster.initialized)
 		return;
 
+	TieVrHands_Shutdown();
 	TieRemaster_ShutdownFlight();
 	TiePresentationCursor* cursor = &g_remaster.cursor;
 	if (cursor->target)

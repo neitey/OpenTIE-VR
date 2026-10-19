@@ -291,9 +291,14 @@ static struct {
 	int menu_latch[4]; /* A, B, X, Y */
 	float throttle;
 	float trigger[2], grip[2];
-	int hand_pose_set[2];
-	int capture_trigger[2], capture_grip[2];
+	/* xrpose: scripted hand poses (x, y, z, yaw, pitch), else the env/default */
 	float hand_pose[2][5];
+	int hand_pose_set[2];
+	/* Aeron_XrSetVirtualStick (the game's grabbable flight stick) */
+	int vstick_active;
+	float vstick[3];
+	int grip_captured[2];
+	int trigger_captured[2]; /* Aeron_XrCaptureTrigger, logged when it changes */
 } s_xr = { .pointer = -1, .menu_keys = -1, .flight_buttons = -1 };
 
 void TieTestXr_Enable(int eye_width, int eye_height) {
@@ -611,10 +616,10 @@ int __wrap_Aeron_XrGetHand(int hand, AeronXrHand* out) {
 	out->grip = s_xr.grip[h];
 	float p[5] = { hand ? 0.15f : -0.15f, -0.35f, -0.35f, hand ? 10.0f : -10.0f, 30.0f };
 	const char* env = SDL_getenv(hand ? "TIE_TEST_XR_RHAND" : "TIE_TEST_XR_LHAND");
-	if (env)
-		(void)SDL_sscanf(env, "%f,%f,%f,%f,%f", &p[0], &p[1], &p[2], &p[3], &p[4]);
 	if (s_xr.hand_pose_set[h])
 		memcpy(p, s_xr.hand_pose[h], sizeof p);
+	else if (env)
+		(void)SDL_sscanf(env, "%f,%f,%f,%f,%f", &p[0], &p[1], &p[2], &p[3], &p[4]);
 	const float d2r = 3.14159265f / 360.0f;
 	const float qy[4] = { 0, sinf(p[3] * d2r), 0, cosf(p[3] * d2r) };
 	const float qx[4] = { sinf(p[4] * d2r), 0, 0, cosf(p[4] * d2r) };
@@ -740,34 +745,62 @@ void TieTestXr_SetHandInput(int hand, float trigger, float grip) {
 	s_xr.grip[h] = grip;
 }
 
-/* Panel captures of a hand's trigger / grip: logged when they change. */
-static void TieTestXr_LogCapture(const char* what, int* last, int hand, int captured) {
-	if (hand < 0 || hand > 1 || last[hand] == (captured != 0))
-		return;
-	last[hand] = captured != 0;
-	printf("[tie-test] frame %llu: xr capture %s hand=%d %s\n", (unsigned long long)TieTest_Frame(), what, hand,
-		   captured ? "on" : "off");
-	fflush(stdout);
-}
-
-void __real_Aeron_XrCaptureTrigger(int hand, int captured);
-void __wrap_Aeron_XrCaptureTrigger(int hand, int captured) {
-	if (s_xr.on)
-		TieTestXr_LogCapture("trigger", s_xr.capture_trigger, hand, captured);
-	__real_Aeron_XrCaptureTrigger(hand, captured);
-}
-
-void __real_Aeron_XrCaptureGrip(int hand, int captured);
-void __wrap_Aeron_XrCaptureGrip(int hand, int captured) {
-	if (s_xr.on)
-		TieTestXr_LogCapture("grip", s_xr.capture_grip, hand, captured);
-	__real_Aeron_XrCaptureGrip(hand, captured);
-}
-
 void TieTestXr_SetHandPose(int hand, const float pose[5]) {
 	const int h = hand ? 1 : 0;
 	memcpy(s_xr.hand_pose[h], pose, sizeof s_xr.hand_pose[h]);
 	s_xr.hand_pose_set[h] = 1;
+}
+
+/* The game's flight stick: logged when grabbed, let go and moved. */
+void __real_Aeron_XrSetVirtualStick(int active, float x, float y, float roll);
+void __wrap_Aeron_XrSetVirtualStick(int active, float x, float y, float roll) {
+	if (s_xr.on) {
+		const float v[3] = { active ? x : 0.0f, active ? y : 0.0f, active ? roll : 0.0f };
+		if ((active != 0) != s_xr.vstick_active || fabsf(v[0] - s_xr.vstick[0]) > 0.02f ||
+			fabsf(v[1] - s_xr.vstick[1]) > 0.02f || fabsf(v[2] - s_xr.vstick[2]) > 0.02f) {
+			printf("[tie-test] frame %llu: xr vstick active=%d x=%.2f y=%.2f roll=%.2f\n",
+				   (unsigned long long)TieTest_Frame(), active != 0, (double)v[0], (double)v[1], (double)v[2]);
+			fflush(stdout);
+		}
+		s_xr.vstick_active = active != 0;
+		memcpy(s_xr.vstick, v, sizeof v);
+	}
+	__real_Aeron_XrSetVirtualStick(active, x, y, roll);
+}
+
+int TieTestXr_VirtualStick(float out[3]) {
+	if (out)
+		memcpy(out, s_xr.vstick, sizeof s_xr.vstick);
+	return s_xr.on && s_xr.vstick_active;
+}
+
+void __real_Aeron_XrCaptureGrip(int hand, int captured);
+void __wrap_Aeron_XrCaptureGrip(int hand, int captured) {
+	if (s_xr.on && hand >= 0 && hand < 2 && s_xr.grip_captured[hand] != (captured != 0)) {
+		s_xr.grip_captured[hand] = captured != 0;
+		printf("[tie-test] frame %llu: xr grip %d %s\n", (unsigned long long)TieTest_Frame(), hand,
+			   captured ? "captured" : "released");
+		fflush(stdout);
+	}
+	__real_Aeron_XrCaptureGrip(hand, captured);
+}
+
+void __real_Aeron_XrCaptureTrigger(int hand, int captured);
+void __wrap_Aeron_XrCaptureTrigger(int hand, int captured) {
+	if (s_xr.on && hand >= 0 && hand < 2 && s_xr.trigger_captured[hand] != (captured != 0)) {
+		s_xr.trigger_captured[hand] = captured != 0;
+		printf("[tie-test] frame %llu: xr trigger %d %s\n", (unsigned long long)TieTest_Frame(), hand,
+			   captured ? "captured" : "released");
+		fflush(stdout);
+	}
+	__real_Aeron_XrCaptureTrigger(hand, captured);
+}
+
+int __real_Aeron_XrLocateRenderModel(int hand, float position[3], float orientation[4], AeronXrRenderModelNode* nodes,
+									 uint32_t node_capacity);
+int __wrap_Aeron_XrLocateRenderModel(int hand, float position[3], float orientation[4], AeronXrRenderModelNode* nodes,
+									 uint32_t node_capacity) {
+	return s_xr.on ? 0 : __real_Aeron_XrLocateRenderModel(hand, position, orientation, nodes, node_capacity);
 }
 
 int __real_Aeron_XrGetRenderModel(int hand, AeronXrRenderModel* out);
@@ -913,6 +946,10 @@ void TieTestXr_SetHandInput(int hand, float trigger, float grip) {
 void TieTestXr_SetHandPose(int hand, const float pose[5]) {
 	(void)hand;
 	(void)pose;
+}
+int TieTestXr_VirtualStick(float out[3]) {
+	(void)out;
+	return 0;
 }
 
 #endif
