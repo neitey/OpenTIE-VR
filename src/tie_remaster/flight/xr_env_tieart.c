@@ -2465,7 +2465,10 @@ static void art_submit_sprites(AeronScene3D* scene, bool ships) {
 			const float b = art_env("XWA_XR_PILOT_BRIGHTNESS", 1.0f);
 			const float opacity = 0.85f * helmet;
 			const float tint[4] = { 0.78f * b * opacity, 0.55f * b * opacity, 0.45f * b * opacity, opacity };
-			const float h = 80.0f; /* the helmet itself about 60 degrees tall, looming as on the cover */
+			/* 80 degrees tall at XWA_XR_PILOT_SCALE 1; drawn at 0.65 (35 % smaller
+			 * on screen, not in angle). */
+			const float h = 2.0f * atanf(art_env("XWA_XR_PILOT_SCALE", 0.65f) * tanf(40.0f * 3.14159265f / 180.0f)) *
+							180.0f / 3.14159265f;
 			const float w = h * (float)s_art.tex_w[ART_TEX_PILOT] / (float)s_art.tex_h[ART_TEX_PILOT];
 			art_sky_rect(scene, ART_TEX_PILOT, 0.0f, art_env("XWA_XR_PILOT_PITCH", 16.0f), w, h, 0.0f, tint);
 		}
