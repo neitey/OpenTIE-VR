@@ -3,6 +3,9 @@
 #include "tie_app/config/keyboard_config.h"
 
 #include "aeron/log.h"
+#include "tie_app/midi_resources.h"
+
+#include <SDL3/SDL_platform_defines.h>
 
 #include <float.h>
 #include <math.h>
@@ -603,6 +606,21 @@ bool TieAppConfig_Load(AeronVfs* vfs, TieAppConfigState* state, char* error, siz
 		TieAppConfig_LogAeronError(&aeron_error, error, capacity);
 		goto done;
 	}
+#if defined(SDL_PLATFORM_ANDROID)
+	/* Quest: FluidSynth with the bundled GeneralUser GS (or the user's own
+	 * SoundFont in files/soundfonts) is the default synthesizer, not OPL3. */
+	{
+		char soundfont[1024];
+		const char* shipped_backend = AeronConfigFile_GetString(shipped, "audio.midi_backend", "");
+		if (strcmp(shipped_backend, "fm4_opl3") == 0 && TieMidiResources_DefaultSoundfont(soundfont, sizeof soundfont)) {
+			if (!AeronConfigFile_SetString(shipped, "audio.midi_backend", "fluidsynth", &aeron_error)) {
+				TieAppConfig_LogAeronError(&aeron_error, error, capacity);
+				goto done;
+			}
+			Aeron_LogInfo("tie.config", "default music synthesizer: FluidSynth with %s", soundfont);
+		}
+	}
+#endif
 	if (!TieAppConfig_CheckVersion(shipped, error, capacity) ||
 		!TieAppConfig_ValidateSchemaKeys(shipped, false, error, capacity) ||
 		!TieAppConfig_ParseComplete(shipped, &baseline_ssao, &baseline_shadows, &baseline_tonemap,
@@ -866,8 +884,11 @@ bool TieAppConfig_SetLaunchOptions(TieAppConfigState* state, const TieAppLaunchO
 		 options->model_source != TIE_FLIGHT_MODEL_SOURCE_REMASTERED) ||
 		(options->music_source != TIE_MUSIC_IMUSE && options->music_source != TIE_MUSIC_TIE98))
 		return TieAppConfig_ConfigError(error, capacity, "invalid launch settings");
+	char default_sc55[1024];
+	const char* sc55_directory =
+		TieMidiResources_EffectiveSc55Directory(options->sc55_rom_directory, default_sc55, sizeof default_sc55);
 	if (options->midi_backend == TIE_MIDI_BACKEND_SC55 && options->music_source == TIE_MUSIC_IMUSE &&
-		options->sc55_rom_directory[0] == '\0')
+		(!sc55_directory || sc55_directory[0] == '\0'))
 		return TieAppConfig_ConfigError(error, capacity,
 										"select an SC-55 ROM directory before closing settings");
 	if (!AeronConfigFile_Clone(state->user_document, &candidate, &aeron_error) ||

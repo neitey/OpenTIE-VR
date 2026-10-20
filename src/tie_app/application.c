@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <SDL3/SDL_platform_defines.h>
+
 #include "tie_app/application.h"
 #include "tie_app/quest/quest_app.h"
 #include "tie_app/test/test_harness.h"
@@ -66,6 +68,11 @@ static void TieApplication_WarnMidiFallback(const char* reason) {
 	char message[768];
 	snprintf(message, sizeof message, "%s\n\nThe OPL3 MIDI backend will be used for this session.", reason);
 	Aeron_LogWarn("tie.audio", "%s", message);
+#if defined(SDL_PLATFORM_ANDROID)
+	/* An Android dialog cannot be seen in the headset and would block the start. */
+	(void)button;
+	return;
+#endif
 	const AeronMessageBoxOptions options = {
 		.kind = AERON_MESSAGE_BOX_WARNING,
 		.title = "MIDI Synthesizer Warning",
@@ -293,29 +300,40 @@ int TieApplication_Run(const TieLaunchOptions* launch_options) {
 				  (double)app_config.requested.flight_model_opt_projectile_emissive_strength);
 
 	const char* soundfont_path = NULL;
+	char default_soundfont[1024];
 	ImuseNukedSc55Romset* sc55_romset = NULL;
 	TieMidiBackendKind effective_midi_backend = app_config.requested.music_source == TIE_MUSIC_IMUSE
 													? app_config.requested.midi_backend
 													: TIE_MIDI_BACKEND_NONE;
 	if (effective_midi_backend == TIE_MIDI_BACKEND_FLUIDSYNTH) {
-		if (!TieMidiResources_Soundfontvalidate(app_config.requested.fluidsynth_soundfont_file, config_error,
-												sizeof config_error)) {
-			TieApplication_WarnMidiFallback(config_error);
-			effective_midi_backend = TIE_MIDI_BACKEND_FM4_OPL3;
-		} else {
-			soundfont_path = app_config.requested.fluidsynth_soundfont_file;
-			Aeron_LogInfo("tie.audio", "using FluidSynth MIDI backend with %s", soundfont_path);
+		const char* configured_soundfont = app_config.requested.fluidsynth_soundfont_file;
+		if (!TieMidiResources_Soundfontvalidate(configured_soundfont, config_error, sizeof config_error)) {
+			/* A configured SoundFont that went away: the default one beats OPL3. */
+			if (configured_soundfont[0] && TieMidiResources_Soundfontvalidate("", NULL, 0)) {
+				Aeron_LogWarn("tie.audio", "%s; using the default SoundFont", config_error);
+				configured_soundfont = "";
+			} else {
+				TieApplication_WarnMidiFallback(config_error);
+				effective_midi_backend = TIE_MIDI_BACKEND_FM4_OPL3;
+			}
+		}
+		if (effective_midi_backend == TIE_MIDI_BACKEND_FLUIDSYNTH) {
+			soundfont_path = TieMidiResources_EffectiveSoundfont(configured_soundfont, default_soundfont,
+																 sizeof default_soundfont);
+			Aeron_LogInfo("tie.audio", "using FluidSynth MIDI backend with %s%s", soundfont_path,
+						  configured_soundfont[0] ? "" : " (default SoundFont)");
 		}
 	} else if (effective_midi_backend == TIE_MIDI_BACKEND_SC55) {
-		sc55_romset = imuse_nuked_sc55_romset_load(app_config.requested.sc55_rom_directory, config_error,
-												   sizeof config_error);
+		char default_sc55[1024];
+		const char* sc55_directory = TieMidiResources_EffectiveSc55Directory(
+			app_config.requested.sc55_rom_directory, default_sc55, sizeof default_sc55);
+		sc55_romset = imuse_nuked_sc55_romset_load(sc55_directory, config_error, sizeof config_error);
 		if (!sc55_romset) {
 			TieApplication_WarnMidiFallback(config_error);
 			effective_midi_backend = TIE_MIDI_BACKEND_FM4_OPL3;
 		} else {
 			const char* romset_name = imuse_nuked_sc55_romset_name(sc55_romset);
-			Aeron_LogInfo("tie.audio", "using Nuked SC-55 %s MIDI backend from %s", romset_name,
-						  app_config.requested.sc55_rom_directory);
+			Aeron_LogInfo("tie.audio", "using Nuked SC-55 %s MIDI backend from %s", romset_name, sc55_directory);
 		}
 	}
 	if (effective_midi_backend == TIE_MIDI_BACKEND_FM4_OPL3) {

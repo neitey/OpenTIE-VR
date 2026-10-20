@@ -595,3 +595,55 @@ func TestRealInstall(t *testing.T) {
 	}
 	t.Logf("install %+v; %d files, %d skipped; pilots %v", a.game, len(files), skipped, pilotNames(a.allPilotFiles()))
 }
+
+func TestUserSoundfonts(t *testing.T) {
+	dir := t.TempDir()
+	sf := filepath.Join(dir, soundfontsFolder)
+	if err := os.MkdirAll(sf, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"b.SF2", "a.sf2", "readme.txt"} {
+		if err := os.WriteFile(filepath.Join(sf, n), []byte("RIFF"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("OPENTIE_SOUNDFONT", "")
+	got := userSoundfonts(dir)
+	var rels []string
+	for _, f := range got {
+		rels = append(rels, f.Rel)
+		if destFolder(f.Rel) != soundfontsFolder {
+			t.Errorf("destFolder(%q) = %q", f.Rel, destFolder(f.Rel))
+		}
+	}
+	if want := []string{"soundfonts/a.sf2", "soundfonts/b.SF2"}; !reflect.DeepEqual(rels, want) {
+		t.Errorf("userSoundfonts = %v, want %v", rels, want)
+	}
+	t.Setenv("OPENTIE_SOUNDFONT", filepath.Join(sf, "b.SF2"))
+	if got := userSoundfonts(dir); len(got) != 1 || got[0].Rel != "soundfonts/b.SF2" {
+		t.Errorf("OPENTIE_SOUNDFONT: got %v", got)
+	}
+}
+
+func TestUserSc55Roms(t *testing.T) {
+	dir := t.TempDir()
+	if got := userSc55Roms(dir); len(got) != 0 {
+		t.Fatalf("no sc55 folder: got %v", got)
+	}
+	rom := filepath.Join(dir, sc55Folder)
+	if err := os.MkdirAll(rom, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"sc55_rom1.bin", "sc55_waverom1.bin", "desktop.ini"} {
+		if err := os.WriteFile(filepath.Join(rom, n), []byte{1, 2, 3}, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var rels []string
+	for _, f := range userSc55Roms(dir) {
+		rels = append(rels, f.Rel)
+	}
+	if want := []string{"sc55/sc55_rom1.bin", "sc55/sc55_waverom1.bin"}; !reflect.DeepEqual(rels, want) {
+		t.Errorf("userSc55Roms = %v, want %v", rels, want)
+	}
+}

@@ -130,7 +130,7 @@ func (a *app) remoteOwners(paths ...string) map[string]owner {
 
 // gameRoots are the folders below the files folder that the game files go
 // into; each must belong to the app.
-var gameRoots = []string{tie98Folder, tie95Folder, "XWA"}
+var gameRoots = []string{tie98Folder, tie95Folder, "XWA", soundfontsFolder, sc55Folder}
 
 // prepareAppFolder is step 6: make sure the app's game folders exist and
 // belong to the app. Folders made over USB are removed and made again by the

@@ -39,10 +39,17 @@ const (
 	tie95Folder    = "TIE95"            // TIE Fighter Collector's CD (1995, DOS)
 	cockpitsFolder = "XWA/FlightModels" // X-Wing Alliance cockpit models
 	pilotsFolder   = "pilot-import"
+	// The user's own SoundFont for the music (FluidSynth; the app also
+	// bundles GeneralUser GS): *.sf2 from a "soundfonts" folder next to the
+	// launcher, or the file in OPENTIE_SOUNDFONT. See src/tie_app/midi_resources.c.
+	soundfontsFolder = "soundfonts"
+	// The user's Roland SC-55 / SC-55mkII ROM dumps for the Nuked SC-55
+	// synthesizer: every file of a "sc55" folder next to the launcher.
+	sc55Folder = "sc55"
 )
 
 // appFolders are the folders the app makes (and owns).
-var appFolders = []string{tie98Folder, tie95Folder, cockpitsFolder}
+var appFolders = []string{tie98Folder, tie95Folder, cockpitsFolder, soundfontsFolder, sc55Folder}
 
 // prepareStep is the number of the "Preparing" step (1-based): "Try again"
 // after a failed final ownership check goes back to it.
@@ -84,6 +91,9 @@ func usage() string {
 Puts OpenTIE-VR and your own TIE Fighter game files on your VR headset
 (Meta Quest, Pico, Steam Frame) over a USB cable. If X-Wing Alliance is
 installed, its three TIE cockpit models are copied too (3D cockpits).
+SoundFonts (*.sf2) in a "soundfonts" folder next to the launcher are
+copied too (the game plays its music with the first one), and so are
+Roland SC-55 ROM dumps in a "sc55" folder (Settings > Audio > Roland SC-55).
 
 Usage:
   OpenTIE-VR-Launcher [options] [TIE Fighter folder]
