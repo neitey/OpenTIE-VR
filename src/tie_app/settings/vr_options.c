@@ -59,6 +59,9 @@ static const char* const k_hud_layout_values[] = { "cockpit", "helmet" };
 static const char* const k_hands_labels[] = { "Controllers", "Pilot Gloves", "Off" };
 static const char* const k_hands_values[] = { "controllers", "gloves", "off" };
 
+static const char* const k_curve_labels[] = { "Direct", "Medium", "Precise", "Very Precise" };
+static const char* const k_curve_values[] = { "1.0", "1.5", "2.0", "2.6" };
+
 static const TieVrOptionRow k_rows[] = {
 	{ "TIE_XR_COCKPIT", "Cockpit", k_cockpit_labels, k_cockpit_values, 2, 0, false,
 	  "X-Wing Alliance's 3D TIE cockpits need their cockpit files copied over by the PC launcher." },
@@ -82,6 +85,8 @@ static const TieVrOptionRow k_rows[] = {
 	  "A stick right of the seat: grab it with the right grip and fly with it (the thumbstick still works). "
 	  "The left grip moves it." },
 	{ "XWA_XR_AUTO_PAUSE", "Pause When Headset Is Off", k_off_on, k_0_1, 2, 1, false, NULL },
+	{ "TIE_XR_STICK_CURVE", "Stick Response", k_curve_labels, k_curve_values, 4, 2, false,
+	  "Precise: small thumbstick movements turn gently for fine aim; full deflection still turns at full rate." },
 	{ "AERON_XR_INVERT_PITCH", "Invert Pitch", k_off_on, k_0_1, 2, 0, false, NULL },
 	{ "AERON_XR_LEFT_HANDED", "Left-Handed Controls", k_off_on, k_0_1, 2, 0, false, NULL },
 	{ "XWA_XR_VOICE", "Voice Commands", k_voice_labels, k_voice_values, 3, 1, false,

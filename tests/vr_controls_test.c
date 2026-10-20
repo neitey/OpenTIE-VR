@@ -20,6 +20,8 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include <SDL3/SDL_stdinc.h>
 #include <string.h>
 
 static int g_failures;
@@ -247,7 +249,21 @@ static void TestXrProfile(void) {
 	const int16_t pitch = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_PITCH]);
 	const int16_t roll = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_ROLL]);
 	printf("XR pad: yaw %d pitch %d roll %d\n", yaw, pitch, roll);
-	CHECK(yaw > 50 && yaw < 70);
+	{
+		/* Linear (TIE_XR_STICK_CURVE=1): half deflection is half the axis. */
+		SDL_setenv_unsafe("TIE_XR_STICK_CURVE", "1", 1);
+		TieControllerMapping_Update(&g_input);
+		int16_t lin[3];
+		uint16_t lin_buttons = 0;
+		TieControllerMapping_Read(lin, 3, &lin_buttons);
+		const int16_t lin_yaw = TieInput_MapAxis(lin, 3, TieInput_Mapping()->axes[TIE_INPUT_AXIS_YAW]);
+		printf("XR pad, linear: yaw %d\n", lin_yaw);
+		CHECK(lin_yaw > 50 && lin_yaw < 70);
+		SDL_unsetenv_unsafe("TIE_XR_STICK_CURVE");
+	}
+	/* Default response curve (TIE_XR_STICK_CURVE=2): half deflection turns
+	 * gently, full deflection fully. */
+	CHECK(yaw > 30 && yaw < 45);
 	CHECK(pitch == -127);
 	CHECK(roll == -127);
 	CHECK(TieControllerMapping_Present());

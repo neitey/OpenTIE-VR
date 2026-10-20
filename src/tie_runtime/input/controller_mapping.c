@@ -571,6 +571,33 @@ static void SampleAnalog(size_t index, const AeronControllerSnapshot* d, TieInpu
  * profile, on the logical axes no connected configured model drives. Its
  * sticks steer only in flight (in the menus the right controller is the
  * pointer, and Landru would also move its cursor with them). */
+/* Response curve of the Touch thumbsticks in flight (TIE_XR_STICK_CURVE,
+ * default 2.0; 1 = linear): small deflections turn gently for fine aim, full
+ * deflection still gives the full turn rate. The thumbsticks' short travel
+ * makes a linear response feel twitchy next to a desk stick. */
+static void TieControllerMapping_XrStickCurve(int16_t* axes, const TieInputMapping* mapping) {
+	const char* env = getenv("TIE_XR_STICK_CURVE");
+	double exponent = env && env[0] ? atof(env) : 2.0;
+	if (!(exponent >= 1.0))
+		exponent = 1.0;
+	if (exponent > 4.0)
+		exponent = 4.0;
+	if (exponent == 1.0)
+		return;
+	for (int axis = 0; axis < 3; ++axis) {
+		/* Curved beyond the dead zone (the game's own and the binding's), so
+		 * the stick answers as soon as it leaves it, just gently. */
+		const double c = TieInput_AxisDeadzonePercent(mapping->axes[axis].deadzone) * 1.27;
+		const int v = axes[axis];
+		const double a = v < 0 ? -v : v;
+		if (a <= c || c >= 126.0)
+			continue;
+		const double t = (a - c) / (127.0 - c);
+		const int out = (int)(c + (127.0 - c) * pow(t > 1.0 ? 1.0 : t, exponent) + 0.5);
+		axes[axis] = (int16_t)(v < 0 ? -out : out);
+	}
+}
+
 static void SampleXrPad(const AeronInputSnapshot* input, unsigned owned_axes, TieInputMapping* mapping) {
 	const AeronControllerSnapshot* pad = NULL;
 	TieControllerXrDebug* debug = &g_controller.xr_debug;
@@ -613,6 +640,8 @@ static void SampleXrPad(const AeronInputSnapshot* input, unsigned owned_axes, Ti
 			owner_bindings[axis] = mapping->axes[axis];
 	}
 	SampleProfileAnalog(profile, AERON_CONTROLLER_KIND_GAMEPAD, pad, mapping, mask);
+	if (g_controller.xr_flight)
+		TieControllerMapping_XrStickCurve(g_controller.axes, mapping);
 	if (g_controller.xr_flight)
 		for (int axis = 0; axis < 3; ++axis) {
 			if ((owned_axes & (1u << axis)) && abs(owner_axes[axis]) >= abs(g_controller.axes[axis])) {
