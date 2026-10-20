@@ -30,6 +30,7 @@
 #include <SDL3/SDL_stdinc.h>
 
 #include "aeron/aeron.h"
+#include "aeron/asset/flight_model.h"
 #include "aeron/asset/opt_model.h"
 #include "aeron/audio.h"
 #include "aeron/log.h"
@@ -65,11 +66,18 @@ struct AeronSceneMesh* TieFlightXrEnv_LoadModel(AeronCommandBuffer* cmd,
  * (+ up), distance in metres from the viewer; with `view` the nose and up are
  * as the viewer sees the craft (x right, y away along the line of sight to
  * it, z up). */
-enum { ART_TI, ART_TF, ART_TB, ART_XW, ART_AW, ART_MODEL_COUNT };
+enum { ART_TI, ART_TF, ART_TB, ART_XW, ART_AW, ART_TA, ART_BW, ART_SSD, ART_ISD, ART_MODEL_COUNT };
 
 static const uint16_t k_art_species[ART_MODEL_COUNT] = {
-	TIE_SPECIES_TIE_INTERCEPTOR, TIE_SPECIES_TIE_FIGHTER, TIE_SPECIES_TIE_BOMBER,
-	TIE_SPECIES_X_WING,          TIE_SPECIES_A_WING,
+	TIE_SPECIES_TIE_INTERCEPTOR,
+	TIE_SPECIES_TIE_FIGHTER,
+	TIE_SPECIES_TIE_BOMBER,
+	TIE_SPECIES_X_WING,
+	TIE_SPECIES_A_WING,
+	TIE_SPECIES_TIE_ADVANCED,
+	TIE_SPECIES_B_WING,
+	TIE_SPECIES_SUPER_STAR_DESTROYER,
+	TIE_SPECIES_IMPERIAL_STAR_DESTROYER,
 };
 
 typedef struct ArtShip {
@@ -79,7 +87,7 @@ typedef struct ArtShip {
 	int view;
 } ArtShip;
 
-static const ArtShip k_ships[] = {
+static const ArtShip k_tie_ships[] = {
 	/* 0: the big Interceptor below the screen, coming at us, cockpit window
 	 * toward us, seen a little from above, turned slightly to our left. */
 	{ ART_TI, -8.0f, -40.0f, 12.0f, { -0.12f, -0.97f, 0.20f }, { 0.10f, -0.25f, 0.96f }, 1 },
@@ -106,13 +114,7 @@ static const ArtShip k_ships[] = {
 	{ ART_AW, 80.0f, -30.0f, 300.0f, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, 0 },
 	{ ART_AW, -80.0f, -30.0f, 300.0f, { -1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, 0 },
 };
-#define ART_SHIPS ((int)(sizeof k_ships / sizeof k_ships[0]))
-#define ART_XWING 5 /* the X-wing shot down on the cover */
-
-static int art_is_tie(int ship) {
-	const int m = k_ships[ship].model;
-	return m == ART_TI || m == ART_TF || m == ART_TB;
-}
+#define ART_MAX_SHIPS 16
 
 /* The passers: ships 8 and 9 fly straight in from far ahead, cross each
  * other's course PASS_CROSS_M ahead of the viewer and pass it at PASS_AT
@@ -127,18 +129,19 @@ static const float k_pass[ART_PASSERS][2] = { { -7.0f, 3.0f }, { 7.5f, -2.0f } }
 
 #define ART_RUNNERS 2
 #define ART_CHASE_SHIP 0 /* the Interceptor after the jinking X-wing */
-#define ART_FIRST_RUNNER 6
 /* Who runs from whom, and how it gets away: the break comes where it is
  * break_m from the viewer (0: never by distance) or end_s before the
  * cover's moment, whichever is first; a barrel roll of roll_s (0: none),
  * then a pull at pull_w rad/s toward `away` (viewer's x right, y ahead,
  * z up). */
-static const struct {
+typedef struct ArtRunnerDef {
 	int ship, chaser;
 	float lead_m, break_m, end_s, roll_s, pull_w;
 	float away[3];
 	int weave; /* jinks instead (see art_weave_pose) */
-} k_runners[ART_RUNNERS] = {
+} ArtRunnerDef;
+
+static const ArtRunnerDef k_runners[ART_RUNNERS] = {
 	/* The X-wing from the big Interceptor: jinking left and right three
 	 * times ahead of it, the Interceptor correcting after it, until it is
 	 * hit and disappears in the great explosion. */
@@ -151,7 +154,7 @@ static const struct {
 
 /* The explosion's centre behind the big Interceptor: yaw, pitch, metres,
  * diameter in metres. */
-static const float k_blast[4] = { -6.0f, -33.0f, 70.0f, 58.0f };
+static const float k_tie_blast[4] = { -6.0f, -33.0f, 70.0f, 58.0f };
 
 /* Frozen laser salvos: shooter -> target (ship indices) from the shooter's
  * guns, as spans of the shooter-target distance along its nose. */
@@ -160,6 +163,7 @@ typedef enum ArtGuns {
 	ART_GUNS_TIE,         /* two chin guns, green */
 	ART_GUNS_AWING,       /* two wingtip cannons, red */
 	ART_GUNS_INTERCEPTOR, /* TIE Interceptor: two wingtip guns, green */
+	ART_GUNS_BWING,       /* B-wing: the wing's cannons, red */
 } ArtGuns;
 
 typedef struct ArtSalvo {
@@ -169,7 +173,7 @@ typedef struct ArtSalvo {
 	int span_count;
 } ArtSalvo;
 
-static const ArtSalvo k_salvos[] = {
+static const ArtSalvo k_tie_salvos[] = {
 	/* The long green streaks of the Interceptor upper left. */
 	{ 1, 0, ART_GUNS_INTERCEPTOR, { { 0.05f, 1.10f } }, 1 },
 	/* The TIE fighter's fire to the left. */
@@ -177,7 +181,6 @@ static const ArtSalvo k_salvos[] = {
 	/* The bomber's streak to the upper right. */
 	{ 3, 0, ART_GUNS_TIE, { { 0.10f, 1.60f } }, 1 },
 };
-#define ART_SALVOS ((int)(sizeof k_salvos / sizeof k_salvos[0]))
 
 /* The animation: the seconds before the cover's moment, which then holds. */
 #define ART_ANIM_SECONDS 7.0f
@@ -192,6 +195,187 @@ static const float k_hits[3] = { ART_ANIM_SECONDS - 2.6f, ART_ANIM_SECONDS - 2.1
 /* The hunter's shots that miss before those. */
 static const float k_misses[2] = { ART_ANIM_SECONDS - 3.6f, ART_ANIM_SECONDS - 3.1f };
 
+/* ---- "Defender of the Empire" and "Balance of Power" ----------------------
+ * The same two box arts as OpenXWA-VR's ENV_DOEART and ENV_BOPART, with the
+ * same places and cover attitudes (fitted to the covers against renders of
+ * the models), flights, fire and timeline; TIE Fighter's own craft. */
+static const ArtShip k_doe_ships[] = {
+	/* 0: the big TIE Bomber lower right: coming at us, rolled with the pods'
+	 * axis falling to the right; its two green streaks down past us. */
+	{ ART_TB, 30.0f, -30.0f, 18.0f, { -0.20f, -0.95f, -0.25f }, { 0.52f, -0.32f, 0.79f }, 1 },
+	/* 1: the TIE Advanced upper right, from the front. */
+	{ ART_TA, 37.0f, 19.0f, 32.0f, { 0.51f, -0.82f, 0.26f }, { -0.35f, 0.07f, 0.93f }, 1 },
+	/* 2..5: the formation of four TIE Advanced on the left (2 leads). */
+	{ ART_TA, -27.0f, -3.0f, 42.0f, { -0.50f, -0.70f, -0.50f }, { 0.37f, -0.70f, 0.61f }, 1 },
+	{ ART_TA, -39.0f, -5.0f, 42.0f, { -0.50f, -0.70f, -0.50f }, { 0.37f, -0.70f, 0.61f }, 1 },
+	{ ART_TA, -39.0f, -18.0f, 42.0f, { -0.50f, -0.70f, -0.50f }, { 0.37f, -0.70f, 0.61f }, 1 },
+	{ ART_TA, -27.0f, -16.0f, 42.0f, { -0.50f, -0.70f, -0.50f }, { 0.37f, -0.70f, 0.61f }, 1 },
+	/* 6: the A-wing breaking up in the explosion. */
+	{ ART_AW, -11.0f, -33.0f, 58.0f, { -0.50f, -0.50f, -0.70f }, { -0.71f, 0.71f, 0.00f }, 1 },
+	/* 7, 8: two A-wings screaming past early in the fight (the passers). */
+	{ ART_AW, 80.0f, -30.0f, 300.0f, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, 0 },
+	{ ART_AW, -80.0f, -30.0f, 300.0f, { -1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, 0 },
+};
+static const float k_doe_blast[4] = { -12.0f, -32.0f, 64.0f, 48.0f };
+static const ArtSalvo k_doe_salvos[] = {
+	{ 0, 6, ART_GUNS_TIE, { { 0.04f, 0.26f } }, 1 },
+	{ 5, 6, ART_GUNS_TIE, { { 0.08f, 2.4f } }, 1 },
+};
+static const int k_doe_shooters[] = { 1, 2, 3, 4, 5, 6 };
+static const signed char k_doe_leader[] = { -1, -1, -1, 2, 2, 2, -1, -1, -1 };
+static const float k_doe_pass[2][2] = { { -7.0f, 3.0f }, { 7.5f, -2.0f } };
+
+static const ArtShip k_bop_ships[] = {
+	/* 0: the big B-wing upper left, from behind and below. */
+	{ ART_BW, -36.0f, 8.0f, 21.0f, { 0.15f, 0.95f, 0.26f }, { -0.44f, -0.18f, 0.88f }, 1 },
+	/* 1: the B-wing lower right, the same way. */
+	{ ART_BW, 35.0f, -33.0f, 30.0f, { 0.10f, 0.95f, 0.30f }, { -0.42f, -0.24f, 0.87f }, 1 },
+	/* 2: the A-wing at the bottom, from behind and above. */
+	{ ART_AW, 1.0f, -42.0f, 44.0f, { 0.00f, 0.94f, 0.35f }, { 0.00f, -0.35f, 0.94f }, 1 },
+	/* 3..5: the three TIE Advanced upper right (3 leads). */
+	{ ART_TA, 33.0f, 30.0f, 75.0f, { 0.10f, -0.95f, -0.30f }, { 0.10f, -0.29f, 0.95f }, 1 },
+	{ ART_TA, 21.0f, 26.0f, 75.0f, { 0.10f, -0.95f, -0.30f }, { 0.10f, -0.29f, 0.95f }, 1 },
+	{ ART_TA, 33.0f, 21.0f, 75.0f, { 0.10f, -0.95f, -0.30f }, { 0.10f, -0.29f, 0.95f }, 1 },
+	/* 6: a fourth TIE Advanced, shot down in the flak. */
+	{ ART_TA, 26.0f, 16.0f, 72.0f, { -0.30f, -0.90f, -0.30f }, { 0.00f, -0.30f, 0.95f }, 1 },
+	/* 7: a small B-wing by the dreadnought's stern. */
+	{ ART_BW, 38.0f, -12.0f, 130.0f, { 0.20f, 0.90f, 0.35f }, { -0.30f, -0.30f, 0.90f }, 1 },
+	/* 8: the Super Star Destroyer, its bow lower left (world attitude). */
+	{ ART_SSD, 1.0f, -29.0f, 3600.0f, { -0.89f, -0.09f, -0.44f }, { -0.33f, -0.55f, 0.77f }, 0 },
+	/* 9..11: Star Destroyers in the distance. */
+	{ ART_ISD, 41.0f, 1.0f, 9000.0f, { -0.70f, -0.70f, 0.00f }, { 0.0f, 0.0f, 1.0f }, 0 },
+	{ ART_ISD, 37.0f, 11.0f, 20000.0f, { -0.80f, -0.55f, 0.15f }, { 0.0f, 0.0f, 1.0f }, 0 },
+	{ ART_ISD, -32.0f, -24.0f, 16000.0f, { 0.90f, 0.30f, 0.10f }, { 0.0f, 0.0f, 1.0f }, 0 },
+};
+static const float k_bop_blast[4] = { 26.0f, 16.0f, 72.0f, 12.0f };
+static const float k_bop_flak[][4] = {
+	{ 19.0f, -18.0f, 160.0f, 14.0f },
+	{ 6.0f, -30.0f, 140.0f, 10.0f },
+	{ 40.0f, -11.0f, 150.0f, 9.0f },
+	{ -5.0f, -24.0f, 260.0f, 7.0f },
+};
+static const ArtSalvo k_bop_salvos[] = {
+	{ 0, 8, ART_GUNS_BWING, { { 0.002f, 0.012f }, { 0.018f, 0.028f } }, 2 },
+	{ 1, 8, ART_GUNS_BWING, { { 0.002f, 0.010f } }, 1 },
+};
+static const int k_bop_shooters[] = { 1, 2, 3, 4, 5, 7 };
+static const signed char k_bop_leader[] = { -1, -1, -1, -1, 3, 3, -1, -1, -1, -1, -1, -1 };
+
+/* The engines' glow (model metres, glow diameter, core colour), XWA's
+ * OPTs' engine glows (TIE Fighter's models carry none): the B-wing's four
+ * red ones, the A-wing's two white-yellow ones. */
+static const struct {
+	int model;
+	float p[3], size, rgb[3];
+} k_glows[] = {
+	{ ART_BW, { -0.51f, 2.96f, -0.48f }, 1.6f, { 1.0f, 0.04f, 0.04f } },
+	{ ART_BW, { 0.52f, 2.94f, -0.48f }, 1.6f, { 1.0f, 0.04f, 0.04f } },
+	{ ART_BW, { 0.52f, 2.96f, 0.46f }, 1.6f, { 1.0f, 0.04f, 0.04f } },
+	{ ART_BW, { -0.50f, 2.98f, 0.46f }, 1.6f, { 1.0f, 0.04f, 0.04f } },
+	{ ART_AW, { 1.59f, 3.82f, -0.33f }, 1.26f, { 1.0f, 1.0f, 1.0f } },
+	{ ART_AW, { -1.63f, 3.82f, -0.32f }, 1.26f, { 1.0f, 1.0f, 1.0f } },
+};
+
+/* ---- the scenes ------------------------------------------------------------
+ * Each played scene told which craft dies where, who shoots it, who runs,
+ * passes or flies in formation (OpenXWA-VR's EnvAnim). Ships 0..animated-1
+ * fly in (at most 8), passers fly straight past early on, the rest (capital
+ * ships) hold their places. */
+enum { ART_BACKDROP_VADER, ART_BACKDROP_PILOT, ART_BACKDROP_PLANET };
+
+typedef struct ArtScene {
+	const char* name;
+	const ArtShip* ships;
+	int count;
+	const ArtSalvo* salvos;
+	int salvo_count;
+	int victim;          /* shot down at the cover's moment */
+	const float* blast;  /* its explosion: yaw, pitch, metres, diameter */
+	float blast_tint[4]; /* the explosion's colour (1.5, 1.4, 1.3: as it is) */
+	int hunter;          /* who shoots it down (-1: a TIE fighter on the right) */
+	int chase_ship;      /* kept in the middle of the view while it chases (-1) */
+	const ArtRunnerDef* runners;
+	int runner_count;
+	int first_passer, passers;
+	const float (*pass)[2];
+	const int* shooters;
+	int shooter_count;
+	const signed char* leader; /* per ship: flies in formation on this one (-1) */
+	int animated;
+	int backdrop;
+} ArtScene;
+
+static const int k_tie_shooters[] = { 1, 2, 3, 0, 5 };
+static const ArtScene k_scenes[3] = {
+	{ "TIE Fighter",
+	  k_tie_ships,
+	  (int)(sizeof k_tie_ships / sizeof k_tie_ships[0]),
+	  k_tie_salvos,
+	  (int)(sizeof k_tie_salvos / sizeof k_tie_salvos[0]),
+	  5,
+	  k_tie_blast,
+	  { 1.5f, 1.4f, 1.3f, 1.0f },
+	  -1,
+	  ART_CHASE_SHIP,
+	  k_runners,
+	  ART_RUNNERS,
+	  ART_FIRST_PASSER,
+	  ART_PASSERS,
+	  k_pass,
+	  k_tie_shooters,
+	  5,
+	  NULL,
+	  8,
+	  ART_BACKDROP_VADER },
+	{ "Defender of the Empire",
+	  k_doe_ships,
+	  (int)(sizeof k_doe_ships / sizeof k_doe_ships[0]),
+	  k_doe_salvos,
+	  (int)(sizeof k_doe_salvos / sizeof k_doe_salvos[0]),
+	  6,
+	  k_doe_blast,
+	  { 1.5f, 1.4f, 1.3f, 1.0f },
+	  0,
+	  -1,
+	  NULL,
+	  0,
+	  7,
+	  2,
+	  k_doe_pass,
+	  k_doe_shooters,
+	  6,
+	  k_doe_leader,
+	  7,
+	  ART_BACKDROP_PILOT },
+	{ "Balance of Power",
+	  k_bop_ships,
+	  (int)(sizeof k_bop_ships / sizeof k_bop_ships[0]),
+	  k_bop_salvos,
+	  (int)(sizeof k_bop_salvos / sizeof k_bop_salvos[0]),
+	  6,
+	  k_bop_blast,
+	  { 1.7f, 0.75f, 0.95f, 1.0f },
+	  0,
+	  -1,
+	  NULL,
+	  0,
+	  0,
+	  0,
+	  NULL,
+	  k_bop_shooters,
+	  6,
+	  k_bop_leader,
+	  8,
+	  ART_BACKDROP_PLANET },
+};
+static const ArtScene* s_scene = &k_scenes[0];
+#define SC s_scene
+
+static int art_is_tie(int ship) {
+	const int m = SC->ships[ship].model;
+	return m == ART_TI || m == ART_TF || m == ART_TB || m == ART_TA;
+}
+
 /* ---- textures ---------------------------------------------------------- */
 
 enum {
@@ -199,6 +383,8 @@ enum {
 	ART_TEX_NEBULA, /* generated: the purple clouds */
 	ART_TEX_GLOW,   /* generated: a soft round glow (the blast's flash) */
 	ART_TEX_VADER,  /* vr/vader.rgba */
+	ART_TEX_PILOT,  /* vr/xvt_tie_pilot.rgba: the Defender of the Empire helmet */
+	ART_TEX_PLANET, /* generated: Balance of Power's brown world */
 	ART_TEX_LOGO,   /* vr/logo.rgba: above the screen, and the startup title */
 	ART_TEX_BLAST,  /* the explosion at its height (XPLO05C) */
 	ART_TEX_FIRE,   /* a cloud of fire (BOOM_N1A) */
@@ -273,7 +459,7 @@ static struct {
 	} models[ART_MODEL_COUNT];
 	AeronTexture* tex[ART_TEX_COUNT];
 	int tex_w[ART_TEX_COUNT], tex_h[ART_TEX_COUNT];
-	bool generated_tried, vader_tried, logo_tried, sprites_tried, sounds_tried;
+	bool generated_tried, vader_tried, pilot_tried, planet_tried, logo_tried, sprites_tried, sounds_tried;
 	bool logged;
 	float view_pos[3];
 	/* The fight. */
@@ -293,8 +479,8 @@ static struct {
 	float next_shot[8];
 	ArtRunner runner[ART_RUNNERS];
 	int hunter; /* the TIE that shoots the X-wing down (-1: none) */
-	float transform[ART_SHIPS][16];
-	bool hidden[ART_SHIPS];
+	float transform[ART_MAX_SHIPS][16];
+	bool hidden[ART_MAX_SHIPS];
 	bool posed;
 	/* TIE_XR_ENV_TIME: the moment played to. */
 	bool fixed;
@@ -397,7 +583,7 @@ static void art_pose_matrix(const float nose_in[3], const float up_in[3], const 
 
 /* World position (units) of ship i on the cover. */
 static void art_ship_pos(int i, float out[3]) {
-	const ArtShip* e = &k_ships[i];
+	const ArtShip* e = &SC->ships[i];
 	art_dir(e->yaw, e->pitch, out);
 	for (int a = 0; a < 3; ++a)
 		out[a] *= e->dist * ART_K;
@@ -405,7 +591,7 @@ static void art_ship_pos(int i, float out[3]) {
 
 /* Orthonormal nose / right / up of ship i on the cover. */
 static void art_ship_basis(int i, float n[3], float r[3], float u[3]) {
-	const ArtShip* e = &k_ships[i];
+	const ArtShip* e = &SC->ships[i];
 	float up[3];
 	memcpy(n, e->nose, 3 * sizeof(float));
 	memcpy(up, e->up, sizeof up);
@@ -602,6 +788,62 @@ static void art_make_nebula(AeronCommandBuffer* cmd) {
 		}
 	}
 	(void)art_make_texture(cmd, ART_TEX_NEBULA, px, NW, NH);
+	free(px);
+}
+
+/* Balance of Power's world: a mottled brown globe, cloud bands swirling
+ * across it, lit from the upper left, its right limb in night, a faint dark
+ * ring's line round it (OpenXWA-VR's, straight sRGB RGBA; made once). */
+static void art_make_planet(AeronCommandBuffer* cmd) {
+	enum { PN = 512 };
+	uint8_t* px = (uint8_t*)malloc((size_t)PN * PN * 4u);
+	if (!px)
+		return;
+	const float R = 0.80f;
+	float light[3] = { -0.80f, 0.40f, 0.45f }; /* x right, y up, z toward the viewer */
+	art_norm(light);
+	for (int y = 0; y < PN; ++y) {
+		for (int x = 0; x < PN; ++x) {
+			const float u = ((float)x + 0.5f) / (float)PN * 2.0f - 1.0f;
+			const float v = 1.0f - ((float)y + 0.5f) / (float)PN * 2.0f;
+			const float r = sqrtf(u * u + v * v);
+			float rgb[3] = { 0.0f, 0.0f, 0.0f }, a = 0.0f;
+			if (r < R) {
+				const float nx = u / R, ny = v / R, nz = sqrtf(fmaxf(0.0f, 1.0f - nx * nx - ny * ny));
+				/* Bands tilted a little, warped into swirls. */
+				const float bx = nx * 0.95f + ny * 0.31f, by = ny * 0.95f - nx * 0.31f;
+				const float w = art_fbm(bx * 2.5f + 3.0f, by * 2.5f, 51, 5);
+				const float band = 0.5f + 0.5f * sinf(by * 9.0f + w * 6.0f);
+				const float d = art_fbm(bx * 6.0f + w * 2.0f, by * 6.0f - w, 57, 5);
+				const float m = fminf(fmaxf(0.45f * band + 0.55f * d, 0.0f), 1.0f);
+				static const float dark[3] = { 0.20f, 0.12f, 0.08f }, light_c[3] = { 0.62f, 0.46f, 0.36f },
+								   pale[3] = { 0.78f, 0.66f, 0.58f };
+				const float lit_dot = nx * light[0] + ny * light[1] + nz * light[2];
+				const float lit = fmaxf(0.0f, lit_dot) * 0.95f + 0.03f;
+				for (int c = 0; c < 3; ++c) {
+					float al = dark[c] + (light_c[c] - dark[c]) * m;
+					al += (pale[c] - al) * fmaxf(0.0f, d - 0.62f) * 2.0f;
+					rgb[c] = al * lit;
+				}
+				a = fminf(1.0f, (R - r) * (float)PN * 0.5f);
+			}
+			/* The ring's thin dark line just outside the limb (and its glint on
+			 * the lit side). */
+			const float ring = expf(-powf((r - 0.86f) / 0.006f, 2.0f));
+			if (ring > 0.01f && r >= R) {
+				const float lit = fmaxf(0.0f, -(u / r) * 0.8f + (v / r) * 0.3f);
+				rgb[0] = 0.10f + 0.25f * lit;
+				rgb[1] = 0.08f + 0.18f * lit;
+				rgb[2] = 0.10f + 0.20f * lit;
+				a = 0.55f * ring;
+			}
+			uint8_t* p = &px[((size_t)y * PN + x) * 4];
+			for (int c = 0; c < 3; ++c)
+				p[c] = (uint8_t)(art_linear_to_srgb(fminf(1.0f, rgb[c])) * 255.0f + 0.5f);
+			p[3] = (uint8_t)(fminf(fmaxf(a, 0.0f), 1.0f) * 255.0f + 0.5f);
+		}
+	}
+	(void)art_make_texture(cmd, ART_TEX_PLANET, px, PN, PN);
 	free(px);
 }
 
@@ -826,10 +1068,17 @@ static void art_flight_pose(int ship, float t, float pos[3], float n[3], float u
 
 static float art_speed(int ship) {
 	float v = 70.0f; /* m/s */
-	if (k_ships[ship].model == ART_TI)
+	const int m = SC->ships[ship].model;
+	if (m == ART_TI)
 		v = 80.0f;
-	else if (k_ships[ship].model == ART_TB)
+	else if (m == ART_TB)
 		v = 55.0f;
+	else if (m == ART_TA)
+		v = 85.0f;
+	else if (m == ART_BW)
+		v = 55.0f;
+	else if (m == ART_AW && SC != &k_scenes[0])
+		v = 80.0f;
 	else if (!art_is_tie(ship))
 		v = 62.0f;
 	return v * art_env("XWA_XR_TIEART_SPEED", 1.0f) * ART_K;
@@ -908,7 +1157,7 @@ static float art_path_score(int ship) {
 		if (i >= 8)
 			steep += fmaxf(fabsf(n[2]) - 0.5f, 0.0f);
 		/* The X-wing's chaser: the chase right in the middle of the view. */
-		if (ship == ART_CHASE_SHIP && i >= 7 && i <= 30)
+		if (ship == SC->chase_ship && i >= 7 && i <= 30)
 			out_of_view += 2.0f * (fabsf(yaw) + fabsf(pitch + 6.0f));
 	}
 	/* Snap rolls look wrong: more than about 2 rad/s costs. */
@@ -921,23 +1170,31 @@ static float art_path_score(int ship) {
  * away: a barrel roll (a roll round a small helix, the nose along the path
  * all the way) if it has one, then a pull out of the forward view. */
 static int art_runner_of(int ship) {
-	for (int r = 0; r < ART_RUNNERS; ++r)
-		if (k_runners[r].ship == ship)
+	for (int r = 0; r < SC->runner_count; ++r)
+		if (SC->runners[r].ship == ship)
 			return r;
 	return -1;
 }
 
+/* The ship `ship` flies in formation on (-1: none). */
+static int art_leader_of(int ship) {
+	return SC->leader && ship >= 0 && ship < SC->animated ? SC->leader[ship] : -1;
+}
+
 static void art_runner_plan(void) {
 	const float T = ART_ANIM_SECONDS;
-	for (int r = 0; r < ART_RUNNERS; ++r) {
+	for (int r = 0; r < ART_RUNNERS; ++r)
+		s_art.runner[r].ok = 0;
+	for (int r = 0; r < SC->runner_count && r < ART_RUNNERS; ++r) {
 		ArtRunner* rn = &s_art.runner[r];
-		const int chaser = k_runners[r].chaser;
+		const ArtRunnerDef* const kr = &SC->runners[r];
+		const int chaser = kr->chaser;
 		rn->ok = 0;
-		if (ART_SHIPS <= k_runners[r].ship || !s_art.anim_fl[chaser].v)
+		if (SC->count <= kr->ship || !s_art.anim_fl[chaser].v)
 			continue;
 		const float v = s_art.anim_fl[chaser].v;
-		const float lead = k_runners[r].lead_m * ART_K / v;
-		if (k_runners[r].weave) {
+		const float lead = kr->lead_m * ART_K / v;
+		if (kr->weave) {
 			rn->chaser = chaser;
 			rn->lead = lead;
 			rn->v = v;
@@ -946,9 +1203,9 @@ static void art_runner_plan(void) {
 			rn->ok = 1;
 			continue;
 		}
-		float tb = T - lead - k_runners[r].end_s;
+		float tb = T - lead - kr->end_s;
 		const float break_m =
-			k_runners[r].break_m * (r == 0 ? art_env("XWA_XR_RUNNER_BREAK_M", 130.0f) / 130.0f : 1.0f);
+			kr->break_m * (r == 0 ? art_env("XWA_XR_RUNNER_BREAK_M", 130.0f) / 130.0f : 1.0f);
 		for (float t = 0.0f; break_m > 0.0f && t < tb; t += 0.02f) {
 			float p[3], nn[3], uu[3];
 			art_flight_pose(chaser, t + lead, p, nn, uu);
@@ -961,16 +1218,16 @@ static void art_runner_plan(void) {
 		rn->lead = lead;
 		rn->tb = fmaxf(tb, 0.0f);
 		rn->v = v;
-		rn->roll_time = k_runners[r].roll_s;
+		rn->roll_time = kr->roll_s;
 		rn->helix = 3.0f * ART_K;
 		art_flight_pose(chaser, rn->tb + lead, rn->pb, rn->nb, rn->ub);
-		const float* away = k_runners[r].away;
+		const float* away = kr->away;
 		const float along = art_dot(away, rn->nb);
 		for (int a = 0; a < 3; ++a)
 			rn->pull_up[a] = away[a] - rn->nb[a] * along;
 		if (!art_norm(rn->pull_up))
 			memcpy(rn->pull_up, rn->ub, sizeof rn->pull_up);
-		rn->pull_w = k_runners[r].pull_w;
+		rn->pull_w = kr->pull_w;
 		rn->pull_bank = art_roll(rn->ub, rn->pull_up, rn->nb);
 		rn->flyby_done = 0;
 		rn->ok = 1;
@@ -1025,13 +1282,15 @@ static void art_runner_pose(int r, float t, float pos[3], float n[3], float u[3]
 }
 
 static void art_paths(void) {
-	const int count = ART_SHIPS < 8 ? ART_SHIPS : 8;
+	const int count = SC->count < SC->animated ? SC->count : SC->animated;
+	const int victim = SC->victim;
 	s_art.anim_paths = 1; /* art_pose follows anim_fl from here */
 	static float scores[8][ART_CANDIDATES];
 	for (int i = 0; i < count; ++i) {
 		int best = 0;
-		if (art_runner_of(i) >= 0)
-			continue; /* flies after its chaser (art_runner_plan) */
+		s_art.next_shot[i] = 1.2f + 0.27f * (float)i;
+		if (art_runner_of(i) >= 0 || art_leader_of(i) >= 0)
+			continue; /* flies after its chaser (art_runner_plan) or on its leader */
 		for (int c = 0; c < ART_CANDIDATES; ++c) {
 			art_candidate(i, c);
 			scores[i][c] = art_path_score(i);
@@ -1039,22 +1298,21 @@ static void art_paths(void) {
 				best = c;
 		}
 		art_candidate(i, best);
-		s_art.next_shot[i] = 1.2f + 0.27f * (float)i;
 	}
-	/* The X-wing's killer: a TIE fighter (any TIE when there is none). It and
-	 * the X-wing take the paths, among their good ones, on which its guns bear
-	 * best on the X-wing while it hits it. */
+	/* The victim's killer: the scene's, or a TIE fighter (any TIE when there
+	 * is none). It and the victim take the paths, among their good ones, on
+	 * which its guns bear best on the victim while it hits it. */
 	s_art.hunter = -1;
 	art_runner_plan();
-	if (count <= ART_XWING)
+	if (count <= victim)
 		return;
 	int fighters = 0;
 	for (int i = 0; i < count; ++i)
-		fighters += i != ART_XWING && k_ships[i].model == ART_TF;
+		fighters += i != victim && SC->ships[i].model == ART_TF;
 	/* Each one's best few paths only. */
 	enum { TOP = 24 };
 	int top[8][TOP];
-	for (int i = 0; i < count && i < ART_FIRST_RUNNER; ++i) {
+	for (int i = 0; i < count; ++i) {
 		for (int j = 0; j < TOP; ++j) {
 			top[i][j] = -1;
 			for (int c = 0; c < ART_CANDIDATES; ++c) {
@@ -1068,22 +1326,27 @@ static void art_paths(void) {
 	}
 	float best = -1e9f;
 	int best_h = -1, best_hc = 0, best_xc = 0;
-	for (int h = 0; h < count && h < ART_FIRST_RUNNER; ++h) {
-		/* The TIE fighter on the right (any TIE when there is none). */
-		if (h == ART_XWING || !art_is_tie(h) || (fighters && k_ships[h].model != ART_TF) ||
-			(fighters > 1 && k_ships[h].yaw <= 0.0f))
+	for (int h = 0; h < count; ++h) {
+		if (h == victim || art_runner_of(h) >= 0 || art_leader_of(h) >= 0)
 			continue;
+		if (SC->hunter >= 0) {
+			if (h != SC->hunter)
+				continue;
+		} else if (!art_is_tie(h) || (fighters && SC->ships[h].model != ART_TF) ||
+				   (fighters > 1 && SC->ships[h].yaw <= 0.0f)) {
+			continue; /* the TIE fighter on the right (any TIE when there is none) */
+		}
 		for (int hj = 0; hj < TOP; ++hj) {
 			const int hc = top[h][hj];
 			art_candidate(h, hc);
 			for (int xj = 0; xj < TOP; ++xj) {
-				const int xc = top[ART_XWING][xj];
-				art_candidate(ART_XWING, xc);
+				const int xc = top[victim][xj];
+				art_candidate(victim, xc);
 				float miss = 0.0f, range = 0.0f;
 				for (int q = 0; q < 3; ++q) {
 					float hp[3], hn[3], hu[3], xp[3], xn[3], xu[3], dir[3];
 					art_pose(h, k_hits[q] - 0.15f, hp, hn, hu);
-					art_pose(ART_XWING, k_hits[q], xp, xn, xu);
+					art_pose(victim, k_hits[q], xp, xn, xu);
 					for (int a = 0; a < 3; ++a)
 						dir[a] = xp[a] - hp[a];
 					range += art_len(dir) / ART_K;
@@ -1092,7 +1355,7 @@ static void art_paths(void) {
 				}
 				miss /= 3.0f;
 				range /= 3.0f;
-				const float score = scores[h][hc] + scores[ART_XWING][xc] - 1.5f * miss -
+				const float score = scores[h][hc] + scores[victim][xc] - 1.5f * miss -
 									(range > 150.0f ? (range - 150.0f) * 0.3f : 0.0f);
 				if (score > best) {
 					best = score;
@@ -1111,13 +1374,13 @@ static void art_paths(void) {
 	{
 		int own = 0;
 		for (int c = 0; c < ART_CANDIDATES; ++c)
-			own = scores[ART_XWING][c] > scores[ART_XWING][own] ? c : own;
-		art_candidate(ART_XWING, own);
+			own = scores[victim][c] > scores[victim][own] ? c : own;
+		art_candidate(victim, own);
 	}
 	if (best_h >= 0) {
 		s_art.hunter = best_h;
 		art_candidate(best_h, best_hc);
-		art_candidate(ART_XWING, best_xc);
+		art_candidate(victim, best_xc);
 	}
 }
 
@@ -1183,7 +1446,7 @@ static float art_weave(float t) {
 /* The offset (world units) from its base path at t: chased = 0 for the
  * runner, 1 for its chaser. */
 static void art_weave_offset(int r, int chased, float t, float out[3]) {
-	const int chaser = k_runners[r].chaser;
+	const int chaser = SC->runners[r].chaser;
 	const float lead = chased ? 0.0f : s_art.runner[r].lead;
 	float p[3], n[3], u[3], side[3];
 	art_flight_pose(chaser, t + lead, p, n, u);
@@ -1201,18 +1464,18 @@ static void art_weave_offset(int r, int chased, float t, float out[3]) {
 	if (!chased) {
 		/* Onto the explosion's centre as it starts. */
 		float b[3], at[3], an[3], au[3];
-		art_dir(k_blast[0], k_blast[1], b);
+		art_dir(SC->blast[0], SC->blast[1], b);
 		art_flight_pose(chaser, ART_BOOM_AT + lead, at, an, au);
 		const float w = art_smoother((t - (ART_BOOM_AT - 2.2f)) / 2.2f);
 		for (int a = 0; a < 3; ++a) {
-			b[a] = s_art.view_pos[a] + b[a] * k_blast[2] * ART_K;
+			b[a] = s_art.view_pos[a] + b[a] * SC->blast[2] * ART_K;
 			out[a] += (b[a] - at[a]) * w;
 		}
 	}
 }
 
 static void art_weave_pose(int r, int chased, float t, float pos[3], float n[3], float u[3]) {
-	const int chaser = k_runners[r].chaser;
+	const int chaser = SC->runners[r].chaser;
 	const float lead = chased ? 0.0f : s_art.runner[r].lead;
 	const float h = 0.02f;
 	float b0[3], b1[3], b2[3], o0[3], o1[3], o2[3], bn[3], bu[3], tn[3], tu[3];
@@ -1270,8 +1533,8 @@ static void art_weave_pose(int r, int chased, float t, float pos[3], float n[3],
 
 /* The runner whose chaser `ship` is (weaving after it), or -1. */
 static int art_weave_chaser_of(int ship) {
-	for (int r = 0; r < ART_RUNNERS; ++r)
-		if (k_runners[r].weave && k_runners[r].chaser == ship && s_art.runner[r].ok)
+	for (int r = 0; r < SC->runner_count && r < ART_RUNNERS; ++r)
+		if (SC->runners[r].weave && SC->runners[r].chaser == ship && s_art.runner[r].ok)
 			return r;
 	return -1;
 }
@@ -1279,7 +1542,7 @@ static int art_weave_chaser_of(int ship) {
 /* A passer's pose: a straight line through its passing point, level, the
  * nose along it. */
 static void art_passer_pose(int ship, float t, float pos[3], float n[3], float u[3]) {
-	const float* at = k_pass[ship - ART_FIRST_PASSER];
+	const float* at = SC->pass[ship - SC->first_passer];
 	/* Heading toward and past the viewer, its x through 0 at the crossing. */
 	float d[3] = { at[0] / ART_PASS_CROSS_M, -1.0f, 0.0f };
 	art_norm(d);
@@ -1294,18 +1557,54 @@ static void art_passer_pose(int ship, float t, float pos[3], float n[3], float u
 }
 
 static int art_is_passer(int ship) {
-	return ship >= ART_FIRST_PASSER && ship < ART_FIRST_PASSER + ART_PASSERS;
+	return SC->passers > 0 && ship >= SC->first_passer && ship < SC->first_passer + SC->passers;
+}
+
+/* A formation member's pose: its leader's, the formation (the offset and the
+ * turn from the leader as on the cover) kept in the leader's frame. */
+static void art_follower_pose(int ship, int leader, float t, float pos[3], float n[3], float u[3]) {
+	float lp[3], ln[3], lu[3], lr[3];
+	float cp[3], cn[3], cr[3], cu[3], fp[3], fn[3], fr[3], fu[3];
+	art_pose(leader, t, lp, ln, lu);
+	art_cross(ln, lu, lr);
+	art_ship_pos(leader, cp);
+	art_ship_basis(leader, cn, cr, cu);
+	art_ship_pos(ship, fp);
+	art_ship_basis(ship, fn, fr, fu);
+	float off[3], ob[3], nb[3], ub[3];
+	for (int a = 0; a < 3; ++a)
+		off[a] = fp[a] - cp[a];
+	/* In the leader's frame on the cover (right, nose, up). */
+	ob[0] = art_dot(off, cr);
+	ob[1] = art_dot(off, cn);
+	ob[2] = art_dot(off, cu);
+	nb[0] = art_dot(fn, cr);
+	nb[1] = art_dot(fn, cn);
+	nb[2] = art_dot(fn, cu);
+	ub[0] = art_dot(fu, cr);
+	ub[1] = art_dot(fu, cn);
+	ub[2] = art_dot(fu, cu);
+	for (int a = 0; a < 3; ++a) {
+		pos[a] = lp[a] + lr[a] * ob[0] + ln[a] * ob[1] + lu[a] * ob[2];
+		n[a] = lr[a] * nb[0] + ln[a] * nb[1] + lu[a] * nb[2];
+		u[a] = lr[a] * ub[0] + ln[a] * ub[1] + lu[a] * ub[2];
+	}
 }
 
 static void art_pose(int ship, float t, float pos[3], float n[3], float u[3]) {
-	if (s_art.anim_paths && art_is_passer(ship) && ship < ART_SHIPS && t < ART_ANIM_SECONDS) {
+	if (s_art.anim_paths && art_is_passer(ship) && ship < SC->count && t < ART_ANIM_SECONDS) {
 		art_passer_pose(ship, t, pos, n, u);
 		return;
 	}
-	if (s_art.anim_paths && ship < 8 && t < ART_ANIM_SECONDS) {
+	if (s_art.anim_paths && ship < SC->animated && t < ART_ANIM_SECONDS) {
+		const int leader = art_leader_of(ship);
+		if (leader >= 0 && leader != ship) {
+			art_follower_pose(ship, leader, t, pos, n, u);
+			return;
+		}
 		const int r = art_runner_of(ship);
 		if (r >= 0) {
-			if (k_runners[r].weave) {
+			if (SC->runners[r].weave) {
 				float rr[3];
 				art_ship_basis(ship, n, rr, u);
 				art_ship_pos(ship, pos);
@@ -1335,7 +1634,7 @@ static void art_flight_pose(int ship, float t, float pos[3], float n[3], float u
 	float r[3];
 	art_ship_basis(ship, n, r, u);
 	art_ship_pos(ship, pos);
-	if (!s_art.anim_paths || ship >= 8 || t >= ART_ANIM_SECONDS)
+	if (!s_art.anim_paths || ship >= SC->animated || t >= ART_ANIM_SECONDS)
 		return;
 	if (art_runner_of(ship) >= 0)
 		return; /* runners have no flight of their own */
@@ -1430,7 +1729,7 @@ static void art_hunter_shot(float before, float t, float at, float miss_m) {
 	if (h < 0)
 		return;
 	float hp[3], hn[3], hu[3], x[3], xn[3], xu[3];
-	art_pose(ART_XWING, at, x, xn, xu);
+	art_pose(SC->victim, at, x, xn, xu);
 	art_pose(h, at, hp, hn, hu);
 	const float dx[3] = { x[0] - hp[0], x[1] - hp[1], x[2] - hp[2] };
 	const float flight = art_len(dx) / ART_K / ART_BOLT_SPEED;
@@ -1451,16 +1750,16 @@ static void art_hunter_shot(float before, float t, float at, float miss_m) {
 		const float len = art_len(d) / ART_K;
 		art_norm(d);
 		/* Gone as they strike (or fly on past for a miss). */
-		art_spawn_bolt(p, d, miss_m != 0.0f ? 1.2f : len / ART_BOLT_SPEED, 1);
+		art_spawn_bolt(p, d, miss_m != 0.0f ? 1.2f : len / ART_BOLT_SPEED, art_is_tie(h));
 	}
-	es_play(ES_TIE_LASER, pos, 18.0f, 1.0f, 1.0f);
+	es_play(art_is_tie(h) ? ES_TIE_LASER : ES_REBEL_LASER, pos, 18.0f, 1.0f, 1.0f);
 }
 
 /* The engines (fading out once the fight holds) and the fly-bys. */
 static void es_update_craft(float t, float dt) {
 	const float T = ART_ANIM_SECONDS;
 	const float hum = t < T ? 1.0f : 1.0f - art_smooth((t - T) / 1.5f);
-	for (int i = 0; i < ART_SHIPS && i < 8; ++i) {
+	for (int i = 0; i < SC->count && i < SC->animated; ++i) {
 		if (!art_is_tie(i))
 			continue;
 		float pos[3], n[3], u[3];
@@ -1506,9 +1805,9 @@ static void art_animate(float dt, bool skip) {
 		if (s_art.anim_t < ART_BOOM_AT) {
 			/* Jumped past the blast: still heard. */
 			float p[3];
-			art_dir(k_blast[0], k_blast[1], p);
+			art_dir(SC->blast[0], SC->blast[1], p);
 			for (int a = 0; a < 3; ++a)
-				p[a] *= k_blast[2] * ART_K;
+				p[a] *= SC->blast[2] * ART_K;
 			es_play(ES_BOOM, p, 60.0f, 1.0f, 1.0f);
 		}
 		s_art.anim_t = T;
@@ -1516,14 +1815,14 @@ static void art_animate(float dt, bool skip) {
 	const float before = s_art.anim_t;
 	s_art.anim_t = fminf(s_art.anim_t + dt, T + 60.0f);
 	const float t = s_art.anim_t;
-	for (int i = 0; i < ART_SHIPS; ++i) {
+	for (int i = 0; i < SC->count && i < ART_MAX_SHIPS; ++i) {
 		float pos[3], n[3], u[3];
 		art_pose(i, t, pos, n, u);
 		art_pose_matrix(n, u, pos, s_art.transform[i]);
 		/* The runner is gone by the cover's moment. */
 		const int r = art_runner_of(i);
 		s_art.hidden[i] =
-			r >= 0 && (t >= T || !s_art.runner[r].ok || (k_runners[r].weave && t >= ART_BOOM_AT + 0.12f));
+			r >= 0 && (t >= T || !s_art.runner[r].ok || (SC->runners[r].weave && t >= ART_BOOM_AT + 0.12f));
 		/* The passers are gone once well past the viewer. */
 		if (art_is_passer(i) && t >= ART_PASS_AT + 1.5f)
 			s_art.hidden[i] = true;
@@ -1531,34 +1830,34 @@ static void art_animate(float dt, bool skip) {
 	s_art.posed = true;
 	/* Their scream just before they pass. */
 	if (before < ART_PASS_AT - 0.35f && t >= ART_PASS_AT - 0.35f) {
-		for (int ship = ART_FIRST_PASSER; ship < ART_FIRST_PASSER + ART_PASSERS && ship < ART_SHIPS; ++ship) {
+		for (int ship = SC->first_passer; ship < SC->first_passer + SC->passers && ship < SC->count; ++ship) {
 			float pos[3], n[3], u[3];
 			art_pose(ship, ART_PASS_AT, pos, n, u);
-			es_play(ES_AW_FLYBY, pos, 30.0f, 1.1f, ship == ART_FIRST_PASSER ? 1.0f : 1.06f);
+			es_play(ES_AW_FLYBY, pos, 30.0f, 1.1f, ship == SC->first_passer ? 1.0f : 1.06f);
 		}
 	}
-	for (int r = 0; r < ART_RUNNERS; ++r) {
+	for (int r = 0; r < SC->runner_count && r < ART_RUNNERS; ++r) {
 		if (s_art.runner[r].ok && !s_art.runner[r].flyby_done && t >= s_art.runner[r].tb + 0.25f && t < T) {
 			float pos[3], n[3], u[3];
-			art_pose(k_runners[r].ship, t, pos, n, u);
+			art_pose(SC->runners[r].ship, t, pos, n, u);
 			s_art.runner[r].flyby_done = 1;
 			es_play(ES_XW_FLYBY, pos, 30.0f, 1.2f, 1.0f);
 		}
 	}
 	/* Bolts: the cover's shooters, the big Interceptor and the X-wing fire
 	 * along their noses in bursts until the cover's moment. */
-	static const int shooters[5] = { 1, 2, 3, 0, 5 };
-	for (int si = 0; si < 5 && t < T - ART_SALVO_SECONDS - 0.1f; ++si) {
-		const int ship = shooters[si];
-		if ((ship == ART_XWING && t > ART_BOOM_AT) ||
+	for (int si = 0; si < SC->shooter_count && t < T - ART_SALVO_SECONDS - 0.1f; ++si) {
+		const int ship = SC->shooters[si];
+		if ((ship == SC->victim && t > ART_BOOM_AT) ||
 			(ship == s_art.hunter && t > k_misses[0] - 1.0f && t < ART_BOOM_AT))
 			continue; /* the hunter's shots at the X-wing are its own */
 		if (before < s_art.next_shot[ship] && t >= s_art.next_shot[ship]) {
 			float pos[3], n[3], u[3], r[3];
 			art_pose(ship, t, pos, n, u);
 			art_cross(n, u, r);
-			const int green = ship != ART_XWING;
-			const float spread = green ? 0.7f : 5.2f;
+			const int green = art_is_tie(ship);
+			const int model = SC->ships[ship].model;
+			const float spread = green ? 0.7f : model == ART_AW ? 3.3f : model == ART_BW ? 1.6f : 5.2f;
 			es_play(green ? ES_TIE_LASER : ES_REBEL_LASER, pos, 18.0f, 0.8f, 0.96f + 0.08f * (float)(si & 1));
 			for (int g = -1; g <= 1; g += 2) {
 				float p[3];
@@ -1592,10 +1891,10 @@ static void art_animate(float dt, bool skip) {
 	/* The cover's salvos, the X-wing's hits, the blast. */
 	const float salvo_at = T - ART_SALVO_SECONDS;
 	if (before < salvo_at && t >= salvo_at) {
-		for (int si = 0; si < ART_SALVOS; ++si) {
+		for (int si = 0; si < SC->salvo_count; ++si) {
 			float pos[3], n[3], u[3];
-			art_pose(k_salvos[si].shooter, t, pos, n, u);
-			const ArtGuns g = k_salvos[si].guns;
+			art_pose(SC->salvos[si].shooter, t, pos, n, u);
+			const ArtGuns g = SC->salvos[si].guns;
 			es_play(g == ART_GUNS_TIE || g == ART_GUNS_INTERCEPTOR ? ES_TIE_LASER : ES_REBEL_LASER, pos,
 					18.0f, 1.0f, 1.0f);
 		}
@@ -1603,15 +1902,15 @@ static void art_animate(float dt, bool skip) {
 	for (int h = 0; h < 3; ++h) {
 		if (before < k_hits[h] && t >= k_hits[h]) {
 			float pos[3], n[3], u[3];
-			art_pose(ART_XWING, t, pos, n, u);
+			art_pose(SC->victim, t, pos, n, u);
 			es_play(ES_HIT0 + h, pos, 30.0f, 0.8f, 1.0f);
 		}
 	}
 	if (before < ART_BOOM_AT && t >= ART_BOOM_AT) {
 		float p[3];
-		art_dir(k_blast[0], k_blast[1], p);
+		art_dir(SC->blast[0], SC->blast[1], p);
 		for (int a = 0; a < 3; ++a)
-			p[a] *= k_blast[2] * ART_K;
+			p[a] *= SC->blast[2] * ART_K;
 		es_play(ES_BOOM, p, 60.0f, 1.0f, 1.0f);
 		es_play(ES_HIT2, p, 60.0f, 0.7f, 0.8f);
 	}
@@ -1619,7 +1918,7 @@ static void art_animate(float dt, bool skip) {
 	if (before < T && t >= T) {
 		int nearest = -1;
 		float nd = 1e30f, np[3] = { 0.0f, 0.0f, 0.0f };
-		for (int i = 0; i < ART_SHIPS && i < 8; ++i) {
+		for (int i = 0; i < SC->count && i < SC->animated; ++i) {
 			float p[3], n[3], u[3];
 			if (!art_is_tie(i))
 				continue;
@@ -1880,13 +2179,12 @@ static void art_beam(AeronScene3D* scene, const float a[3], const float b[3], fl
 
 static const float k_red[4] = { 2.4f, 0.35f, 0.25f, 1.0f };
 static const float k_green[4] = { 0.4f, 2.4f, 0.45f, 1.0f };
-static const float k_white[4] = { 1.5f, 1.4f, 1.3f, 1.0f };
 
 /* The cover's salvos along their shooters' noses; `reach` 0..1: how far the
  * bolts have come out of the guns yet (fired into the cover's moment). */
 static void art_submit_salvos(AeronScene3D* scene, float reach) {
-	for (int si = 0; si < ART_SALVOS; ++si) {
-		const ArtSalvo* sv = &k_salvos[si];
+	for (int si = 0; si < SC->salvo_count; ++si) {
+		const ArtSalvo* sv = &SC->salvos[si];
 		float from[3], to[3], n[3], r[3], u[3];
 		art_ship_pos(sv->shooter, from);
 		art_ship_pos(sv->target, to);
@@ -1905,6 +2203,7 @@ static void art_submit_salvos(AeronScene3D* scene, float reach) {
 		static const float tie_guns[2][2] = { { 0.6f, -1.0f }, { -0.6f, -1.0f } };
 		static const float aw_guns[2][2] = { { 3.3f, 0.0f }, { -3.3f, 0.0f } };
 		static const float int_guns[2][2] = { { 3.6f, 1.6f }, { -3.6f, 1.6f } };
+		static const float bw_guns[2][2] = { { 1.6f, 0.0f }, { -1.6f, 0.0f } };
 		const float(*guns)[2] = xw_guns;
 		int gun_count = 4;
 		const float* tint = k_red;
@@ -1922,6 +2221,10 @@ static void art_submit_salvos(AeronScene3D* scene, float reach) {
 				guns = int_guns;
 				gun_count = 2;
 				tint = k_green;
+				break;
+			case ART_GUNS_BWING:
+				guns = bw_guns;
+				gun_count = 2;
 				break;
 			default:
 				break;
@@ -1945,7 +2248,10 @@ static void art_submit_salvos(AeronScene3D* scene, float reach) {
 
 /* A great explosion centred on `at` (yaw, pitch, metres, diameter in metres):
  * the blast with two fire clouds in it. */
-static void art_submit_fireball(AeronScene3D* scene, const float at[4]) {
+/* `spread` scales the fire clouds' offsets (degrees) and `step` their steps
+ * toward the viewer (3 m): 1 for the TIE Fighter scene's size. */
+static void art_submit_fireball_tint(AeronScene3D* scene, const float at[4], const float tint[4],
+									 float spread, float step) {
 	float p[3], c[4][3];
 	static const struct {
 		float dyaw, dpitch, size, roll;
@@ -1956,12 +2262,12 @@ static void art_submit_fireball(AeronScene3D* scene, const float at[4]) {
 		{ 7.0f, -3.0f, 0.55f, -60.0f, ART_TEX_FIRE },
 	};
 	for (size_t i = 0; i < sizeof puffs / sizeof puffs[0]; ++i) {
-		art_dir(at[0] + puffs[i].dyaw, at[1] + puffs[i].dpitch, p);
+		art_dir(at[0] + puffs[i].dyaw * spread, at[1] + puffs[i].dpitch * spread, p);
 		for (int a = 0; a < 3; ++a)
-			p[a] = s_art.view_pos[a] + p[a] * (at[2] - (float)i * 3.0f) * ART_K;
+			p[a] = s_art.view_pos[a] + p[a] * (at[2] - (float)i * 3.0f * step) * ART_K;
 		art_facing(p, at[3] * puffs[i].size * ART_K, puffs[i].roll, c);
 		art_quad(scene, puffs[i].tex, AERON_SCENE_BILLBOARD_STAGE_OVERLAY, AERON_SCENE_BILLBOARD_BLEND_PMA, c,
-				 k_white);
+				 tint);
 	}
 }
 
@@ -1976,124 +2282,221 @@ static void art_submit_bolts(AeronScene3D* scene) {
 	}
 }
 
-/* The helmet and the clouds behind, the fire, the great explosion with the
- * X-wing breaking up in it; the helmet fades in once the fight has come to
- * the cover's moment. */
-static void art_submit_sprites(AeronScene3D* scene, bool ships) {
-	const float t = ships ? s_art.anim_t : ART_ANIM_SECONDS + 60.0f;
-	const float T = ART_ANIM_SECONDS;
-	/* Vader's helmet, looming behind the screen and the fight, a dark
-	 * blue-violet; XWA_XR_VADER_BRIGHTNESS scales it. */
-	const float vader = art_smooth((t - T) / art_env("XWA_XR_VADER_FADE_SECONDS", 2.5f));
-	if (s_art.tex[ART_TEX_VADER] && vader > 0.0f) {
-		const float b = art_env("XWA_XR_VADER_BRIGHTNESS", 1.0f);
-		/* 15 % darker and slightly see-through (premultiplied: the colour
-		 * carries the opacity too). */
-		const float dark = 0.85f, opacity = 0.8f * vader;
-		const float tint[4] = { 0.18f * b * dark * opacity, 0.17f * b * dark * opacity,
-								0.42f * b * dark * opacity, opacity };
-		const float h = 39.8f;
-		const float w = h * (float)s_art.tex_w[ART_TEX_VADER] / (float)s_art.tex_h[ART_TEX_VADER];
-		const float pitch = art_env("XWA_XR_VADER_PITCH", 31.0f); /* the eyes above the screen */
-		art_sky_rect(scene, ART_TEX_VADER, 0.0f, pitch, w, h, 0.0f, tint);
+/* Purple clouds below (the TIE Fighter and Defender of the Empire covers). */
+static void art_submit_low_clouds(AeronScene3D* scene, float gain) {
+	static const struct {
+		float yaw, pitch, w, h, roll, gain;
+	} clouds[] = {
+		{ -30.0f, -42.0f, 110.0f, 40.0f, 6.0f, 0.55f },
+		{ 35.0f, -40.0f, 100.0f, 36.0f, -8.0f, 0.5f },
+		{ 0.0f, -58.0f, 120.0f, 46.0f, 0.0f, 0.45f },
+	};
+	for (size_t i = 0; i < sizeof clouds / sizeof clouds[0]; ++i) {
+		const float g = clouds[i].gain * gain;
+		const float tint[4] = { 0.55f * g, 0.45f * g, 1.0f * g, 1.0f };
+		art_sky_rect(scene, ART_TEX_NEBULA, clouds[i].yaw, clouds[i].pitch, clouds[i].w, clouds[i].h,
+					 clouds[i].roll, tint);
 	}
-	/* Purple clouds below. */
-	{
-		static const struct {
-			float yaw, pitch, w, h, roll, gain;
-		} clouds[] = {
-			{ -30.0f, -42.0f, 110.0f, 40.0f, 6.0f, 0.55f },
-			{ 35.0f, -40.0f, 100.0f, 36.0f, -8.0f, 0.5f },
-			{ 0.0f, -58.0f, 120.0f, 46.0f, 0.0f, 0.45f },
-		};
-		for (size_t i = 0; i < sizeof clouds / sizeof clouds[0]; ++i) {
-			const float g = clouds[i].gain;
-			const float tint[4] = { 0.55f * g, 0.45f * g, 1.0f * g, 1.0f };
-			art_sky_rect(scene, ART_TEX_NEBULA, clouds[i].yaw, clouds[i].pitch, clouds[i].w, clouds[i].h,
-						 clouds[i].roll, tint);
+}
+
+/* The engines' glow of the craft shown, seen from behind (k_glows). */
+static void art_submit_engine_glows(AeronScene3D* scene) {
+	if (!s_art.tex[ART_TEX_GLOW] || !s_art.posed)
+		return;
+	for (int i = 0; i < SC->count && i < ART_MAX_SHIPS; ++i) {
+		if (s_art.hidden[i])
+			continue;
+		const float* x = s_art.transform[i];
+		float back[3] = { x[1], x[5], x[9] }; /* model +y: the craft's rear */
+		art_norm(back);
+		for (size_t g = 0; g < sizeof k_glows / sizeof k_glows[0]; ++g) {
+			if (k_glows[g].model != SC->ships[i].model)
+				continue;
+			/* The model is drawn centred on its bounds (TieXrArt_Submit). */
+			const float* bd = s_art.models[k_glows[g].model].bounds;
+			const float o[3] = { k_glows[g].p[0] - 0.5f * (bd[0] + bd[3]),
+								 k_glows[g].p[1] - 0.5f * (bd[1] + bd[4]),
+								 k_glows[g].p[2] - 0.5f * (bd[2] + bd[5]) };
+			float p[3], to[3], c[4][3];
+			for (int a = 0; a < 3; ++a) {
+				p[a] = x[a * 4 + 0] * o[0] + x[a * 4 + 1] * o[1] + x[a * 4 + 2] * o[2] + x[a * 4 + 3];
+				to[a] = s_art.view_pos[a] - p[a];
+			}
+			art_norm(to);
+			const float w = art_smooth(art_dot(back, to) * 1.6f);
+			if (w <= 0.0f)
+				continue;
+			/* Just off the nozzle toward the viewer, so the hull hides none of it. */
+			for (int a = 0; a < 3; ++a)
+				p[a] += to[a] * 0.6f * ART_K;
+			const float b = 1.6f * w;
+			const float* rgb = k_glows[g].rgb;
+			const float core[4] = { (0.4f + 0.6f * rgb[0]) * b, (0.15f + 0.85f * rgb[1]) * b,
+									(0.15f + 0.85f * rgb[2]) * b, 1.0f };
+			art_facing(p, k_glows[g].size * 2.0f * ART_K, 0.0f, c);
+			art_quad(scene, ART_TEX_GLOW, AERON_SCENE_BILLBOARD_STAGE_OVERLAY,
+					 AERON_SCENE_BILLBOARD_BLEND_ADDITIVE, c, core);
 		}
 	}
-	if (!ships)
-		return;
+}
+
+/* The fight: the bolts in flight, the cover's salvos leaving the guns in the
+ * last half second, the victim hit, the great explosion growing into the
+ * cover's with the victim catching fire as it breaks up in it; then the
+ * cover's moment, held. Sizes go with the explosion's (the TIE Fighter
+ * scene's 58 m). */
+static void art_submit_fight(AeronScene3D* scene, float t) {
+	const float T = ART_ANIM_SECONDS;
+	const float* blast = SC->blast;
+	const float D = blast[3];
+	const float* white = SC->blast_tint;
 	float c[4][3];
 	if (t >= T) {
 		/* The cover's moment, held. */
 		art_submit_salvos(scene, 1.0f);
 		float q[3];
-		art_submit_fireball(scene, k_blast);
-		art_ship_pos(ART_XWING, q);
-		art_facing(q, 16.0f * ART_K, 70.0f, c);
+		art_submit_fireball_tint(scene, blast, white, D / blast[2] / (58.0f / 70.0f), D / 58.0f);
+		art_ship_pos(SC->victim, q);
+		art_facing(q, 0.276f * D * ART_K, 70.0f, c);
 		art_quad(scene, ART_TEX_FIRE, AERON_SCENE_BILLBOARD_STAGE_OVERLAY, AERON_SCENE_BILLBOARD_BLEND_PMA, c,
-				 k_white);
-		art_facing(q, 10.0f * ART_K, -20.0f, c);
+				 white);
+		art_facing(q, 0.172f * D * ART_K, -20.0f, c);
 		art_quad(scene, ART_TEX_BLAST, AERON_SCENE_BILLBOARD_STAGE_OVERLAY, AERON_SCENE_BILLBOARD_BLEND_PMA,
-				 c, k_white);
+				 c, white);
 		return;
 	}
-	/* The run-up: bolts in flight, the X-wing hit, then the blast; the
-	 * cover's salvos leave the guns in the last half second. */
+	/* The run-up: bolts in flight, the victim hit, then the blast; the cover's
+	 * salvos leave the guns in the last half second. */
 	art_submit_bolts(scene);
 	if (t > T - ART_SALVO_SECONDS)
 		art_submit_salvos(scene, art_smooth((t - (T - ART_SALVO_SECONDS)) / ART_SALVO_SECONDS));
 	float xw[3], n[3], u[3];
-	art_pose(ART_XWING, t, xw, n, u);
+	art_pose(SC->victim, t, xw, n, u);
 	for (int h = 0; h < 3; ++h) {
 		const float a = (t - k_hits[h]) / 0.35f;
 		if (a > 0.0f && a < 1.0f) {
-			const float tint[4] = { 1.5f, 1.4f, 1.3f, 1.0f - a };
-			art_facing(xw, (3.0f + 5.0f * a) * ART_K, 40.0f * (float)h, c);
+			const float tint[4] = { white[0], white[1], white[2], 1.0f - a };
+			art_facing(xw, (0.0517f + 0.0862f * a) * D * ART_K, 40.0f * (float)h, c);
 			art_quad(scene, ART_TEX_FIRE, AERON_SCENE_BILLBOARD_STAGE_OVERLAY,
 					 AERON_SCENE_BILLBOARD_BLEND_PMA, c, tint);
 		}
 	}
 	if (t >= ART_BOOM_AT) {
-		/* The great explosion growing into the cover's: the explosion's
-		 * frames up to its height (the cover's blast), the flames swelling
-		 * with it, a flash at the start. */
+		/* The great explosion growing into the cover's: the explosion's frames
+		 * up to its height (the cover's blast), the flames swelling with it, a
+		 * flash at the start. */
 		const float g = (t - ART_BOOM_AT) / (T - ART_BOOM_AT);
 		int frame = (int)(g * ((float)ART_BOOM_FRAMES - 0.01f));
 		frame = frame < 0 ? 0 : frame > ART_BOOM_FRAMES - 1 ? ART_BOOM_FRAMES - 1 : frame;
 		const int slot = s_art.tex[ART_TEX_BOOM + frame] ? ART_TEX_BOOM + frame : ART_TEX_BLAST;
 		const float grow = 0.35f + 0.65f * art_smooth(g);
 		float p[3];
-		art_dir(k_blast[0], k_blast[1], p);
+		art_dir(blast[0], blast[1], p);
 		for (int a = 0; a < 3; ++a)
-			p[a] = s_art.view_pos[a] + p[a] * k_blast[2] * ART_K;
-		art_facing(p, k_blast[3] * grow * ART_K, 0.0f, c);
-		art_quad(scene, slot, AERON_SCENE_BILLBOARD_STAGE_OVERLAY, AERON_SCENE_BILLBOARD_BLEND_PMA, c,
-				 k_white);
+			p[a] = s_art.view_pos[a] + p[a] * blast[2] * ART_K;
+		art_facing(p, D * grow * ART_K, 0.0f, c);
+		art_quad(scene, slot, AERON_SCENE_BILLBOARD_STAGE_OVERLAY, AERON_SCENE_BILLBOARD_BLEND_PMA, c, white);
 		static const struct {
 			float dyaw, dpitch, size, roll;
 		} puffs[2] = { { -6.0f, 4.0f, 0.62f, 40.0f }, { 7.0f, -3.0f, 0.55f, -60.0f } };
 		const float fire = art_smooth((g - 0.25f) / 0.75f);
+		/* The puffs' offsets are the TIE Fighter scene's degrees at its size. */
+		const float spread = D / blast[2] / (58.0f / 70.0f);
 		for (int i = 0; i < 2 && fire > 0.0f; ++i) {
 			float q[3];
-			art_dir(k_blast[0] + puffs[i].dyaw, k_blast[1] + puffs[i].dpitch, q);
+			art_dir(blast[0] + puffs[i].dyaw * spread, blast[1] + puffs[i].dpitch * spread, q);
 			for (int a = 0; a < 3; ++a)
-				q[a] = s_art.view_pos[a] + q[a] * (k_blast[2] - (float)(i + 1) * 3.0f) * ART_K;
-			art_facing(q, k_blast[3] * puffs[i].size * fire * ART_K, puffs[i].roll, c);
+				q[a] = s_art.view_pos[a] + q[a] * (blast[2] - (float)(i + 1) * 3.0f * D / 58.0f) * ART_K;
+			art_facing(q, D * puffs[i].size * fire * ART_K, puffs[i].roll, c);
 			art_quad(scene, ART_TEX_FIRE, AERON_SCENE_BILLBOARD_STAGE_OVERLAY,
-					 AERON_SCENE_BILLBOARD_BLEND_PMA, c, k_white);
+					 AERON_SCENE_BILLBOARD_BLEND_PMA, c, white);
 		}
 		const float flash = 1.0f - (t - ART_BOOM_AT) / 0.6f;
 		if (flash > 0.0f && s_art.tex[ART_TEX_GLOW]) {
 			const float f = 1.6f * flash * flash;
-			const float tint[4] = { 1.0f * f, 0.75f * f, 0.45f * f, 1.0f };
-			art_facing(p, k_blast[3] * 0.9f * ART_K, 0.0f, c);
+			const float tint[4] = { 1.0f * f * white[0] / 1.5f, 0.75f * f * white[1] / 1.4f,
+									0.45f * f * white[2] / 1.3f, 1.0f };
+			art_facing(p, D * 0.9f * ART_K, 0.0f, c);
 			art_quad(scene, ART_TEX_GLOW, AERON_SCENE_BILLBOARD_STAGE_OVERLAY,
 					 AERON_SCENE_BILLBOARD_BLEND_ADDITIVE, c, tint);
 		}
-		/* The X-wing catching fire as it breaks up. */
+		/* The victim catching fire as it breaks up. */
 		const float burn = art_smooth((t - ART_BOOM_AT - 0.3f) / 1.1f);
 		if (burn > 0.0f) {
-			art_facing(xw, 16.0f * burn * ART_K, 70.0f, c);
+			art_facing(xw, 0.276f * D * burn * ART_K, 70.0f, c);
 			art_quad(scene, ART_TEX_FIRE, AERON_SCENE_BILLBOARD_STAGE_OVERLAY,
-					 AERON_SCENE_BILLBOARD_BLEND_PMA, c, k_white);
-			art_facing(xw, 10.0f * burn * ART_K, -20.0f, c);
+					 AERON_SCENE_BILLBOARD_BLEND_PMA, c, white);
+			art_facing(xw, 0.172f * D * burn * ART_K, -20.0f, c);
 			art_quad(scene, ART_TEX_BLAST, AERON_SCENE_BILLBOARD_STAGE_OVERLAY,
-					 AERON_SCENE_BILLBOARD_BLEND_PMA, c, k_white);
+					 AERON_SCENE_BILLBOARD_BLEND_PMA, c, white);
 		}
 	}
+}
+
+/* The backdrop and the fight. TIE Fighter: Vader's helmet over the clouds;
+ * Defender of the Empire: the TIE pilot's helmet (X-Wing vs. TIE Fighter's
+ * picture, vr/xvt_tie_pilot.rgba) in the cover's dark warm tones over the
+ * clouds; both fade in once the fight has come to the cover's moment.
+ * Balance of Power: the brown world behind the dreadnought, red-pink flak
+ * bursting round the fight over its last seconds, the engines' glow. */
+static void art_submit_sprites(AeronScene3D* scene, bool ships) {
+	const float t = ships ? s_art.anim_t : ART_ANIM_SECONDS + 60.0f;
+	const float T = ART_ANIM_SECONDS;
+	const float helmet = art_smooth((t - T) / art_env("XWA_XR_VADER_FADE_SECONDS", 2.5f));
+	if (SC->backdrop == ART_BACKDROP_VADER) {
+		/* Vader's helmet, looming behind the screen and the fight, a dark
+		 * blue-violet; XWA_XR_VADER_BRIGHTNESS scales it. */
+		if (s_art.tex[ART_TEX_VADER] && helmet > 0.0f) {
+			const float b = art_env("XWA_XR_VADER_BRIGHTNESS", 1.0f);
+			/* 15 % darker and slightly see-through (premultiplied: the colour
+			 * carries the opacity too). */
+			const float dark = 0.85f, opacity = 0.8f * helmet;
+			const float tint[4] = { 0.18f * b * dark * opacity, 0.17f * b * dark * opacity,
+									0.42f * b * dark * opacity, opacity };
+			const float h = 39.8f;
+			const float w = h * (float)s_art.tex_w[ART_TEX_VADER] / (float)s_art.tex_h[ART_TEX_VADER];
+			const float pitch = art_env("XWA_XR_VADER_PITCH", 31.0f); /* the eyes above the screen */
+			art_sky_rect(scene, ART_TEX_VADER, 0.0f, pitch, w, h, 0.0f, tint);
+		}
+		art_submit_low_clouds(scene, 1.0f);
+	} else if (SC->backdrop == ART_BACKDROP_PILOT) {
+		/* XWA_XR_PILOT_BRIGHTNESS, XWA_XR_PILOT_PITCH: the helmet. */
+		if (s_art.tex[ART_TEX_PILOT] && helmet > 0.0f) {
+			const float b = art_env("XWA_XR_PILOT_BRIGHTNESS", 1.0f);
+			const float opacity = 0.85f * helmet;
+			const float tint[4] = { 0.78f * b * opacity, 0.55f * b * opacity, 0.45f * b * opacity, opacity };
+			const float h = 80.0f; /* the helmet itself about 60 degrees tall, looming as on the cover */
+			const float w = h * (float)s_art.tex_w[ART_TEX_PILOT] / (float)s_art.tex_h[ART_TEX_PILOT];
+			art_sky_rect(scene, ART_TEX_PILOT, 0.0f, art_env("XWA_XR_PILOT_PITCH", 16.0f), w, h, 0.0f, tint);
+		}
+		art_submit_low_clouds(scene, 1.15f);
+	} else {
+		const float b = art_env("XWA_XR_PLANET_BRIGHTNESS", 1.0f);
+		const float tint[4] = { b, b, b, 1.0f };
+		art_sky_rect(scene, ART_TEX_PLANET, -3.0f, 3.0f, 56.0f, 56.0f, 0.0f, tint);
+		for (size_t i = 0; i < sizeof k_bop_flak / sizeof k_bop_flak[0] && ships; ++i) {
+			const float at = T - 3.2f + 0.7f * (float)i;
+			const float g = art_smooth((t - at) / 0.5f);
+			if (g <= 0.0f)
+				continue;
+			float p[3], c[4][3];
+			art_dir(k_bop_flak[i][0], k_bop_flak[i][1], p);
+			for (int a = 0; a < 3; ++a)
+				p[a] = s_art.view_pos[a] + p[a] * k_bop_flak[i][2] * ART_K;
+			static const float pink[4] = { 1.7f, 0.75f, 0.95f, 1.0f };
+			art_facing(p, k_bop_flak[i][3] * (0.4f + 0.6f * g) * ART_K, 25.0f * (float)i, c);
+			art_quad(scene, ART_TEX_BLAST, AERON_SCENE_BILLBOARD_STAGE_OVERLAY,
+					 AERON_SCENE_BILLBOARD_BLEND_PMA, c, pink);
+			const float glow[4] = { 0.9f * g, 0.25f * g, 0.35f * g, 1.0f };
+			art_facing(p, k_bop_flak[i][3] * 1.6f * ART_K, 0.0f, c);
+			art_quad(scene, ART_TEX_GLOW, AERON_SCENE_BILLBOARD_STAGE_OVERLAY,
+					 AERON_SCENE_BILLBOARD_BLEND_ADDITIVE, c, glow);
+		}
+		if (ships)
+			art_submit_engine_glows(scene);
+	}
+	if (ships)
+		art_submit_fight(scene, t);
 }
 
 /* ---- the logo and the title ------------------------------------------------ */
@@ -2240,8 +2643,8 @@ void TieXrArt_Submit(AeronScene3D* scene, bool ships, float fade) {
 	s_fade = fade;
 	TieXrArt_ViewPos(s_art.view_pos);
 	if (ships) {
-		for (int i = 0; i < ART_SHIPS; ++i) {
-			const struct AeronSceneMesh* mesh = s_art.models[k_ships[i].model].mesh;
+		for (int i = 0; i < SC->count && i < ART_MAX_SHIPS; ++i) {
+			const struct AeronSceneMesh* mesh = s_art.models[SC->ships[i].model].mesh;
 			if (!mesh || s_art.hidden[i])
 				continue;
 			float m[16];
@@ -2255,7 +2658,7 @@ void TieXrArt_Submit(AeronScene3D* scene, bool ships, float fade) {
 			}
 			/* Centred on its bounds as XWA's OPTs are (TIE Fighter's own sit
 			 * off their origin, the Interceptor 2 m toward its nose). */
-			const float* b = s_art.models[k_ships[i].model].bounds;
+			const float* b = s_art.models[SC->ships[i].model].bounds;
 			const float c[3] = { 0.5f * (b[0] + b[3]), 0.5f * (b[1] + b[4]), 0.5f * (b[2] + b[5]) };
 			for (int row = 0; row < 3; ++row)
 				m[row * 4 + 3] -= m[row * 4 + 0] * c[0] + m[row * 4 + 1] * c[1] + m[row * 4 + 2] * c[2];
@@ -2283,15 +2686,43 @@ void TieXrArt_Submit(AeronScene3D* scene, bool ships, float fade) {
 void TieXrArt_Lighting(TieXrArtLighting* out) {
 	/* The TIE Fighter cover: a cool blue-white light from the upper right, the
 	 * explosion's orange glow from behind and below the craft, a violet
-	 * ambient. */
+	 * ambient. Defender of the Empire: a cool white light from the upper left
+	 * behind the viewer, the explosion's orange from ahead below left. Balance
+	 * of Power: a pale lavender sun from the upper left, a faint blue fill
+	 * from the right, a deep blue-violet ambient (OpenXWA-VR's). */
 	const float sun = art_env("XWA_XR_ENDOR_SUN", 1.6f);
 	memset(out, 0, sizeof *out);
-	const float key_dir[3] = { 0.45f, 0.25f, 0.85f };
-	const float key[3] = { 0.80f * sun, 0.85f * sun, 1.0f * sun };
-	const float fill_dir[3] = { 0.0f, 0.9f, -0.45f };
-	const float fill[3] = { 1.0f * 0.9f, 0.55f * 0.9f, 0.2f * 0.9f };
-	const float sides[3] = { 0.05f, 0.04f, 0.08f }, top[3] = { 0.05f, 0.04f, 0.09f },
-				bottom[3] = { 0.05f, 0.03f, 0.07f };
+	float key_dir[3] = { 0.45f, 0.25f, 0.85f };
+	float key[3] = { 0.80f * sun, 0.85f * sun, 1.0f * sun };
+	float fill_dir[3] = { 0.0f, 0.9f, -0.45f };
+	float fill[3] = { 1.0f * 0.9f, 0.55f * 0.9f, 0.2f * 0.9f };
+	float sides[3] = { 0.05f, 0.04f, 0.08f }, top[3] = { 0.05f, 0.04f, 0.09f },
+		  bottom[3] = { 0.05f, 0.03f, 0.07f };
+	if (SC->backdrop == ART_BACKDROP_PILOT) {
+		const float kd[3] = { -0.50f, -0.35f, 0.79f }, kc[3] = { 0.85f * sun, 0.88f * sun, 1.0f * sun };
+		const float fd[3] = { -0.35f, 0.80f, -0.50f }, fc[3] = { 0.95f, 0.55f * 0.95f, 0.18f * 0.95f };
+		const float sd[3] = { 0.05f, 0.04f, 0.08f }, tp[3] = { 0.05f, 0.04f, 0.09f },
+					bt[3] = { 0.06f, 0.035f, 0.07f };
+		memcpy(key_dir, kd, sizeof kd);
+		memcpy(key, kc, sizeof kc);
+		memcpy(fill_dir, fd, sizeof fd);
+		memcpy(fill, fc, sizeof fc);
+		memcpy(sides, sd, sizeof sd);
+		memcpy(top, tp, sizeof tp);
+		memcpy(bottom, bt, sizeof bt);
+	} else if (SC->backdrop == ART_BACKDROP_PLANET) {
+		const float kd[3] = { -0.62f, 0.30f, 0.72f }, kc[3] = { 0.95f * sun, 0.92f * sun, 1.0f * sun };
+		const float fd[3] = { 0.70f, -0.20f, -0.30f }, fc[3] = { 0.30f * 0.6f, 0.35f * 0.6f, 0.60f * 0.6f };
+		const float sd[3] = { 0.045f, 0.04f, 0.07f }, tp[3] = { 0.05f, 0.045f, 0.08f },
+					bt[3] = { 0.035f, 0.03f, 0.055f };
+		memcpy(key_dir, kd, sizeof kd);
+		memcpy(key, kc, sizeof kc);
+		memcpy(fill_dir, fd, sizeof fd);
+		memcpy(fill, fc, sizeof fc);
+		memcpy(sides, sd, sizeof sd);
+		memcpy(top, tp, sizeof tp);
+		memcpy(bottom, bt, sizeof bt);
+	}
 	memcpy(out->key_dir, key_dir, sizeof key_dir);
 	art_norm(out->key_dir);
 	memcpy(out->key_color, key, sizeof key);
@@ -2305,17 +2736,102 @@ void TieXrArt_Lighting(TieXrArtLighting* out) {
 
 /* ---- loading ---------------------------------------------------------------- */
 
+void TieXrArt_Restart(void);
+
+/* A model the catalog has no row for (TIE Fighter's SSD.OPT sits in IVFILES
+ * but no species row names it): the file named like a sibling's
+ * (`like`'s path with its base name replaced by `base`), built as
+ * TieFlightXrEnv_LoadModel builds the catalog's. */
+static struct AeronSceneMesh* art_load_model_file(AeronCommandBuffer* cmd, const TieFlightAssetSource* assets,
+												  uint16_t like, const char* base, float bounds_m[6]) {
+	for (const TieFlightAssetSource* src = assets; src; src = src->fallback) {
+		if (TieFlightAssetSource_IsTie95(src) || !src->vfs || !src->catalog)
+			continue;
+		const TieFlightAssetEntry* entry = TieFlightAssets_Find(src->catalog, like);
+		if (!entry)
+			continue;
+		char rel[TIE_FLIGHT_ASSET_PATH_MAX + 32], path[TIE_FLIGHT_ASSET_PATH_MAX + 64];
+		const char* slash = strrchr(entry->path, '/');
+		const char* dot = strrchr(entry->path, '.');
+		const int dir = slash ? (int)(slash - entry->path) + 1 : 0;
+		snprintf(rel, sizeof rel, "%.*s%s%s", dir, entry->path, base,
+				 dot && dot > entry->path + dir ? dot : "");
+		const char* prefix = TieFlightAssets_ContentPrefix(src->catalog);
+		snprintf(path, sizeof path, "%s%s%s", prefix && prefix[0] ? prefix : "",
+				 prefix && prefix[0] ? "/" : "", rel);
+		uint8_t* bytes = NULL;
+		size_t size = 0;
+		if (!AeronVfs_Exists(src->vfs, AERON_VFS_ROOT_ASSET, path) ||
+			!AeronVfs_ReadAll(src->vfs, AERON_VFS_ROOT_ASSET, path, 64u << 20, &bytes, &size))
+			continue;
+		AeronFlightModel model;
+		memset(&model, 0, sizeof model);
+		bool built;
+		if (TieFlightAssetSource_IsRemastered(src)) {
+			built = Aeron_FlightModelBuildMemory(bytes, size, path, &model);
+		} else {
+			AeronOptModelError opt_error = { 0 };
+			built = Aeron_OptModelBuildMemory(bytes, size, path,
+											  &(AeronOptModelBuildOptions) {
+												  .smooth_angle_degrees = src->smooth_angle_degrees,
+												  .emissive_strength = 1.5f,
+												  .emissive = true,
+											  },
+											  &model, &opt_error);
+		}
+		free(bytes);
+		if (!built) {
+			Aeron_FlightModelFree(&model);
+			continue;
+		}
+		bounds_m[0] = model.bounds.min.x;
+		bounds_m[1] = model.bounds.min.y;
+		bounds_m[2] = model.bounds.min.z;
+		bounds_m[3] = model.bounds.max.x;
+		bounds_m[4] = model.bounds.max.y;
+		bounds_m[5] = model.bounds.max.z;
+		AeronSceneMeshCreateStatus status = AERON_SCENE_MESH_CREATE_SUCCESS;
+		struct AeronSceneMesh* mesh = AeronScene_MeshCreate(cmd, &model, "vr.env.model[file]", &status);
+		Aeron_FlightModelFree(&model);
+		if (mesh) {
+			Aeron_LogInfo("tie.vr", "menu scene: %s from %s", path, src->name ? src->name : "?");
+			return mesh;
+		}
+	}
+	return NULL;
+}
+
+/* The scene has a craft of model `m`. */
+static bool art_scene_uses(int m) {
+	for (int i = 0; i < SC->count; ++i)
+		if (SC->ships[i].model == m)
+			return true;
+	return false;
+}
+
+void TieXrArt_SetScene(TieXrArtScene scene) {
+	const ArtScene* next = &k_scenes[scene == TIE_XR_ART_DEFENDER ? 1 : scene == TIE_XR_ART_BALANCE ? 2 : 0];
+	if (next == SC)
+		return;
+	TieXrArt_Restart();
+	s_scene = next;
+	s_art.logged = false;
+}
+
 bool TieXrArt_Prepare(AeronCommandBuffer* cmd, const TieFlightAssetSource* assets, bool ships) {
 	if (!cmd)
 		return false;
 	if (ships) {
 		for (int m = 0; m < ART_MODEL_COUNT; ++m) {
-			if (s_art.models[m].tried)
+			if (s_art.models[m].tried || !art_scene_uses(m))
 				continue;
 			s_art.models[m].tried = true;
 			if (assets)
 				s_art.models[m].mesh =
 					TieFlightXrEnv_LoadModel(cmd, assets, k_art_species[m], s_art.models[m].bounds);
+			if (assets && !s_art.models[m].mesh && m == ART_SSD)
+				s_art.models[m].mesh = art_load_model_file(cmd, assets, TIE_SPECIES_IMPERIAL_STAR_DESTROYER,
+														   "SSD", s_art.models[m].bounds);
 			return false;
 		}
 	}
@@ -2326,9 +2842,19 @@ bool TieXrArt_Prepare(AeronCommandBuffer* cmd, const TieFlightAssetSource* asset
 		art_make_nebula(cmd);
 		return false;
 	}
-	if (!s_art.vader_tried) {
+	if (!s_art.vader_tried && SC->backdrop == ART_BACKDROP_VADER) {
 		s_art.vader_tried = true;
 		art_load_rgba(cmd, ART_TEX_VADER, "vader", "XWA_XR_VADER");
+		return false;
+	}
+	if (!s_art.pilot_tried && SC->backdrop == ART_BACKDROP_PILOT) {
+		s_art.pilot_tried = true;
+		art_load_rgba(cmd, ART_TEX_PILOT, "xvt_tie_pilot", "XWA_XR_TIE_PILOT");
+		return false;
+	}
+	if (!s_art.planet_tried && SC->backdrop == ART_BACKDROP_PLANET) {
+		s_art.planet_tried = true;
+		art_make_planet(cmd);
 		return false;
 	}
 	if (!s_art.logo_tried) {
@@ -2352,17 +2878,24 @@ bool TieXrArt_Prepare(AeronCommandBuffer* cmd, const TieFlightAssetSource* asset
 	}
 	if (ships && !s_art.logged) {
 		s_art.logged = true;
-		static const char* const names[ART_MODEL_COUNT] = { "T/I", "T/F", "T/B", "X-W", "A-W" };
+		static const char* const names[ART_MODEL_COUNT] = { "T/I", "T/F", "T/B", "X-W", "A-W",
+															"T/A", "B-W", "SSD", "ISD" };
 		for (int m = 0; m < ART_MODEL_COUNT; ++m) {
+			if (!art_scene_uses(m))
+				continue;
 			const float* b = s_art.models[m].bounds;
-			Aeron_LogInfo("tie.vr", "menu scene (TIE Fighter): %s %s, %.1f long, %.1f wide, %.1f high (m)",
+			Aeron_LogInfo("tie.vr", "menu scene (%s): %s %s, %.1f long, %.1f wide, %.1f high (m)", SC->name,
 						  names[m], s_art.models[m].mesh ? "loaded" : "missing", (double)(b[4] - b[1]),
 						  (double)(b[3] - b[0]), (double)(b[5] - b[2]));
 		}
+		const int backdrop = SC->backdrop == ART_BACKDROP_VADER   ? ART_TEX_VADER
+							 : SC->backdrop == ART_BACKDROP_PILOT ? ART_TEX_PILOT
+																  : ART_TEX_PLANET;
 		Aeron_LogInfo("tie.vr",
-					  "menu scene (TIE Fighter): logo %s, helmet %s, explosion %s, fire %s, sound level %.2f",
-					  s_art.tex[ART_TEX_LOGO] ? "yes" : "no", s_art.tex[ART_TEX_VADER] ? "yes" : "no", s_art.tex[ART_TEX_BLAST] ? "yes" : "no",
-					  s_art.tex[ART_TEX_FIRE] ? "yes" : "no", (double)es_master());
+					  "menu scene (%s): logo %s, backdrop %s, explosion %s, fire %s, sound level %.2f",
+					  SC->name, s_art.tex[ART_TEX_LOGO] ? "yes" : "no", s_art.tex[backdrop] ? "yes" : "no",
+					  s_art.tex[ART_TEX_BLAST] ? "yes" : "no", s_art.tex[ART_TEX_FIRE] ? "yes" : "no",
+					  (double)es_master());
 	}
 	return true;
 }

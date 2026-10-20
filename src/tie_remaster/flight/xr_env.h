@@ -13,8 +13,18 @@
  *
  * Settings (environment, read live; names shared with OpenXWA-VR):
  *   XWA_XR_ENVIRONMENT      tiefighter (default, also unset) the TIE Fighter box art |
+ *                           defender the Defender of the Empire box art (a TIE
+ *                           Bomber, TIE Advanced, an A-wing blown apart before a TIE
+ *                           pilot's helmet, vr/xvt_tie_pilot.rgba) |
+ *                           balance the Balance of Power box art (B-wings, an A-wing
+ *                           and TIE Advanced round a Super Star Destroyer before a
+ *                           brown world) |
  *                           fleet (or 1) the Imperial fleet | 0 (or stars) stars only |
  *                           off nothing
+ *   XWA_XR_TIE_PILOT        the Defender of the Empire helmet: a path, 0 = none
+ *                           [assets/vr/xvt_tie_pilot.rgba, packaged; never in the repo]
+ *   XWA_XR_PILOT_BRIGHTNESS / _PITCH   that helmet [1.0, 16 deg]
+ *   XWA_XR_PLANET_BRIGHTNESS the Balance of Power world [1.0]
  *   XWA_XR_ENV_FADE_SECONDS the TIE Fighter scene's fade in [1.5]
  *   XWA_XR_ENV_BACK         the viewer's distance behind the TIE Fighter scene's
  *                           centre [1.1 m]
@@ -58,6 +68,8 @@ typedef enum TieFlightXrEnvMode {
 	TIE_FLIGHT_XR_ENV_STARS = 1,
 	TIE_FLIGHT_XR_ENV_FLEET = 2,
 	TIE_FLIGHT_XR_ENV_TIEFIGHTER = 3,
+	TIE_FLIGHT_XR_ENV_DEFENDER = 4,
+	TIE_FLIGHT_XR_ENV_BALANCE = 5,
 } TieFlightXrEnvMode;
 
 TieFlightXrEnvMode TieFlightXrEnv_Mode(void);

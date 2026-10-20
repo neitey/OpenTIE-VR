@@ -142,8 +142,18 @@ TieFlightXrEnvMode TieFlightXrEnv_Mode(void) {
 	/* "1" was the fleet's value before the TIE Fighter scene came. */
 	if (v && (strcmp(v, "1") == 0 || SDL_strcasecmp(v, "fleet") == 0))
 		return TIE_FLIGHT_XR_ENV_FLEET;
+	if (v && SDL_strcasecmp(v, "defender") == 0)
+		return TIE_FLIGHT_XR_ENV_DEFENDER;
+	if (v && SDL_strcasecmp(v, "balance") == 0)
+		return TIE_FLIGHT_XR_ENV_BALANCE;
 	/* Unset, "tiefighter" (or anything else): the TIE Fighter box art. */
 	return TIE_FLIGHT_XR_ENV_TIEFIGHTER;
+}
+
+/* The played box arts (xr_env_tieart.c). */
+static bool TieXrEnv_IsArt(TieFlightXrEnvMode mode) {
+	return mode == TIE_FLIGHT_XR_ENV_TIEFIGHTER || mode == TIE_FLIGHT_XR_ENV_DEFENDER ||
+		   mode == TIE_FLIGHT_XR_ENV_BALANCE;
 }
 
 /* ---- small maths ---- */
@@ -887,7 +897,7 @@ static void TieXrEnv_CommitFrame(void) {
 static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, const AeronXrStereoFrame* xr,
 								float t_s, TieFlightXrEnvMode mode, bool ships, float fade, float gain, float reveal) {
 	const bool fleet = mode == TIE_FLIGHT_XR_ENV_FLEET;
-	const bool art = mode == TIE_FLIGHT_XR_ENV_TIEFIGHTER;
+	const bool art = TieXrEnv_IsArt(mode);
 	AeronScene3D* scene = g->scene;
 	/* The seated viewer at the origin looking along +y (TIE world), the
 	 * head pose on top: OpenXR LOCAL (x right, y up, -z ahead) maps to
@@ -1041,9 +1051,13 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 		s_env.ready = false;
 		s_env.last_mode = mode;
 	}
-	const bool art = mode == TIE_FLIGHT_XR_ENV_TIEFIGHTER;
+	const bool art = TieXrEnv_IsArt(mode);
 	if (!art)
 		TieXrEnv_ScreenNormal();
+	else
+		TieXrArt_SetScene(mode == TIE_FLIGHT_XR_ENV_DEFENDER  ? TIE_XR_ART_DEFENDER
+						  : mode == TIE_FLIGHT_XR_ENV_BALANCE ? TIE_XR_ART_BALANCE
+															  : TIE_XR_ART_TIEFIGHTER);
 	AeronXrStereoFrame xr;
 	if (mode == TIE_FLIGHT_XR_ENV_OFF || !g || !g->scene || !Aeron_XrStereoBegin(&xr) || xr.width <= 0 ||
 		xr.height <= 0 || !xr.eye_targets[0] || !xr.eye_targets[1]) {
@@ -1091,7 +1105,7 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	bool models_done = true;
 	if (ok && fleet && ships)
 		models_done = TieXrEnv_LoadNextModel(cmd, assets);
-	/* The TIE Fighter scene loads behind the startup films (stars only
+	/* The box-art scenes load behind the startup films (stars only
 	 * meanwhile, as in OpenXWA-VR) and comes up with the first menu. */
 	if (ok && art)
 		models_done = TieXrArt_Prepare(cmd, assets, ships);

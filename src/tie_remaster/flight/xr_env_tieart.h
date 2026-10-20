@@ -1,7 +1,14 @@
 #ifndef TIE_REMASTER_FLIGHT_XR_ENV_TIEART_H
 #define TIE_REMASTER_FLIGHT_XR_ENV_TIEART_H
 
-/* "TIE Fighter": the TIE Fighter box art around the virtual screen, played
+/* "TIE Fighter", "Defender of the Empire" and "Balance of Power": the box
+ * arts around the virtual screen, played. The TIE Fighter one is described
+ * here; the other two use the same machinery with their own craft, backdrop
+ * (the TIE pilot's helmet, vr/xvt_tie_pilot.rgba; a generated brown world
+ * behind the Super Star Destroyer) and light (OpenXWA-VR's ENV_DOEART,
+ * ENV_BOPART).
+ *
+ * "TIE Fighter": the TIE Fighter box art around the virtual screen, played
  * (ported from OpenXWA-VR's vr_env.c, ENV_TIEART). Internal to the menu
  * environment (xr_env.c), which owns the frame loop, the stars, the eyes and
  * the screen's frame; this module owns the scene: its craft (the player's own
@@ -12,8 +19,8 @@
  * sound effects), the logo above the screen (vr/logo.rgba) and the startup
  * show: the first time the menus come up the screen stays away while the
  * fight plays (A skips to its end), then the title (the logo, "Press (A) to
- * Continue") until A brings the screen in. Units: the scene's world units (AERON_OPT_UNITS_PER_METER per metre),
- * TIE world axes (x right, y ahead, z up). */
+ * Continue") until A brings the screen in. Units: the scene's world units (AERON_OPT_UNITS_PER_METER per
+ * metre), TIE world axes (x right, y ahead, z up). */
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -40,6 +47,14 @@ typedef struct TieXrArtLighting {
 	float ambient_sides[3], ambient_top[3], ambient_bottom[3];
 } TieXrArtLighting;
 
+typedef enum TieXrArtScene {
+	TIE_XR_ART_TIEFIGHTER = 0,
+	TIE_XR_ART_DEFENDER,
+	TIE_XR_ART_BALANCE,
+} TieXrArtScene;
+
+/* The box art shown (the fight starts over when it changes). */
+void TieXrArt_SetScene(TieXrArtScene scene);
 /* Loads one model, sprite set, image or the sounds per call; true once
  * everything was tried (loaded or not). `ships` false: the sky only. */
 bool TieXrArt_Prepare(AeronCommandBuffer* cmd, const struct TieFlightAssetSource* assets, bool ships);
