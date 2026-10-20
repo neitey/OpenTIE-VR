@@ -7,11 +7,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <SDL3/SDL_iostream.h>
+#include <SDL3/SDL_stdinc.h>
+
 #include "aeron/aeron.h"
 #include "aeron/asset/flight_model.h"
 #include "aeron/asset/opt_model.h"
 #include "aeron/log.h"
 #include "aeron/scene/billboard.h"
+#include "aeron/scene/draw_list2d.h"
 #include "aeron/xr.h"
 #include "tie_remaster/flight/pbr.h"
 #include "tie_remaster/flight/point_lights.h"
@@ -103,6 +107,15 @@ static struct {
 	float star_half_px;
 	struct TieFlightRenderer* hook_renderer;
 	bool logged_models;
+	/* The frame round the virtual screen (vr/frame.rgba). */
+	AeronTexture* frame;
+	int frame_w, frame_h;
+	bool frame_tried;
+	bool menu_seen; /* no frame round the startup films */
+	AeronDrawList2D* frame_list;
+	bool frame_drawn;
+	float frame_tint;
+	bool frame_on; /* shown this frame */
 } s_env;
 
 TieFlightXrEnvMode TieFlightXrEnv_Mode(void) {
@@ -670,6 +683,173 @@ static bool TieXrEnv_OutputEye(TieFlightRenderer* g, AeronCommandBuffer* cmd, in
 	return true;
 }
 
+/* ---- the frame round the virtual screen ----
+ *
+ * Same rules as OpenXWA-VR (vr_env.c): an image asset "XWAL", u32 width,
+ * u32 height, straight RGBA, shipped in the APK as assets/vr/frame.rgba (or
+ * next to the executable as vr/frame.rgba; XWA_XR_FRAME=<path> overrides it,
+ * XWA_XR_FRAME=0 turns it off); never part of the source tree. Its opening
+ * (k_frame_opening, image pixels) is the frame's clear 4:3 area enlarged
+ * 2 %: the 4:3 picture fills it exactly, the bezel overlaps under 1 % of the
+ * picture's edges, dark backing in the image fills any gap. The frame is a
+ * compositor layer (AERON_XR_PANEL_FRAME) XWA_XR_FRAME_DEPTH (2 cm) in front
+ * of the picture, scaled so its opening lines up with the picture from the
+ * viewer; XWA_XR_FRAME_OVERSCAN > 1 shows the picture smaller in it. There
+ * is none round the startup films, before the first menu. */
+static const float k_frame_opening[4] = { 86.9f, 124.2f, 1187.9f, 949.9f }; /* x0, y0, x1, y1 */
+
+static float TieXrEnv_SrgbToLinear(float c) {
+	return c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+}
+
+static float TieXrEnv_LinearToSrgb(float c) {
+	c = TieXrEnv_Clamp01(c);
+	return c <= 0.0031308f ? c * 12.92f : 1.055f * powf(c, 1.0f / 2.4f) - 0.055f;
+}
+
+static void TieXrEnv_LoadFrame(AeronCommandBuffer* cmd) {
+	if (s_env.frame_tried)
+		return;
+	s_env.frame_tried = true;
+	const char* override = getenv("XWA_XR_FRAME");
+	if (override && strcmp(override, "0") == 0)
+		return;
+	const char* paths[] = { override && override[0] ? override : NULL, "vr/frame.rgba", "assets/vr/frame.rgba" };
+	for (size_t i = 0; i < sizeof paths / sizeof paths[0] && !s_env.frame; ++i) {
+		if (!paths[i])
+			continue;
+		size_t size = 0;
+		uint8_t* data = (uint8_t*)SDL_LoadFile(paths[i], &size);
+		if (!data)
+			continue;
+		uint32_t w = 0, h = 0;
+		if (size >= 12 && memcmp(data, "XWAL", 4) == 0) {
+			memcpy(&w, data + 4, 4);
+			memcpy(&h, data + 8, 4);
+		}
+		if (w && h && w <= AERON_XR_FRAME_WIDTH && h <= AERON_XR_FRAME_HEIGHT && size >= 12 + (size_t)w * h * 4u) {
+			/* Premultiplied in linear light, stored sRGB. */
+			uint8_t* px = malloc((size_t)w * h * 4u);
+			if (px) {
+				float lut[256];
+				for (int k = 0; k < 256; ++k)
+					lut[k] = TieXrEnv_SrgbToLinear((float)k / 255.0f);
+				const uint8_t* rgba = data + 12;
+				for (size_t k = 0; k < (size_t)w * h; ++k) {
+					const float a = (float)rgba[k * 4 + 3] / 255.0f;
+					for (int c = 0; c < 3; ++c)
+						px[k * 4 + c] = (uint8_t)(TieXrEnv_LinearToSrgb(lut[rgba[k * 4 + c]] * a) * 255.0f + 0.5f);
+					px[k * 4 + 3] = rgba[k * 4 + 3];
+				}
+				AeronTexture* t = Aeron_CreateTexture(&(AeronTextureDesc) {
+					.width = (int)w,
+					.height = (int)h,
+					.mip_count = 1,
+					.format = AERON_TEXTURE_FORMAT_RGBA8_SRGB,
+					.usage = AERON_TEXTURE_USAGE_SAMPLED | AERON_TEXTURE_USAGE_TRANSFER_DST,
+					.debug_name = "tie.vr_env.frame",
+				});
+				if (t && Aeron_UploadTextureDataCmd(cmd, &(AeronTextureUploadDesc) {
+															 .texture = t,
+															 .width = (int)w,
+															 .height = (int)h,
+															 .raw_data = px,
+															 .raw_size = (uint32_t)((size_t)w * h * 4u),
+														 })) {
+					s_env.frame = t;
+					s_env.frame_w = (int)w;
+					s_env.frame_h = (int)h;
+				} else if (t) {
+					Aeron_DestroyTexture(t);
+				}
+				free(px);
+			}
+		}
+		SDL_free(data);
+	}
+	if (s_env.frame)
+		Aeron_LogInfo("tie.vr", "screen frame %dx%d", s_env.frame_w, s_env.frame_h);
+	else
+		Aeron_LogInfo("tie.vr", "no screen frame (vr/frame.rgba)");
+}
+
+/* The frame quad in head-relative metres (OpenXR: x right, y up, -z ahead):
+ * centre and size. False without a frame or a virtual screen. */
+static bool TieXrEnv_FrameQuad(float centre[3], float size[2]) {
+	if (!s_env.frame)
+		return false;
+	float dist = 0.0f, sw = 0.0f, sh = 0.0f, lift = 0.0f;
+	if (!Aeron_XrVirtualScreenGeometry(&dist, &sw, &sh, &lift) || dist <= 0.01f || sw <= 0.0f || sh <= 0.0f)
+		return false;
+	/* The 4:3 picture as the virtual screen shows it, centred. */
+	const float overscan = fmaxf(TieXrEnv_EnvFloat("XWA_XR_FRAME_OVERSCAN", 1.0f), 0.5f);
+	const float pic_w = fminf(sw, sh * 4.0f / 3.0f) / overscan;
+	const float frame_dist = fmaxf(dist - TieXrEnv_EnvFloat("XWA_XR_FRAME_DEPTH", 0.02f), 0.2f);
+	const float scale = frame_dist / dist;
+	const float px = scale * pic_w / (k_frame_opening[2] - k_frame_opening[0]);
+	const float tw = (float)s_env.frame_w, th = (float)s_env.frame_h;
+	size[0] = tw * px;
+	size[1] = th * px;
+	/* Image centre relative to the opening's centre (image y runs down). */
+	centre[0] = (0.5f * tw - 0.5f * (k_frame_opening[0] + k_frame_opening[2])) * px;
+	centre[1] = lift * scale - (0.5f * th - 0.5f * (k_frame_opening[1] + k_frame_opening[3])) * px;
+	centre[2] = -frame_dist;
+	return true;
+}
+
+/* Draws the frame into its layer when the tint changed (once otherwise);
+ * false when there is no frame layer this frame. */
+static bool TieXrEnv_DrawFrame(AeronCommandBuffer* cmd, float tint) {
+	if (!s_env.frame)
+		return false;
+	tint = TieXrEnv_Clamp01(tint);
+	if (s_env.frame_drawn && fabsf(tint - s_env.frame_tint) <= 0.004f)
+		return true;
+	int w = 0, h = 0;
+	AeronRenderTarget* target = Aeron_XrStereoPanelTarget(AERON_XR_PANEL_FRAME, &w, &h);
+	if (!target)
+		return false;
+	if (!s_env.frame_list)
+		s_env.frame_list = AeronDrawList_Create(8);
+	if (!s_env.frame_list)
+		return false;
+	AeronDrawList_Begin(s_env.frame_list, target, w, h, AERON_DRAWLIST2D_CLEAR, NULL);
+	AeronDrawList2DSprite sp;
+	memset(&sp, 0, sizeof sp);
+	sp.texture = s_env.frame;
+	sp.src_u1 = 1.0f;
+	sp.src_v1 = 1.0f;
+	sp.dst_w = (float)s_env.frame_w;
+	sp.dst_h = (float)s_env.frame_h;
+	/* Premultiplied: fading the opacity fades the colour with it. */
+	sp.tint[0] = sp.tint[1] = sp.tint[2] = tint;
+	sp.tint[3] = tint;
+	sp.blend = AERON_BLIT2D_BLEND_NONE; /* premultiplied texels as they are */
+	sp.filter = AERON_BLIT2D_FILTER_NEAREST;
+	AeronDrawList_AddSprite(s_env.frame_list, &sp);
+	AeronDrawList_Render(s_env.frame_list, cmd);
+	s_env.frame_drawn = true;
+	s_env.frame_tint = tint;
+	return true;
+}
+
+static void TieXrEnv_CommitFrame(void) {
+	float q[3], size[2];
+	if (!TieXrEnv_FrameQuad(q, size))
+		return;
+	AeronXrPanel p;
+	memset(&p, 0, sizeof p);
+	p.rect[2] = s_env.frame_w;
+	p.rect[3] = s_env.frame_h;
+	p.position[0] = q[0];
+	p.position[1] = q[1];
+	p.position[2] = q[2];
+	p.orientation[3] = 1.0f;
+	p.size[0] = size[0];
+	p.size[1] = size[1];
+	Aeron_XrStereoCommitPanelLayer(AERON_XR_PANEL_FRAME, &p, 1);
+}
+
 static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, const AeronXrStereoFrame* xr,
 								float t_s, bool fleet, float fade, float gain) {
 	AeronScene3D* scene = g->scene;
@@ -713,8 +893,16 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 		AeronXrPanel screen;
 		memset(&screen, 0, sizeof screen);
 		float d = 0.0f, w = 0.0f, h = 0.0f, off = 0.0f;
-		const bool have_screen = Aeron_XrVirtualScreenGeometry(&d, &w, &h, &off) && w > 0.0f && h > 0.0f;
-		if (have_screen) {
+		float fq[3], fsize[2];
+		bool have_screen = false;
+		if (s_env.frame_on && TieXrEnv_FrameQuad(fq, fsize)) {
+			/* The frame always takes in the picture behind it. */
+			have_screen = true;
+			memcpy(screen.position, fq, sizeof fq);
+			screen.orientation[3] = 1.0f;
+			screen.size[0] = fsize[0];
+			screen.size[1] = fsize[1];
+		} else if ((have_screen = Aeron_XrVirtualScreenGeometry(&d, &w, &h, &off) && w > 0.0f && h > 0.0f)) {
 			screen.position[1] = off;
 			screen.position[2] = -d;
 			screen.orientation[3] = 1.0f;
@@ -810,6 +998,10 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	if (!cmd)
 		return false;
 	bool ok = TieXrEnv_EnsureTextures(cmd);
+	TieXrEnv_LoadFrame(cmd);
+	if (!dimmed)
+		s_env.menu_seen = true;
+	s_env.frame_on = s_env.frame && s_env.menu_seen;
 	if (ok && (!s_env.stars || s_env.stars_format != g->rt_format)) {
 		if (s_env.stars)
 			TieFlightStars_Destroy(s_env.stars);
@@ -858,11 +1050,15 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 		Aeron_CancelCommandBuffer(cmd);
 		return false;
 	}
+	/* The frame dims and fades with the scene. */
+	const bool frame_ok = s_env.frame_on && TieXrEnv_DrawFrame(cmd, powf(gain, 1.0f / 2.2f));
 	if (!Aeron_SubmitCommandBuffer(cmd)) {
 		Aeron_RequestFatalRendererError("VR menu scene command-buffer submission");
 		return false;
 	}
 	Aeron_XrStereoCommitBackdrop();
+	if (frame_ok)
+		TieXrEnv_CommitFrame();
 	TieVrHands_CommitMenu();
 	if (beam_on)
 		Aeron_XrStereoCommitBeams(&beam, 1);
@@ -881,6 +1077,10 @@ void TieFlightXrEnv_Shutdown(void) {
 		TieFlightStars_Destroy(s_env.stars);
 	if (s_env.chain)
 		AeronScenePresentChain_Destroy(s_env.chain);
+	if (s_env.frame)
+		Aeron_DestroyTexture(s_env.frame);
+	if (s_env.frame_list)
+		AeronDrawList_Destroy(s_env.frame_list);
 	TieFlightXrBeam_Shutdown();
 	memset(&s_env, 0, sizeof s_env);
 }

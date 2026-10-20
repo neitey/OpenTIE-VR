@@ -14,7 +14,11 @@
  * Settings (environment, read live; names shared with OpenXWA-VR):
  *   XWA_XR_ENVIRONMENT      1 (default) the fleet | 0 stars only | off nothing
  *   XWA_XR_ENV_BRIGHTNESS   displayed brightness of the scene [0.8]
- *   XWA_XR_ENV_FILM_DIM     brightness factor during films/loading [0.5] */
+ *   XWA_XR_ENV_FILM_DIM     brightness factor during films/loading [0.5]
+ *   XWA_XR_FRAME            the frame round the screen: an image path, 0 = none
+ *                           [assets/vr/frame.rgba, packaged; never in the repo]
+ *   XWA_XR_FRAME_DEPTH      the frame's distance in front of the picture [0.02 m]
+ *   XWA_XR_FRAME_OVERSCAN   > 1 shows the picture smaller in the frame [1.0] */
 
 #include <stdbool.h>
 #include <stdint.h>
