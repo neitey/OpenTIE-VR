@@ -291,6 +291,7 @@ uint32_t TieVrControls_Frame(bool settings_open, bool host_paused) {
 			TieVrControls_SetButtons(0);
 			TieVrControls_SetPointer(1);
 			TieControllerMapping_SetXrFlight(false);
+			Aeron_XrSetSwapSticks(0);
 			TieVrControls_UpdateChord(false, false);
 			TieVrControls_SyncThrottleLever(false);
 			TieVrControls_UpdateHaptics(false);
@@ -320,6 +321,9 @@ uint32_t TieVrControls_Frame(bool settings_open, bool host_paused) {
 	TieVrControls_SetPointer(flight || launch_hold ? 0 : 1);
 	TieVrControls_SetButtons(settings_open ? 0 : 1);
 	TieControllerMapping_SetXrFlight(flight);
+	/* Swapped thumbsticks: in flight only (the sticks steer nowhere else;
+	 * the menus keep the pointer and their keys as they are). */
+	Aeron_XrSetSwapSticks(flight && TieVrButtons_SticksSwapped());
 
 	/* B in the menus: Aeron latches it while the pointer is on. The settings
 	 * menu has no flight buttons (its tabs use X/Y as shoulders), so B

@@ -2,7 +2,8 @@
  * Unit test for the VR (Quest Touch) controls: the flight button table,
  * the throttle lever math, the built-in XR gamepad profile and the
  * per-frame dispatch in vr_controls.c, with Aeron's OpenXR input faked at
- * link time (-Wl,--wrap, see CMakeLists.txt: tie_vr_controls_test).
+ * link time (-Wl,--wrap, see CMakeLists.txt: tie_vr_controls_test), and
+ * swapped thumbsticks through Aeron's own Touch mapping (xr_input_map.c).
  *
  *   ninja tie_vr_controls_test && ./tie_vr_controls_test
  */
@@ -24,6 +25,8 @@
 #include <SDL3/SDL_stdinc.h>
 #include <string.h>
 
+#include "xr_input_map.h" /* aeron/src: the Touch -> virtual gamepad mapping */
+
 static int g_failures;
 #define CHECK(cond)                                                                                           \
 	do {                                                                                                      \
@@ -41,6 +44,7 @@ static struct {
 	int flight_buttons;
 	int menu_keys;
 	int left_handed;
+	int swap_sticks; /* last Aeron_XrSetSwapSticks, -1 never set */
 	int b_latched;
 	AeronXrButton queue[16];
 	int queue_count;
@@ -59,6 +63,7 @@ void __wrap_Aeron_XrSetPointerEnabled(int enabled) { fake.pointer = enabled; }
 void __wrap_Aeron_XrSetFlightButtons(int enabled) { fake.flight_buttons = enabled; }
 void __wrap_Aeron_XrSetMenuKeys(int enabled) { fake.menu_keys = enabled; }
 int __wrap_Aeron_XrLeftHanded(void) { return fake.left_handed; }
+void __wrap_Aeron_XrSetSwapSticks(int enabled) { fake.swap_sticks = enabled; }
 int __wrap_Aeron_XrTakeMenuBPressed(void) {
 	const int pressed = fake.b_latched;
 	fake.b_latched = 0;
@@ -542,6 +547,152 @@ static void TestHaptics(void) {
 	CHECK(fake.haptics[0] == 1 && fake.haptics[1] == 2);
 }
 
+/* The physical thumbsticks (x right, y forward) through Aeron's Touch
+ * mapping as xr_input.c feeds it - left-handed controls trade the sticks
+ * (with the rest of the controllers), then swapped thumbsticks - for
+ * `frames` frames, then TIE's XR profile: yaw, pitch, roll (-127..127) and
+ * the throttle lever's position (0..65535). */
+static void XrSticks(AeronXrTouchMapper* mapper, bool swapped, float lx, float ly, float rx, float ry, int frames,
+					 int out[3], uint16_t* throttle) {
+	AeronControllerSnapshot* pad = &g_input.controllers[AERON_CONTROLLER_MAX - 1];
+	AeronXrTouchState touch;
+	memset(&touch, 0, sizeof touch);
+	touch.active_left = touch.active_right = 1;
+	touch.left_stick[0] = lx;
+	touch.left_stick[1] = ly;
+	touch.right_stick[0] = rx;
+	touch.right_stick[1] = ry;
+	if (fake.left_handed)
+		AeronXrTouchSwapSticks(&touch);
+	if (swapped)
+		AeronXrTouchSwapSticks(&touch);
+	for (int i = 0; i < frames; ++i)
+		AeronXrTouchMapper_Map(mapper, &touch, 1.0f / 60.0f, pad);
+	TieControllerMapping_Update(&g_input);
+	int16_t axes[3];
+	uint16_t buttons = 0;
+	TieControllerMapping_Read(axes, 3, &buttons);
+	const TieInputMapping* mapping = TieInput_Mapping();
+	out[0] = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_YAW]);
+	out[1] = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_PITCH]);
+	out[2] = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_ROLL]);
+	uint32_t generation = 0;
+	*throttle = 0;
+	CHECK(TieControllerMapping_ThrottleSample(throttle, &generation));
+	printf("sticks L(%.0f,%.0f) R(%.0f,%.0f)%s%s: yaw %d pitch %d roll %d throttle %u\n", (double)lx, (double)ly,
+		   (double)rx, (double)ry, swapped ? " swapped" : "", fake.left_handed ? " left-handed" : "", out[0], out[1],
+		   out[2], (unsigned)*throttle);
+}
+
+/* Swapped thumbsticks (XWA_XR_SWAP_STICKS=1): only what the two sticks do
+ * changes places. vr_controls.c asks Aeron for it in flight only, also with
+ * left-handed controls; every flight button keeps its job. */
+static void TestSwapSticks(void) {
+	fake.presenting = 1;
+	fake.swap_sticks = -1;
+	EnterFlight();
+	TieInput_ClearKeys();
+	SDL_unsetenv_unsafe("XWA_XR_SWAP_STICKS");
+	Frame();
+	CHECK(fake.swap_sticks == 0);
+	CHECK(!TieVrButtons_SticksSwapped());
+	SDL_setenv_unsafe("XWA_XR_SWAP_STICKS", "1", 1);
+	Frame();
+	CHECK(TieVrButtons_SticksSwapped());
+	CHECK(fake.swap_sticks == 1);
+	fake.left_handed = 1;
+	Frame();
+	CHECK(fake.swap_sticks == 1);
+	fake.left_handed = 0;
+	/* The buttons, stick clicks included, are not swapped. */
+	Press(AERON_XR_BUTTON_A);
+	Frame();
+	CHECK(OneKey() == 't');
+	Press(AERON_XR_BUTTON_RIGHT_STICK);
+	Frame();
+	CHECK(OneKey() == 13); /* match speed */
+	/* Not in the menus, the settings or the game's pause. */
+	(void)TieVrControls_Frame(true, false);
+	CHECK(fake.swap_sticks == 0);
+	Frame();
+	CHECK(fake.swap_sticks == 1);
+	fake.paused = 1;
+	Frame();
+	CHECK(fake.swap_sticks == 0);
+	fake.paused = 0;
+	memset(&fake.snapshot, 0, sizeof fake.snapshot);
+	fake.snapshot.scene_kind = TIE_SCENE_BRIEFING;
+	Frame();
+	CHECK(fake.swap_sticks == 0);
+	EnterFlight();
+	Frame();
+	CHECK(fake.swap_sticks == 1);
+	fake.presenting = 0;
+	Frame();
+	CHECK(fake.swap_sticks == 0);
+	fake.presenting = 1;
+	SDL_unsetenv_unsafe("XWA_XR_SWAP_STICKS");
+	Frame();
+	CHECK(fake.swap_sticks == 0);
+
+	/* Through Aeron's Touch mapping and TIE's XR profile. */
+	TieControllerOptions empty = { 0 };
+	CHECK(TieControllerMapping_SetOptions(&empty));
+	(void)XrPad();
+	TieControllerMapping_SetXrFlight(true);
+	AeronXrTouchMapper mapper;
+	AeronXrTouchMapper_Init(&mapper);
+	int a[3];
+	uint16_t throttle = 0, before = 0;
+	/* Not swapped: right stick right = yaw right, left stick right = roll. */
+	XrSticks(&mapper, false, 0.0f, 0.0f, 1.0f, 0.0f, 1, a, &throttle);
+	CHECK(a[0] == 127 && a[1] == 0 && a[2] == 0);
+	XrSticks(&mapper, false, 1.0f, 0.0f, 0.0f, 0.0f, 1, a, &throttle);
+	CHECK(a[0] == 0 && a[1] == 0 && a[2] == 127);
+	/* Swapped: the left stick does what the right one did ... */
+	XrSticks(&mapper, true, 1.0f, 0.0f, 0.0f, 0.0f, 1, a, &throttle);
+	CHECK(a[0] == 127 && a[1] == 0 && a[2] == 0);
+	XrSticks(&mapper, true, 0.0f, 0.0f, 0.0f, 0.0f, 1, a, &before);
+	XrSticks(&mapper, true, 0.0f, 1.0f, 0.0f, 0.0f, 60, a, &throttle);
+	CHECK(a[0] == 0 && a[1] == -127 && a[2] == 0); /* forward = nose down, as before */
+	CHECK(throttle == before);                     /* and not the throttle */
+	/* ... and the right stick what the left one did: roll, the lever. */
+	XrSticks(&mapper, true, 0.0f, 0.0f, -1.0f, 0.0f, 1, a, &throttle);
+	CHECK(a[0] == 0 && a[1] == 0 && a[2] == -127);
+	XrSticks(&mapper, true, 0.0f, 0.0f, 0.0f, 1.0f, 60, a, &throttle);
+	CHECK(a[0] == 0 && a[1] == 0 && a[2] == 0);
+	CHECK(throttle > before + 30000); /* a second of full forward: about 80 % lever */
+	before = throttle;
+	XrSticks(&mapper, true, 0.0f, 0.0f, 0.0f, -1.0f, 30, a, &throttle);
+	CHECK(throttle + 20000 < before);
+	/* Left-handed and swapped: the right stick steers again. */
+	fake.left_handed = 1;
+	XrSticks(&mapper, true, 0.0f, 0.0f, 1.0f, -1.0f, 1, a, &throttle);
+	CHECK(a[0] == 127 && a[1] == 127 && a[2] == 0);
+	XrSticks(&mapper, true, -1.0f, 0.0f, 0.0f, 0.0f, 1, a, &throttle);
+	CHECK(a[0] == 0 && a[1] == 0 && a[2] == -127);
+	fake.left_handed = 0;
+	/* The stick clicks stay on their own controllers. */
+	{
+		AeronXrTouchState touch;
+		memset(&touch, 0, sizeof touch);
+		touch.active_left = touch.active_right = 1;
+		touch.left_stick[0] = 1.0f;
+		touch.left_stick_click = 1;
+		AeronXrTouchSwapSticks(&touch);
+		CHECK(touch.left_stick_click == 1 && touch.right_stick_click == 0);
+		CHECK(touch.right_stick[0] == 1.0f && touch.left_stick[0] == 0.0f);
+		AeronControllerSnapshot pad;
+		memset(&pad, 0, sizeof pad);
+		AeronXrTouchMapper_Map(&mapper, &touch, 1.0f / 60.0f, &pad);
+		CHECK(pad.gamepad_buttons & (1u << AERON_GAMEPAD_BUTTON_START)); /* left stick click */
+		CHECK(!(pad.gamepad_buttons & (1u << AERON_GAMEPAD_BUTTON_RIGHT_STICK)));
+	}
+	TieControllerMapping_SetXrFlight(false);
+	memset(&g_input, 0, sizeof g_input);
+	TieControllerMapping_Update(&g_input);
+}
+
 static void TestMenus(void) {
 	/* Briefing / frontend: pointer on, A = Enter, X = Space, B = Esc. */
 	memset(&fake.snapshot, 0, sizeof fake.snapshot);
@@ -596,6 +747,7 @@ int main(void) {
 	TestXrProfile();
 	TestHeadsetGhostPads();
 	TestFlightFrame();
+	TestSwapSticks();
 	TestThrottleSync();
 	TestHaptics();
 	TestMenus();

@@ -297,6 +297,7 @@ static struct {
 	/* Aeron_XrSetVirtualStick (the game's grabbable flight stick) */
 	int vstick_active;
 	float vstick[3];
+	int swap_sticks; /* Aeron_XrSetSwapSticks */
 	int grip_captured[2];
 	int trigger_captured[2]; /* Aeron_XrCaptureTrigger, logged when it changes */
 } s_xr = { .pointer = -1, .menu_keys = -1, .flight_buttons = -1 };
@@ -797,6 +798,19 @@ int TieTestXr_VirtualStick(float out[3]) {
 	return s_xr.on && s_xr.vstick_active;
 }
 
+/* Swapped thumbsticks: logged when the game changes it; xrstick follows it. */
+void __real_Aeron_XrSetSwapSticks(int enabled);
+void __wrap_Aeron_XrSetSwapSticks(int enabled) {
+	if (s_xr.on && (enabled != 0) != s_xr.swap_sticks) {
+		printf("[tie-test] frame %llu: xr swap sticks %d\n", (unsigned long long)TieTest_Frame(), enabled != 0);
+		fflush(stdout);
+	}
+	s_xr.swap_sticks = enabled != 0;
+	__real_Aeron_XrSetSwapSticks(enabled);
+}
+
+int TieTestXr_SwapSticks(void) { return s_xr.on && s_xr.swap_sticks; }
+
 void __real_Aeron_XrCaptureGrip(int hand, int captured);
 void __wrap_Aeron_XrCaptureGrip(int hand, int captured) {
 	if (s_xr.on && hand >= 0 && hand < 2 && s_xr.grip_captured[hand] != (captured != 0)) {
@@ -976,5 +990,6 @@ int TieTestXr_VirtualStick(float out[3]) {
 	(void)out;
 	return 0;
 }
+int TieTestXr_SwapSticks(void) { return 0; }
 
 #endif

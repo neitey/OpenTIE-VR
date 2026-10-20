@@ -2628,7 +2628,9 @@ static void vc_card_label_text(int part, int right_role, char* action, char* mor
 	const char* shifted = button != AERON_XR_BUTTON_COUNT ? vc_binding_label(button, true) : "";
 	switch (part) {
 		case CTL_STICK:
-			snprintf(action, size, "%s", right_role ? "Yaw / pitch" : "Throttle (fwd/back) - roll");
+			/* Swapped thumbsticks trade the stick's job, not its click. */
+			snprintf(action, size, "%s",
+					 (right_role != 0) != TieVrButtons_SticksSwapped() ? "Yaw / pitch" : "Throttle (fwd/back) - roll");
 			snprintf(more, size, "click: %s%s%s", plain, shifted[0] ? "   grip+: " : "", shifted);
 			return;
 		case CTL_UPPER:

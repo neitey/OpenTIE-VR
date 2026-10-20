@@ -1,0 +1,44 @@
+# Swapped thumbsticks (VR settings "Swap Thumbsticks", XWA_XR_SWAP_STICKS=1):
+# the physical Touch sticks go through Aeron's Touch mapping (xrstick) into
+# TIE's flight axes; 'xrinput' logs the pad axes and the yaw / pitch / roll /
+# throttle the game reads. The same moves with the sticks as they are, then
+# swapped (the left stick now does what the right one did and the other way
+# round), then swapped with left-handed controls too (the right stick steers
+# again).
+#   run.sh <build> tools/vrtest/scripts/swap_sticks.txt <out> TIE_TEST_XR=1
+0 mission HF1W
+0 xrpad
+0 wait flying 5 timeout=4000
++2 log --- sticks as they are
++1 xrstick right 1 0             # right stick right: yaw
++3 xrinput
++1 xrstick right 0 0
++1 xrstick left 1 0              # left stick right: roll
++3 xrinput
++1 xrstick left 0 0
++1 xrstick left 0 1              # left stick forward: throttle lever up
++30 xrinput
++1 xrstick left 0 0
++2 env XWA_XR_SWAP_STICKS 1
++2 log --- swapped thumbsticks
++1 xrstick left 1 0              # left stick right: now yaw
++3 xrinput
++1 xrstick left 0 1              # left stick forward: now nose down, lever stays
++3 xrinput
++1 xrstick left 0 0
++1 xrstick right 1 0             # right stick right: now roll
++3 xrinput
++1 xrstick right 0 -1            # right stick back: now throttle lever down
++30 xrinput
++1 xrstick right 0 0
++1 xrbutton rs                   # right stick click: still match speed
++3 env AERON_XR_LEFT_HANDED 1
++2 log --- swapped thumbsticks and left-handed
++1 xrstick right 1 0             # right stick right: yaw again
++3 xrinput
++1 xrstick right 0 0
++1 xrstick left -1 0             # left stick left: roll left
++3 xrinput
++1 xrstick left 0 0
++3 xrinput
++2 quit

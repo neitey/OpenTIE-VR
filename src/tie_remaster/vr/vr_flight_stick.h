@@ -10,7 +10,8 @@
  * (grip on it, move, let go); the spot is saved (XWA_XR_STICK_POS).
  *
  * The deflection goes to Aeron as a virtual stick (Aeron_XrSetVirtualStick),
- * so it drives the same axes as the right thumbstick, which keeps working.
+ * so it drives the same axes as the steering thumbstick (the right one; the
+ * left with Swap Thumbsticks, XWA_XR_SWAP_STICKS), which keeps working.
  * XWA_XR_FLIGHT_STICK=0 turns it off.
  */
 

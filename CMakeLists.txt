@@ -714,11 +714,12 @@ add_subdirectory(src/tie_app)
 #   ninja tie_vr_controls_test && ./tie_vr_controls_test
 if(NOT ANDROID)
     add_executable(tie_vr_controls_test EXCLUDE_FROM_ALL tests/vr_controls_test.c)
-    target_include_directories(tie_vr_controls_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    # aeron/src: xr_input_map.h, the Touch -> virtual gamepad mapping (swapped thumbsticks).
+    target_include_directories(tie_vr_controls_test PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/aeron/src)
     target_link_libraries(tie_vr_controls_test PRIVATE tie_core tie_remaster)
     foreach(TIE_VR_TEST_WRAP
             Aeron_XrIsPresenting Aeron_XrSetPointerEnabled Aeron_XrSetFlightButtons Aeron_XrSetMenuKeys
-            Aeron_XrLeftHanded Aeron_XrTakeMenuBPressed Aeron_XrPollButton Aeron_XrGetHand
+            Aeron_XrLeftHanded Aeron_XrSetSwapSticks Aeron_XrTakeMenuBPressed Aeron_XrPollButton Aeron_XrGetHand
             Aeron_XrThrottleLever Aeron_XrSetThrottleLever Aeron_XrHapticPulse SDL_GetTicks
             TieSnapshot_Current TieFlightPause_IsActive)
         target_link_options(tie_vr_controls_test PRIVATE "LINKER:--wrap=${TIE_VR_TEST_WRAP}")

@@ -1,10 +1,13 @@
 #include "tie_app/test/test_harness.h"
 
+#include "aeron/aeron.h"
 #include "aeron/log.h"
 #include "tie/shell.h"
 #include "tie/shipext.h"
 #include "tie/tie.h"
 #include "tie/user.h"
+#include "tie_runtime/input/controller_mapping.h"
+#include "tie_runtime/input/input.h"
 #include "tie_runtime/runtime/shell_task.h"
 #include "tie_runtime/snapshot/snapshot.h"
 #include <SDL3/SDL.h>
@@ -13,6 +16,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "xr_input_map.h" /* aeron/src: the engine's Touch -> gamepad mapping (xrstick) */
 
 /* ------------------------------------------------------------------------
  * Script (TIE_TEST_SCRIPT): one command per line, '#' starts a comment.
@@ -52,6 +57,16 @@
  *                            replaces TIE_TEST_XR_LHAND/RHAND from then on
  *   (the game's flight stick, Aeron_XrSetVirtualStick, moves the xrpad's
  *   right-stick axes like the engine does: logged as "xr vstick")
+ *   xrstick left|right <x> <y>   a physical thumbstick (x right, y forward,
+ *                            -1..1) through Aeron's Touch mapping
+ *                            (xr_input_map.c) as xr_input.c feeds it:
+ *                            left-handed controls, swapped thumbsticks (the
+ *                            game's Aeron_XrSetSwapSticks: "xr swap sticks"),
+ *                            AERON_XR_INVERT_PITCH, the left stick's roll /
+ *                            throttle zones and the throttle lever; sets the
+ *                            xrpad's stick and lever axes (implies xrpad)
+ *   xrinput                  log the sticks, the pad axes and what the game
+ *                            reads from them (yaw, pitch, roll, throttle)
  *   warp <d> [cargo]         player <d> world units in front of its craft
  *                            target, facing it (proximity events: inspection);
  *                            'cargo' first targets the next uninspected craft
@@ -86,6 +101,8 @@ enum {
 	TT_CMD_XRHAND,
 	TT_CMD_XRPOSE,
 	TT_CMD_XRPAD,
+	TT_CMD_XRSTICK,
+	TT_CMD_XRINPUT,
 	TT_CMD_WARP,
 };
 
@@ -172,6 +189,12 @@ static struct {
 	 * Quest's Touch controllers that Android also lists as input devices. */
 	int ghost_pads;
 	int16_t pad_axes[AERON_GAMEPAD_AXIS_COUNT];
+	/* xrstick: the physical thumbsticks (left, right; x right, y forward)
+	 * and the engine's Touch mapper that turns them into pad axes. */
+	bool xr_sticks;
+	float xr_stick[2][2];
+	AeronXrTouchMapper xr_mapper;
+	bool xr_mapper_ready;
 	uint32_t pad_buttons;
 	uint32_t pad_prev_buttons;
 	/* scene tracking for the log */
@@ -187,6 +210,7 @@ static struct {
 };
 
 static void TieTest_Log(const char* fmt, ...) SDL_PRINTF_VARARG_FUNC(1);
+static void TieTest_LogXrInput(void);
 static void TieTest_Log(const char* fmt, ...) {
 	char buffer[1024];
 	va_list args;
@@ -331,6 +355,8 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 		{ "xrhand", TT_CMD_XRHAND },
 		{ "xrpose", TT_CMD_XRPOSE },
 		{ "xrpad", TT_CMD_XRPAD },
+		{ "xrstick", TT_CMD_XRSTICK },
+		{ "xrinput", TT_CMD_XRINPUT },
 		{ "warp", TT_CMD_WARP },
 	};
 	out->cmd = -1;
@@ -473,6 +499,19 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 			out->ivalue[0] = SDL_strcasecmp(arg, "right") == 0;
 			out->fvalue[0] = (float)SDL_atof(trigger);
 			out->fvalue[1] = grip ? (float)SDL_atof(grip) : 0.0f;
+			return true;
+		}
+		case TT_CMD_XRSTICK: {
+			arg = TieTest_NextToken(&cursor);
+			char* x = TieTest_NextToken(&cursor);
+			char* y = TieTest_NextToken(&cursor);
+			if (!arg || !x || !y || (SDL_strcasecmp(arg, "left") && SDL_strcasecmp(arg, "right"))) {
+				TieTest_Log("script line %d: xrstick left|right <x -1..1> <y -1..1>", line_no);
+				return false;
+			}
+			out->ivalue[0] = SDL_strcasecmp(arg, "right") == 0;
+			out->fvalue[0] = (float)SDL_atof(x);
+			out->fvalue[1] = (float)SDL_atof(y);
 			return true;
 		}
 		case TT_CMD_XRPOSE: {
@@ -1029,6 +1068,23 @@ static void TieTest_Execute(AeronInputSnapshot* input, const TieTestLine* line) 
 			g_test.pad_used = true;
 			g_test.pad_is_xr = true;
 			break;
+		case TT_CMD_XRSTICK: {
+			if (!TieTestXr_Enabled()) {
+				TieTest_Log("script line %d: xrstick needs TIE_TEST_XR=1", line->line_no);
+				break;
+			}
+			g_test.pad_used = true;
+			g_test.pad_is_xr = true;
+			g_test.xr_sticks = true;
+			for (int k = 0; k < 2; ++k) {
+				const float v = line->fvalue[k];
+				g_test.xr_stick[line->ivalue[0]][k] = v < -1.0f ? -1.0f : (v > 1.0f ? 1.0f : v);
+			}
+			break;
+		}
+		case TT_CMD_XRINPUT:
+			TieTest_LogXrInput();
+			break;
 		case TT_CMD_WARP:
 			TieTest_WarpToTarget(line->fvalue[0], line->ivalue[0], line->line_no);
 			break;
@@ -1079,6 +1135,67 @@ static void TieTest_RunScript(AeronInputSnapshot* input) {
 	}
 }
 
+/* xrstick: the physical thumbsticks into the XR pad's stick and lever axes
+ * the way aeron/src/xr_input.c feeds its Touch mapper: left-handed controls
+ * trade the sticks (with the rest of the controllers), then the game's
+ * swapped thumbsticks (AeronXrTouchSwapSticks), then AERON_XR_INVERT_PITCH
+ * on the steering stick; the mapper zones the other stick into roll and
+ * the throttle lever (Aeron_XrThrottleLever, which the game also sets). */
+static void TieTest_MapXrSticks(int16_t* axes) {
+	AeronXrTouchState touch;
+	AeronControllerSnapshot mapped;
+	SDL_zero(touch);
+	SDL_zero(mapped);
+	touch.active_left = touch.active_right = 1;
+	SDL_memcpy(touch.left_stick, g_test.xr_stick[0], sizeof touch.left_stick);
+	SDL_memcpy(touch.right_stick, g_test.xr_stick[1], sizeof touch.right_stick);
+	if (Aeron_XrLeftHanded())
+		AeronXrTouchSwapSticks(&touch);
+	if (TieTestXr_SwapSticks())
+		AeronXrTouchSwapSticks(&touch);
+	const char* invert = SDL_getenv("AERON_XR_INVERT_PITCH");
+	if (invert && invert[0] == '1')
+		touch.right_stick[1] = -touch.right_stick[1];
+	if (!g_test.xr_mapper_ready) {
+		AeronXrTouchMapper_Init(&g_test.xr_mapper);
+		const char* zone = SDL_getenv("AERON_XR_THROTTLE_ZONE");
+		if (zone && SDL_atof(zone) > 0.0 && SDL_atof(zone) < 90.0)
+			g_test.xr_mapper.throttle_zone_deg = (float)SDL_atof(zone);
+		g_test.xr_mapper_ready = true;
+	}
+	g_test.xr_mapper.throttle = Aeron_XrThrottleLever();
+	AeronXrTouchMapper_Map(&g_test.xr_mapper, &touch, 1.0f / 60.0f, &mapped);
+	TieTestXr_SetThrottle(g_test.xr_mapper.throttle);
+	static const int k_stick_axes[] = { AERON_GAMEPAD_AXIS_LEFTX, AERON_GAMEPAD_AXIS_LEFTY, AERON_GAMEPAD_AXIS_RIGHTX,
+										AERON_GAMEPAD_AXIS_RIGHTY, AERON_GAMEPAD_AXIS_RIGHT_TRIGGER };
+	for (size_t k = 0; k < SDL_arraysize(k_stick_axes); ++k)
+		axes[k_stick_axes[k]] = mapped.gamepad_axes[k_stick_axes[k]];
+}
+
+/* xrinput: the sticks, the XR pad's axes and what the game makes of them
+ * (TIE's flight axes -127..127 after its stick curve and polarity; the
+ * throttle 0..65535 the lever asks for). */
+static void TieTest_LogXrInput(void) {
+	int16_t raw[3];
+	uint16_t buttons = 0;
+	TieControllerMapping_Read(raw, 3, &buttons);
+	const TieInputMapping* mapping = TieInput_Mapping();
+	const int yaw = TieInput_MapAxis(raw, 3, mapping->axes[TIE_INPUT_AXIS_YAW]);
+	const int pitch = TieInput_MapAxis(raw, 3, mapping->axes[TIE_INPUT_AXIS_PITCH]);
+	const int roll = TieInput_MapAxis(raw, 3, mapping->axes[TIE_INPUT_AXIS_ROLL]);
+	uint16_t throttle = 0;
+	uint32_t generation = 0;
+	const bool throttle_valid = TieControllerMapping_ThrottleSample(&throttle, &generation);
+	TieControllerXrDebug d;
+	TieControllerMapping_XrDebug(&d);
+	TieTest_Log("xr input: sticks L(%.2f,%.2f) R(%.2f,%.2f), swapped %d, left-handed %d -> pad LEFTX %d LEFTY %d "
+				"RIGHTX %d lever %d (lever %.3f) -> yaw %d pitch %d roll %d throttle %u%s (flight %d)",
+				(double)g_test.xr_stick[0][0], (double)g_test.xr_stick[0][1], (double)g_test.xr_stick[1][0],
+				(double)g_test.xr_stick[1][1], TieTestXr_SwapSticks(), Aeron_XrLeftHanded(), d.leftx, d.lefty,
+				d.rightx, d.lever, (double)Aeron_XrThrottleLever(), yaw, pitch, roll, (unsigned)throttle,
+				throttle_valid ? "" : " (none)", d.flight ? 1 : 0);
+}
+
 static void TieTest_ApplyGamepad(AeronInputSnapshot* input) {
 	AeronControllerSnapshot* pad = &input->controllers[AERON_CONTROLLER_MAX - 1];
 	if (!pad->connected || pad->instance_id != 0x7e57u) {
@@ -1100,6 +1217,8 @@ static void TieTest_ApplyGamepad(AeronInputSnapshot* input) {
 	}
 	int16_t axes[AERON_GAMEPAD_AXIS_COUNT];
 	SDL_memcpy(axes, g_test.pad_axes, sizeof axes);
+	if (g_test.pad_is_xr && g_test.xr_sticks)
+		TieTest_MapXrSticks(axes);
 	/* The game's flight stick drives the XR pad's right-stick axes (LEFTX/
 	 * LEFTY, forward = -Y) and roll (RIGHTX), whichever is pushed further,
 	 * as Aeron's virtual Touch pad does. */

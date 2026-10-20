@@ -86,6 +86,8 @@ void TieTestXr_SetHandPose(int hand, const float pose[5]);
 /* The game's flight stick (Aeron_XrSetVirtualStick): 1 while grabbed, with
  * x (right), y (forward = nose down), roll in -1..1. */
 int TieTestXr_VirtualStick(float out[3]);
+/* 1 while the game has the thumbsticks swapped (Aeron_XrSetSwapSticks). */
+int TieTestXr_SwapSticks(void);
 /* Frames on which stereo was committed so far. */
 uint64_t TieTestXr_CommittedFrames(void);
 

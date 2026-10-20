@@ -74,6 +74,8 @@ target_include_directories(tie PRIVATE
     ${CMAKE_SOURCE_DIR}/src)
 # third_party/sherpa-onnx/c-api.h (voice commands; the library is dlopen'ed).
 set_source_files_properties(quest/voice_core.c PROPERTIES INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}")
+# The harness's xrstick runs Aeron's Touch -> gamepad mapping (aeron/src/xr_input_map.h).
+set_source_files_properties(test/test_harness.c PROPERTIES INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/aeron/src")
 target_link_libraries(tie PRIVATE
     tie_core
     tie_remaster
@@ -126,6 +128,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
         Aeron_XrSetThrottleLever
         Aeron_XrHapticPulse
         Aeron_XrSetVirtualStick
+        Aeron_XrSetSwapSticks
         Aeron_XrCaptureGrip
         Aeron_XrLocateRenderModel)
     target_compile_definitions(tie PRIVATE TIE_TEST_WRAP=1)

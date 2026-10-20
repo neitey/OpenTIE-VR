@@ -1,6 +1,7 @@
 #include "tie_runtime/input/vr_buttons.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 /* Flight buttons, one action each per layer. Left-handed controls swap the
  * controllers under these in Aeron (Aeron_XrLeftHanded), so the table
@@ -40,6 +41,11 @@ TieInputAction TieVrButtons_Action(AeronXrButton button, bool shifted) {
 		if (k_bindings[i].button == button && k_bindings[i].shifted == shifted)
 			return k_bindings[i].action;
 	return TIE_INPUT_ACTION_NONE;
+}
+
+bool TieVrButtons_SticksSwapped(void) {
+	const char* value = getenv("XWA_XR_SWAP_STICKS");
+	return value && value[0] == '1';
 }
 
 int TieVrButtons_MenuKey(AeronXrButton button) {
