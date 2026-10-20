@@ -56,6 +56,8 @@
  *                            target, facing it (proximity events: inspection);
  *                            'cargo' first targets the next uninspected craft
  *                            with cargo
+ *   env <NAME> [value]       set (or with no value unset) an environment
+ *                            variable, e.g. env TIE_XR_ENV_TIME 3.5
  *   log <text>, quit
  *   (env TIE_TEST_GHOST_PADS=N: N idle 'Device 0x...' gamepads in slots 0..,
  *   as Android lists the Quest's Touch controllers)
@@ -75,6 +77,7 @@ enum {
 	TT_CMD_CAPTURE,
 	TT_CMD_WAIT,
 	TT_CMD_LOG,
+	TT_CMD_ENV,
 	TT_CMD_QUIT,
 	TT_CMD_MISSION,
 	TT_CMD_XRBUTTON,
@@ -319,6 +322,7 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 		{ "capture", TT_CMD_CAPTURE },
 		{ "wait", TT_CMD_WAIT },
 		{ "log", TT_CMD_LOG },
+		{ "env", TT_CMD_ENV },
 		{ "quit", TT_CMD_QUIT },
 		{ "mission", TT_CMD_MISSION },
 		{ "xrbutton", TT_CMD_XRBUTTON },
@@ -356,6 +360,7 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 			return true;
 		case TT_CMD_TEXT:
 		case TT_CMD_LOG:
+		case TT_CMD_ENV:
 		case TT_CMD_MISSION:
 			while (*cursor && isspace((unsigned char)*cursor))
 				++cursor;
@@ -980,6 +985,26 @@ static void TieTest_Execute(AeronInputSnapshot* input, const TieTestLine* line) 
 		case TT_CMD_LOG:
 			TieTest_Log("log: %s", line->text);
 			break;
+		case TT_CMD_ENV: {
+			char name[96];
+			SDL_strlcpy(name, line->text, sizeof name);
+			char* value = name;
+			while (*value && !isspace((unsigned char)*value))
+				++value;
+			if (*value) {
+				*value++ = '\0';
+				while (*value && isspace((unsigned char)*value))
+					++value;
+			}
+			if (!name[0])
+				break;
+			if (*value)
+				SDL_setenv_unsafe(name, value, 1);
+			else
+				SDL_unsetenv_unsafe(name);
+			TieTest_Log("env %s=%s", name, value);
+			break;
+		}
 		case TT_CMD_XRBUTTON:
 		case TT_CMD_XRMENU:
 		case TT_CMD_XRTHROTTLE:

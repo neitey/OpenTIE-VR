@@ -1,6 +1,7 @@
 /* OpenXR menu environment; see xr_env.h. */
 
 #include "tie_remaster/flight/xr_env.h"
+#include "tie_remaster/flight/xr_env_tieart.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -116,15 +117,33 @@ static struct {
 	bool frame_drawn;
 	float frame_tint;
 	bool frame_on; /* shown this frame */
+	/* The TIE Fighter scene (xr_env_tieart.c). */
+	TieFlightXrEnvMode last_mode;
+	bool art_up;		 /* shown (loaded, past the startup films) */
+	uint64_t art_up_us;	 /* since */
+	bool screen_control; /* the screen's fade / input block are ours */
 } s_env;
+
+/* The screen as usual again (after the TIE Fighter scene's startup show). */
+static void TieXrEnv_ScreenNormal(void) {
+	if (!s_env.screen_control)
+		return;
+	s_env.screen_control = false;
+	Aeron_XrSetScreenFade(1.0f);
+	Aeron_XrSetInputBlocked(0);
+}
 
 TieFlightXrEnvMode TieFlightXrEnv_Mode(void) {
 	const char* v = getenv("XWA_XR_ENVIRONMENT");
-	if (v && (strcmp(v, "off") == 0 || strcmp(v, "none") == 0))
+	if (v && (SDL_strcasecmp(v, "off") == 0 || SDL_strcasecmp(v, "none") == 0))
 		return TIE_FLIGHT_XR_ENV_OFF;
-	if (v && (strcmp(v, "0") == 0 || strcmp(v, "stars") == 0))
+	if (v && (strcmp(v, "0") == 0 || SDL_strcasecmp(v, "stars") == 0))
 		return TIE_FLIGHT_XR_ENV_STARS;
-	return TIE_FLIGHT_XR_ENV_FLEET;
+	/* "1" was the fleet's value before the TIE Fighter scene came. */
+	if (v && (strcmp(v, "1") == 0 || SDL_strcasecmp(v, "fleet") == 0))
+		return TIE_FLIGHT_XR_ENV_FLEET;
+	/* Unset, "tiefighter" (or anything else): the TIE Fighter box art. */
+	return TIE_FLIGHT_XR_ENV_TIEFIGHTER;
 }
 
 /* ---- small maths ---- */
@@ -401,8 +420,11 @@ static bool TieXrEnv_EnsureTextures(AeronCommandBuffer* cmd) {
 
 /* ---- craft from the player's flight models ---- */
 
-static AeronSceneMesh* TieXrEnv_LoadModel(AeronCommandBuffer* cmd, const TieFlightAssetSource* source,
-										  uint16_t species) {
+AeronSceneMesh* TieFlightXrEnv_LoadModel(AeronCommandBuffer* cmd, const TieFlightAssetSource* source,
+										 uint16_t species, float bounds_m[6]);
+
+AeronSceneMesh* TieFlightXrEnv_LoadModel(AeronCommandBuffer* cmd, const TieFlightAssetSource* source,
+										 uint16_t species, float bounds_m[6]) {
 	for (const TieFlightAssetSource* src = source; src; src = src->fallback) {
 		if (TieFlightAssetSource_IsTie95(src))
 			continue; /* DOS ShipModelData, no OPT */
@@ -437,6 +459,15 @@ static AeronSceneMesh* TieXrEnv_LoadModel(AeronCommandBuffer* cmd, const TieFlig
 			Aeron_FlightModelFree(&model);
 			continue;
 		}
+		if (bounds_m) {
+			/* min x y z, max x y z (OPT axes, metres). */
+			bounds_m[0] = model.bounds.min.x;
+			bounds_m[1] = model.bounds.min.y;
+			bounds_m[2] = model.bounds.min.z;
+			bounds_m[3] = model.bounds.max.x;
+			bounds_m[4] = model.bounds.max.y;
+			bounds_m[5] = model.bounds.max.z;
+		}
 		char name[64];
 		snprintf(name, sizeof name, "vr.env.model[%u]", (unsigned)species);
 		AeronSceneMeshCreateStatus status = AERON_SCENE_MESH_CREATE_SUCCESS;
@@ -459,13 +490,16 @@ static bool TieXrEnv_LoadNextModel(AeronCommandBuffer* cmd, const TieFlightAsset
 			continue;
 		model->tried = true;
 		if (assets)
-			model->mesh = TieXrEnv_LoadModel(cmd, assets, k_env_species[m]);
+			model->mesh = TieFlightXrEnv_LoadModel(cmd, assets, k_env_species[m], NULL);
 		return false;
 	}
 	return true;
 }
 
 void TieFlightXrEnv_ReleaseShips(void) {
+	if (TieXrArt_ReleaseShips())
+		s_env.art_up = false; /* fades in again with its craft */
+	TieXrEnv_ScreenNormal();
 	for (int m = 0; m < TIE_XR_ENV_MODEL_COUNT; ++m) {
 		if (s_env.models[m].mesh)
 			AeronScene_MeshDestroy(s_env.models[m].mesh);
@@ -851,7 +885,9 @@ static void TieXrEnv_CommitFrame(void) {
 }
 
 static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, const AeronXrStereoFrame* xr,
-								float t_s, bool fleet, float fade, float gain) {
+								float t_s, TieFlightXrEnvMode mode, bool ships, float fade, float gain, float reveal) {
+	const bool fleet = mode == TIE_FLIGHT_XR_ENV_FLEET;
+	const bool art = mode == TIE_FLIGHT_XR_ENV_TIEFIGHTER;
 	AeronScene3D* scene = g->scene;
 	/* The seated viewer at the origin looking along +y (TIE world), the
 	 * head pose on top: OpenXR LOCAL (x right, y up, -z ahead) maps to
@@ -863,6 +899,8 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 	base.h_half_rad = 0.8f;
 	base.v_half_rad = 0.8f;
 	base.near_z = 2.0f;
+	if (art)
+		TieXrArt_ViewPos(base.pos); /* the TIE Fighter scene: a little behind its centre */
 	AeronSceneCamera eyes[2];
 	for (int e = 0; e < 2; ++e) {
 		TieFlightXr_EyeCamera(&base, &xr->views[e], &eyes[e]);
@@ -885,11 +923,14 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 	AeronScene_SetPassHook(scene, AERON_SCENE_HOOK_AFTER_UPSCALE, NULL, NULL);
 
 	TieXrEnv_SubmitSky(scene, fleet);
-	if (fleet)
+	if (fleet && ships)
 		TieXrEnv_SubmitCraft(scene, t_s);
+	if (art && s_env.art_up)
+		TieXrArt_Submit(scene, ships, fade);
 	/* The controllers or gloves (VR Options > Hands), in front of the
-	 * virtual screen where they reach over it. */
-	{
+	 * virtual screen where they reach over it; none while the screen is
+	 * away (the TIE Fighter scene's startup show). */
+	if (reveal > 0.0f) {
 		AeronXrPanel screen;
 		memset(&screen, 0, sizeof screen);
 		float d = 0.0f, w = 0.0f, h = 0.0f, off = 0.0f;
@@ -918,6 +959,11 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 	TieFlightPointLights_GetParams(&point_params);
 	float sun[3];
 	TieXrEnv_Dir(k_sun_yaw_deg, k_sun_pitch_deg, sun);
+	TieXrArtLighting art_light;
+	if (art) {
+		TieXrArt_Lighting(&art_light);
+		memcpy(sun, art_light.key_dir, sizeof sun);
+	}
 	int render_w = xr->width, render_h = xr->height;
 	AeronScene_RenderDims(scene, &render_w, &render_h);
 	const TieFlightPbrAoParams ao = { .intensity = 0.0f, .power = 1.0f, .rt_w = (float)render_w,
@@ -951,6 +997,21 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 		pbr.amb_pos_z[c] = top[c] * fade;
 		pbr.amb_neg_z[c] = bottom[c] * fade;
 	}
+	if (art) {
+		/* The TIE Fighter cover's light: the key from the upper right, the
+		 * explosion's orange fill from ahead below, a violet ambient. */
+		memset(pbr.extra_dir, 0, sizeof pbr.extra_dir);
+		memset(pbr.extra_col, 0, sizeof pbr.extra_col);
+		for (int c = 0; c < 3; ++c) {
+			pbr.sun_color[c] = art_light.key_color[c] * fade;
+			pbr.extra_dir[0][c] = art_light.fill_dir[c];
+			pbr.extra_col[0][c] = art_light.fill_color[c] * fade;
+			pbr.amb_pos_x[c] = pbr.amb_neg_x[c] = pbr.amb_pos_y[c] = pbr.amb_neg_y[c] =
+				art_light.ambient_sides[c] * fade;
+			pbr.amb_pos_z[c] = art_light.ambient_top[c] * fade;
+			pbr.amb_neg_z[c] = art_light.ambient_bottom[c] * fade;
+		}
+	}
 	AeronScene_SetFrameUniformData(scene, AERON_SHADER_STAGE_FRAGMENT, 1, &pbr, sizeof pbr);
 
 	TIE_GPU_PUSH(cmd, "VR menu scene, left eye");
@@ -972,10 +1033,22 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* assets, uint64_t time_us, bool ships,
 						   bool dimmed) {
 	const TieFlightXrEnvMode mode = TieFlightXrEnv_Mode();
+	if (mode != s_env.last_mode) {
+		/* Another scene (VR options): the TIE Fighter scene's fight starts
+		 * over when it comes back, and everything fades in again. */
+		TieXrArt_Restart();
+		s_env.art_up = false;
+		s_env.ready = false;
+		s_env.last_mode = mode;
+	}
+	const bool art = mode == TIE_FLIGHT_XR_ENV_TIEFIGHTER;
+	if (!art)
+		TieXrEnv_ScreenNormal();
 	AeronXrStereoFrame xr;
 	if (mode == TIE_FLIGHT_XR_ENV_OFF || !g || !g->scene || !Aeron_XrStereoBegin(&xr) || xr.width <= 0 ||
 		xr.height <= 0 || !xr.eye_targets[0] || !xr.eye_targets[1]) {
 		s_env.rendering = false;
+		TieXrEnv_ScreenNormal();
 		return false;
 	}
 	if (!TieFlightRenderer_EnsureOutputSize(g, xr.width, xr.height))
@@ -987,6 +1060,7 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	s_env.last_us = time_us;
 	if (restart) {
 		s_env.ready = false;
+		s_env.art_up = false;
 		s_env.dim = dimmed ? 1.0f : 0.0f;
 	}
 	s_env.rendering = true;
@@ -1017,6 +1091,10 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	bool models_done = true;
 	if (ok && fleet && ships)
 		models_done = TieXrEnv_LoadNextModel(cmd, assets);
+	/* The TIE Fighter scene loads behind the startup films (stars only
+	 * meanwhile, as in OpenXWA-VR) and comes up with the first menu. */
+	if (ok && art)
+		models_done = TieXrArt_Prepare(cmd, assets, ships);
 	if (models_done && !s_env.ready) {
 		s_env.ready = true;
 		s_env.ready_us = time_us;
@@ -1027,36 +1105,72 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 						  s_env.models[2].mesh ? "yes" : "no");
 		}
 	}
-	const float fade =
-		s_env.ready ? TieXrEnv_Smooth(0.0f, 1.0f, (float)(time_us - s_env.ready_us) * 1e-6f / TIE_XR_ENV_FADE_S)
-					: 0.0f;
+	if (!art && mode != TIE_FLIGHT_XR_ENV_OFF && s_env.menu_seen)
+		TieXrArt_SkipStartupShow();
+	if (art && s_env.ready && s_env.menu_seen && !s_env.art_up) {
+		s_env.art_up = true;
+		s_env.art_up_us = time_us;
+	}
+	float fade;
+	if (art) {
+		fade = s_env.art_up ? TieXrEnv_Smooth(0.0f, 1.0f,
+											  (float)(time_us - s_env.art_up_us) * 1e-6f /
+												  fmaxf(TieXrEnv_EnvFloat("XWA_XR_ENV_FADE_SECONDS", 1.5f), 0.01f))
+							: 0.0f;
+	} else {
+		fade = s_env.ready ? TieXrEnv_Smooth(0.0f, 1.0f,
+											 (float)(time_us - s_env.ready_us) * 1e-6f / TIE_XR_ENV_FADE_S)
+						   : 0.0f;
+	}
 	/* XWA_XR_ENV_BRIGHTNESS is the displayed brightness (applied in linear
-	 * light); films and loading ease down to XWA_XR_ENV_FILM_DIM of it. */
+	 * light); films and loading ease down to XWA_XR_ENV_FILM_DIM of it. The
+	 * TIE Fighter scene's stars stay while it loads (its craft and sprites
+	 * fade in). */
 	const float brightness = TieXrEnv_Clamp01(TieXrEnv_EnvFloat("XWA_XR_ENV_BRIGHTNESS", 0.8f));
 	const float film = TieXrEnv_Clamp01(TieXrEnv_EnvFloat("XWA_XR_ENV_FILM_DIM", 0.5f));
 	const float dim = s_env.dim * s_env.dim * (3.0f - 2.0f * s_env.dim);
-	const float gain = powf(brightness * (1.0f - dim * (1.0f - film)) * fade, 2.2f);
+	const float gain = powf(brightness * (1.0f - dim * (1.0f - film)) * (art ? 1.0f : fade), 2.2f);
 
 	/* TIE_XR_ENV_TIME=<s> freezes the craft at that moment (tests). */
 	const char* fixed_time = getenv("TIE_XR_ENV_TIME");
 	const float t_s = fixed_time && fixed_time[0] ? (float)atof(fixed_time) : (float)((double)time_us * 1e-6);
+	/* The TIE Fighter scene's fight, from its first frame up; the startup
+	 * show keeps the screen away (and the controllers on A only) until the
+	 * fight has come to the cover's moment. */
+	float reveal = 1.0f;
+	if (art && s_env.art_up) {
+		if (ships)
+			TieXrArt_Advance(dt, xr.views[0].orientation);
+		reveal = TieXrArt_ScreenReveal();
+		s_env.screen_control = true;
+		Aeron_XrSetScreenFade(reveal);
+		Aeron_XrSetInputBlocked(reveal <= 0.0f);
+	}
 	if (ok)
-		ok = TieXrEnv_RenderEyes(g, cmd, &xr, t_s, fleet && ships, fade, gain);
+		ok = TieXrEnv_RenderEyes(g, cmd, &xr, t_s, mode, ships, fade, gain, reveal);
 	/* The pointer beam over the screen; none during films and loading. */
 	AeronXrPanel beam;
-	const bool beam_on = ok && !dimmed && xr.beam_target &&
+	const bool beam_on = ok && !dimmed && reveal > 0.0f && xr.beam_target &&
 						 TieFlightXrBeam_Frame(cmd, xr.beam_target, xr.beam_width, xr.beam_height, xr.views, &beam);
 	if (!ok) {
 		Aeron_CancelCommandBuffer(cmd);
 		return false;
 	}
-	/* The frame dims and fades with the scene. */
-	const bool frame_ok = s_env.frame_on && TieXrEnv_DrawFrame(cmd, powf(gain, 1.0f / 2.2f));
+	/* The frame dims and fades with the scene (and comes in with the screen). */
+	const float frame_gain = art ? powf(brightness * (1.0f - dim * (1.0f - film)) * fade, 2.2f) : gain;
+	const bool frame_ok = s_env.frame_on && reveal > 0.0f &&
+						  TieXrEnv_DrawFrame(cmd, powf(frame_gain, 1.0f / 2.2f) * reveal);
 	if (!Aeron_SubmitCommandBuffer(cmd)) {
 		Aeron_RequestFatalRendererError("VR menu scene command-buffer submission");
 		return false;
 	}
-	Aeron_XrStereoCommitBackdrop();
+	/* The eyes with the virtual screen in front of them; while the startup
+	 * show keeps the screen away, the eyes alone (a screen faded to 0 would
+	 * still be an opaque quad). */
+	if (reveal > 0.0f)
+		Aeron_XrStereoCommitBackdrop();
+	else
+		Aeron_XrStereoCommitHuds(NULL, NULL);
 	if (frame_ok)
 		TieXrEnv_CommitFrame();
 	TieVrHands_CommitMenu();
@@ -1067,6 +1181,7 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 
 void TieFlightXrEnv_Shutdown(void) {
 	TieFlightXrEnv_ReleaseShips();
+	TieXrArt_Shutdown();
 	if (s_env.planet)
 		Aeron_DestroyTexture(s_env.planet);
 	if (s_env.nebula)
