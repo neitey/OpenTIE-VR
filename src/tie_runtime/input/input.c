@@ -240,6 +240,16 @@ static float TieInput_Clamp(float v, float lo, float hi) { return v < lo ? lo : 
 static bool TieInput_WarpHostCursorToFramebufferCell(int16_t x, int16_t y) {
 	if (capture_active || fb_w <= 0 || fb_h <= 0 || layout_classic_w <= 0 || layout_classic_h <= 0)
 		return false;
+	/* In the headset the controller ray is the mouse: there is no host pointer
+	 * to move, and the cursor follows the ray on the next frame anyway. Warping
+	 * SDL's (on the Quest: virtual) mouse moved it INTO the headless content
+	 * rect, where Aeron keeps the mouse-button level from frame to frame and
+	 * the ray only ORs its trigger into it: the first click stayed held. The
+	 * Tour of Duty briefing room (the first screen whose start position lands
+	 * there) then hung until the headset lost focus, which released the button
+	 * and finally took the click (OpenTIE-VR 0.2.2 Quest test). */
+	if (Aeron_XrIsPresenting())
+		return false;
 
 	/* Target the cell center so the next inverse mapping resolves to the
 	 * same integer framebuffer coordinate despite presentation scaling. */
