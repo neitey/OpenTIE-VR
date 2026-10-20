@@ -9,9 +9,10 @@
  * moment, its laser fire and explosions (TIE Fighter's own XACT sprites),
  * Vader's helmet over purple clouds (vr/vader.rgba, packaged, never in the
  * repository), the scene's lighting and sounds (TIE Fighter's own flight
- * sound effects), and the startup show: the first time the menus come up the
- * screen stays away while the fight plays (A skips to its end), then comes
- * in. Units: the scene's world units (AERON_OPT_UNITS_PER_METER per metre),
+ * sound effects), the logo above the screen (vr/logo.rgba) and the startup
+ * show: the first time the menus come up the screen stays away while the
+ * fight plays (A skips to its end), then the title (the logo, "Press (A) to
+ * Continue") until A brings the screen in. Units: the scene's world units (AERON_OPT_UNITS_PER_METER per metre),
  * TIE world axes (x right, y ahead, z up). */
 
 #include <stdbool.h>
@@ -21,6 +22,17 @@
 
 struct AeronScene3D;
 struct TieFlightAssetSource;
+
+/* The virtual screen this frame (xr_env.c): metres, head-relative. The 4:3
+ * picture pic_w x pic_h, its centre `lift` above eye level, `dist` ahead;
+ * the frame (when there is one) frame_dist ahead, the picture scaled by
+ * frame_scale into it, its bezel frame_top above the picture's top (in the
+ * picture's plane); `units` scene units per metre (world scale). */
+typedef struct TieXrArtScreen {
+	float dist, lift, pic_w, pic_h;
+	float frame_dist, frame_scale, frame_top;
+	float units;
+} TieXrArtScreen;
 
 typedef struct TieXrArtLighting {
 	float key_dir[3], key_color[3];
@@ -43,6 +55,8 @@ void TieXrArt_Submit(struct AeronScene3D* scene, bool ships, float fade);
  * centre. */
 void TieXrArt_ViewPos(float out[3]);
 void TieXrArt_Lighting(TieXrArtLighting* out);
+/* The screen this frame, for the logo above it and the startup title. */
+void TieXrArt_SetScreen(const TieXrArtScreen* screen);
 /* The startup show: 1 = screen shown .. 0 = away (A still reaches us). */
 float TieXrArt_ScreenReveal(void);
 /* Another scene came up first this run: no startup show (it belongs to the
