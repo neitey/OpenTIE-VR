@@ -20,7 +20,7 @@
  * The grip picks a panel up when the hand is on it (within a few cm of its
  * plane) and puts it anywhere (6DoF); the layout is saved per cockpit as
  * XWA_XR_HUD_POSE_<COCKPIT> = "id=x,y,z,qx,qy,qz,qw;..." (LOCAL metres; ids
- * pod_l pod_r msg threat cmd power_l power_r gauges_l gauges_r; cockpit = the
+ * pod_l pod_r msg threat topbar cmd power_l power_r gauges_l gauges_r; cockpit = the
  * XWA cockpit model, e.g. TIECOCKPIT, or 2D in the 2D cockpit mode). Unset or
  * empty = the built-in layout of that cockpit.
  *
@@ -39,7 +39,7 @@ extern "C" {
 struct TieCockpitRenderer;
 struct TieSnapshot;
 
-#define TIE_VR_COCKPIT_HUD_MAX_PANELS 9
+#define TIE_VR_COCKPIT_HUD_MAX_PANELS 10
 
 /* Copies the panels' atlas rectangles into the aux HUD target (or
  * hud_target's free rows). `hud_area` = x, y, w, h of the HUD target the
