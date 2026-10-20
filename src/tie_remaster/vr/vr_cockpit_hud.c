@@ -389,23 +389,23 @@ typedef struct CkRule {
 #define CK_SF_SHIELDS 0x0001u /* SF_SHIELDS */
 
 static const CkRule k_rules[] = {
-	/* Tractor beam gauges only on craft that have one (else TIE's cover plate). */
+	/* Tractor beam gauges only on craft that have one, the shield slider only
+	 * with shields (else TIE shows a cover plate there). */
 	{ -9, -1, TIE_HUDI_POWER_BEAM, TIE_HUDI_POWER_BEAM, CK_SF_BEAM, 0, -1, -1, -1 },
 	{ -9, -1, TIE_HUDI_BEAM_ARC, TIE_HUDI_BEAM_ARC, CK_SF_BEAM, 0, -1, -1, -1 },
 	{ -9, -1, TIE_HUDI_BEAM_FIRE, TIE_HUDI_BEAM_FIRE, CK_SF_BEAM, 0, -1, -1, -1 },
+	{ -9, -1, TIE_HUDI_POWER_SHIELDS, TIE_HUDI_POWER_SHIELDS, CK_SF_SHIELDS, 0, -1, -1, -1 },
 	{ TIE_COCKPIT_PANEL_SENSOR_FWD, -1, -1, -1, 0, 0, CK_POD_L, -1, -1 },
 	{ TIE_COCKPIT_PANEL_SENSOR_REAR, -1, -1, -1, 0, 0, CK_POD_R, -1, -1 },
-	{ TIE_COCKPIT_PANEL_CMD, -1, -1, -1, 0, 0, CK_CMD, -1, -1 },
-	/* The shield slider only on craft with shields. */
-	{ -9, -1, TIE_HUDI_POWER_SHIELDS, TIE_HUDI_POWER_SHIELDS, CK_SF_SHIELDS, 0, -1, -1, -1 },
-	/* Speed, throttle, clock, recorder: a readout block on the side of the
-	 * CMD they are on (also when TIE put them with the CMD, as the T/I). */
+	/* Power sliders and speed/throttle/clock/recorder by the side of the CMD
+	 * they are on, also where TIE's layout put them next to the CRT (T/I,
+	 * gunboat, missile boat). */
+	{ -7, 1, -1, -1, 0, 0, CK_POWER_L, -1, CK_POWER_R },
 	{ -7, -1, TIE_HUDI_SPEED_DIGITS, TIE_HUDI_THROTTLE_DIGITS, 0, 0, CK_READOUTS_L, -1, CK_READOUTS_R },
 	{ -7, -1, TIE_HUDI_CLOCK_DIGITS, TIE_HUDI_REC_PCT, 0, 0, CK_READOUTS_L, -1, CK_READOUTS_R },
-	{ TIE_COCKPIT_PANEL_GAUGES_L, 1, -1, -1, 0, 0, CK_POWER_L, -1, -1 },
-	{ TIE_COCKPIT_PANEL_GAUGES_L, 0, -1, -1, 0, 0, CK_GAUGES_L, -1, -1 },
-	{ TIE_COCKPIT_PANEL_GAUGES_R, 1, -1, -1, 0, 0, CK_POWER_R, -1, -1 },
-	{ TIE_COCKPIT_PANEL_GAUGES_R, 0, -1, -1, 0, 0, CK_GAUGES_R, -1, -1 },
+	{ TIE_COCKPIT_PANEL_CMD, -1, -1, -1, 0, 0, CK_CMD, -1, -1 },
+	{ TIE_COCKPIT_PANEL_GAUGES_L, -1, -1, -1, 0, 0, CK_GAUGES_L, -1, -1 },
+	{ TIE_COCKPIT_PANEL_GAUGES_R, -1, -1, -1, 0, 0, CK_GAUGES_R, -1, -1 },
 	{ -3, -1, -1, -1, 0, 0, CK_TOPBAR, -1, -1 },
 	/* Unsorted instruments that showed something. */
 	{ -2, -1, TIE_HUDI_THREAT_ION, TIE_HUDI_THREAT_HULL_PCT, 0, 1, CK_THREAT, -1, -1 },
