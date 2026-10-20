@@ -1,0 +1,19 @@
+# VR cockpit HUD, views only (ahead, CMD, down-left, down-right), e.g. with
+# TIE_XR_COCKPIT=2d or TIE_XR_COCKPIT_FILE=COMBATSIMCOCKPIT (see hud.txt).
+0 mission HF1W
+0 xrpad
+0 wait flying 5 timeout=4000
++1 axis yaw 1
++1 axis pitch -0.6
++20 key t
++2 axis yaw 0
++1 axis pitch 0
++1 key ]
++12 capture ahead
++1 head 0 -30
++4 capture down
++1 head 30 -22
++4 capture down_left
++1 head -30 -22
++4 capture down_right
++2 quit

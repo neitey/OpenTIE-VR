@@ -94,6 +94,33 @@ void TieCockpitRenderer_SetXrTarget(TieCockpitRenderer* cg, int width, int heigh
 bool TieCockpitRenderer_RenderXrTarget(TieCockpitRenderer* cg, struct AeronCommandBuffer* cmd,
 									   struct AeronRenderTarget* target, const struct TieSnapshot* snap, bool world);
 
+/* VR cockpit HUD (vr/vr_cockpit_hud.c): with panels on, Prepare draws the
+ * instrument atlas in a cockpit view even without the 3D cockpit model (2D
+ * cockpit mode), the HUD target gets only the screen HUD (the target box and
+ * gunsight to the world list, the message bar), and the 3D dashboard shows
+ * no instrument quads. Set every frame before the flight prepare. */
+void TieCockpitRenderer_SetXrPanels(TieCockpitRenderer* cg, bool on);
+bool TieCockpitRenderer_XrPanels(const TieCockpitRenderer* cg);
+
+/* Where one HUD instrument is in the instrument atlas (UV, v down). */
+typedef struct TieCockpitInstrumentBox {
+	bool valid;        /* placed this atlas (est holds its anchor box) */
+	bool drawn;        /* it drew sprites (drawn_uv = their bounds) */
+	bool slider;       /* a vertical slider (power bars) */
+	int8_t group;      /* TieCockpitPanelId; -1 the gunsight cluster (world HUD); -2 none */
+	float est[4];      /* u0, v0, u1, v1 */
+	float drawn_uv[4]; /* u0, v0, u1, v1 */
+} TieCockpitInstrumentBox;
+
+/* Fills out[0..count) (count = TIE_MAX_HUD_INSTRUMENTS) for this frame's
+ * atlas and returns the atlas texture; NULL when the atlas mode is off. */
+struct AeronTexture* TieCockpitRenderer_InstrumentBoxes(const TieCockpitRenderer* cg, TieCockpitInstrumentBox* out,
+														int count);
+
+/* The message bar's text (rect = x, y, w, h in HUD-target pixels, as
+ * RenderXrTarget draws it); false when no message shows. */
+bool TieCockpitRenderer_XrMessageRect(TieCockpitRenderer* cg, const struct TieSnapshot* snap, int rect[4]);
+
 #ifdef __cplusplus
 }
 #endif

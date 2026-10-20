@@ -26,9 +26,12 @@ bool TieFlightXr_StereoEnabled(void) {
 TieFlightXrHudLayout TieFlightXr_HudLayout(void) {
 	const char* layout = getenv("XWA_XR_HUD_LAYOUT");
 	const char* headlock = getenv("XWA_XR_HUD_HEADLOCK");
+	const char* tie_layout = getenv("TIE_XR_HUD_LAYOUT");
+	if ((layout && strcmp(layout, "helmet") == 0) || (tie_layout && strcmp(tie_layout, "dashboard") == 0))
+		return TIE_FLIGHT_XR_HUD_HELMET;
 	if ((layout && strcmp(layout, "fixed") == 0) || (headlock && headlock[0] == '0'))
 		return TIE_FLIGHT_XR_HUD_FIXED;
-	return TIE_FLIGHT_XR_HUD_HELMET;
+	return TIE_FLIGHT_XR_HUD_COCKPIT;
 }
 
 float TieFlightXr_DepthBoost(void) {

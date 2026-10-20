@@ -54,6 +54,8 @@ static const char* const k_env_bright_labels[] = { "Dim", "Medium", "Bright" };
 static const char* const k_env_bright_values[] = { "0.5", "0.8", "1.0" };
 static const char* const k_screen_labels[] = { "2.5 m", "3.2 m", "4 m" };
 static const char* const k_screen_values[] = { "2.5", "3.2", "4.0" };
+static const char* const k_hud_layout_labels[] = { "Cockpit Panels", "Helmet" };
+static const char* const k_hud_layout_values[] = { "cockpit", "helmet" };
 static const char* const k_hands_labels[] = { "Controllers", "Pilot Gloves", "Off" };
 static const char* const k_hands_values[] = { "controllers", "gloves", "off" };
 
@@ -62,6 +64,10 @@ static const TieVrOptionRow k_rows[] = {
 	  "X-Wing Alliance's 3D TIE cockpits need their cockpit files copied over by the PC launcher." },
 	{ "XWA_XR_STEREO", "3D Flight", k_off_on, k_0_1, 2, 1, false,
 	  "Off shows the flight view on the flat screen as well." },
+	{ "XWA_XR_HUD_LAYOUT", "HUD", k_hud_layout_labels, k_hud_layout_values, 2, 0, false,
+	  "Cockpit Panels: the sensors, targeting computer and gauges float around the canopy; put a hand on one "
+	  "and squeeze the grip to move it. Helmet: the instruments follow your view (2D cockpit) or sit on the "
+	  "dashboard (3D cockpit)." },
 	{ "XWA_XR_HUD_SCALE", "Helmet HUD Size", k_hud_scale_labels, k_hud_scale_values, 4, 1, false, NULL },
 	{ "XWA_XR_HUD_DISTANCE", "Helmet HUD Distance", k_hud_dist_labels, k_hud_dist_values, 3, 1, false, NULL },
 	{ "XWA_XR_WORLD_SCALE", "World Scale", k_world_scale_labels, k_world_scale_values, 3, 2, false,
@@ -102,6 +108,31 @@ static const TieVrOptionRow k_rows[] = {
 enum { TIE_VR_ROW_COUNT = (int)(sizeof k_rows / sizeof k_rows[0]) };
 
 static bool s_restart_needed;
+
+/* The VR cockpit HUD's per-cockpit panel layouts (vr_cockpit_hud.h); empty =
+ * that cockpit's built-in layout. */
+static const char* const k_hud_pose_keys[] = {
+	"XWA_XR_HUD_POSE_TIECOCKPIT",
+	"XWA_XR_HUD_POSE_TIEBOMBERCOCKPIT",
+	"XWA_XR_HUD_POSE_COMBATSIMCOCKPIT",
+	"XWA_XR_HUD_POSE_2D",
+};
+
+static bool TieVrOptions_HudPosesSet(void) {
+	for (size_t i = 0; i < sizeof k_hud_pose_keys / sizeof k_hud_pose_keys[0]; ++i) {
+		const char* v = SDL_getenv(k_hud_pose_keys[i]);
+		if (v && v[0])
+			return true;
+	}
+	return false;
+}
+
+static void TieVrOptions_ResetHudPoses(void) {
+	for (size_t i = 0; i < sizeof k_hud_pose_keys / sizeof k_hud_pose_keys[0]; ++i) {
+		SDL_setenv_unsafe(k_hud_pose_keys[i], "", 1);
+		TieQuest_SaveSetting(k_hud_pose_keys[i], "");
+	}
+}
 
 bool TieVrOptions_Available(void) {
 #if defined(SDL_PLATFORM_ANDROID)
@@ -162,6 +193,10 @@ void TieVrOptions_Draw(AeronUiContext* ui) {
 			TieVrOptions_Set(row, index);
 		if (row->help && !row->restart)
 			AeronUi_Help(ui, row->help);
+		if (strcmp(row->key, "XWA_XR_HUD_LAYOUT") == 0) {
+			if (AeronUi_ButtonEnabled(ui, "Reset HUD Positions", TieVrOptions_HudPosesSet()))
+				TieVrOptions_ResetHudPoses();
+		}
 		if (strcmp(row->key, "XWA_XR_CONSOLE") == 0) {
 			const char* pose = SDL_getenv("XWA_XR_CONSOLE_POSE");
 			if (AeronUi_ButtonEnabled(ui, "Reset Console Position", pose && pose[0])) {
@@ -176,6 +211,7 @@ void TieVrOptions_Draw(AeronUiContext* ui) {
 			TieVrOptions_Set(&k_rows[i], k_rows[i].default_index);
 		SDL_setenv_unsafe("XWA_XR_CONSOLE_POSE", "", 1);
 		TieQuest_SaveSetting("XWA_XR_CONSOLE_POSE", "");
+		TieVrOptions_ResetHudPoses();
 		/* The flight stick back to its own spot. */
 		SDL_unsetenv_unsafe("XWA_XR_STICK_POS");
 		TieQuest_SaveSetting("XWA_XR_STICK_POS", "");

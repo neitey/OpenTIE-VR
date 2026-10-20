@@ -50,6 +50,13 @@ void TieXwaCockpit_Prepare(struct AeronCommandBuffer* cmd, const struct TieFligh
  * shows its panel. TieCockpitRenderer then skips its 2D art. */
 bool TieXwaCockpit_Drawn(const struct TieSnapshot* snap);
 
+/* A cockpit view in which TIE shows its panel (any cockpit mode): the VR
+ * cockpit HUD's instrument panels are shown then. */
+bool TieXwaCockpit_PanelView(const struct TieSnapshot* snap);
+
+/* The loaded cockpit model's name (e.g. "TIECOCKPIT"), "" when none. */
+const char* TieXwaCockpit_ModelName(void);
+
 /* Add the cockpit instance and the instrument panels to a begun scene. The
  * scene's origin must be snapshot.camera.world_pos. */
 void TieXwaCockpit_Submit(struct AeronScene3D* scene, const struct TieSnapshot* snap,
