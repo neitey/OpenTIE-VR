@@ -884,8 +884,11 @@ bool TieAppConfig_SetLaunchOptions(TieAppConfigState* state, const TieAppLaunchO
 		 options->model_source != TIE_FLIGHT_MODEL_SOURCE_REMASTERED) ||
 		(options->music_source != TIE_MUSIC_IMUSE && options->music_source != TIE_MUSIC_TIE98))
 		return TieAppConfig_ConfigError(error, capacity, "invalid launch settings");
+	char default_sc55[1024];
+	const char* sc55_directory =
+		TieMidiResources_EffectiveSc55Directory(options->sc55_rom_directory, default_sc55, sizeof default_sc55);
 	if (options->midi_backend == TIE_MIDI_BACKEND_SC55 && options->music_source == TIE_MUSIC_IMUSE &&
-		options->sc55_rom_directory[0] == '\0')
+		(!sc55_directory || sc55_directory[0] == '\0'))
 		return TieAppConfig_ConfigError(error, capacity,
 										"select an SC-55 ROM directory before closing settings");
 	if (!AeronConfigFile_Clone(state->user_document, &candidate, &aeron_error) ||

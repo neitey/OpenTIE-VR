@@ -19,7 +19,9 @@
 #            (/root/android/soundfonts/GeneralUser-GS.sf2, GeneralUser GS 2.0.3,
 #            32 MB, freely redistributable; never in the repo; skipped when absent:
 #            the app then defaults to OPL3 music). Needs a libmain.so built with
-#            -DENABLE_FLUIDSYNTH=ON (FluidSynth from /root/android/prefix-music).
+#            -DENABLE_FLUIDSYNTH=ON (and -DENABLE_NUKED_SC55=ON for the optional
+#            SC-55 emulation): FluidSynth and SpeexDSP come from
+#            /root/android/prefix-music, toolchain /root/android/toolchain-music.cmake.
 #   KEY/CERT signing key and certificate (never in the repo)
 set -e
 CODE=$1

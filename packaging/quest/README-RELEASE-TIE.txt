@@ -54,6 +54,10 @@ adaptive) soundtrack instead. To use your own General MIDI / GS SoundFont,
 put the .sf2 file in a folder named "soundfonts" next to
 OpenTIE-VR-Launcher.exe before running it: it goes to the headset's
 "soundfonts" folder and is used instead of GeneralUser GS (first by name).
+If you own a Roland SC-55 or SC-55mkII, put dumps of its ROMs in a folder
+named "sc55" next to the launcher; Settings -> Audio -> Synthesizer ->
+Roland SC-55 then emulates it (Nuked SC-55; heavier on the CPU, not tested
+on a headset yet). No Roland ROMs are included.
 
 Steam Frame: turn on Developer Mode, start "Lepton Development" from your
 Steam Library and keep it running; the launcher then connects to it over

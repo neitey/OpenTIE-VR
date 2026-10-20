@@ -624,3 +624,26 @@ func TestUserSoundfonts(t *testing.T) {
 		t.Errorf("OPENTIE_SOUNDFONT: got %v", got)
 	}
 }
+
+func TestUserSc55Roms(t *testing.T) {
+	dir := t.TempDir()
+	if got := userSc55Roms(dir); len(got) != 0 {
+		t.Fatalf("no sc55 folder: got %v", got)
+	}
+	rom := filepath.Join(dir, sc55Folder)
+	if err := os.MkdirAll(rom, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"sc55_rom1.bin", "sc55_waverom1.bin", "desktop.ini"} {
+		if err := os.WriteFile(filepath.Join(rom, n), []byte{1, 2, 3}, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var rels []string
+	for _, f := range userSc55Roms(dir) {
+		rels = append(rels, f.Rel)
+	}
+	if want := []string{"sc55/sc55_rom1.bin", "sc55/sc55_waverom1.bin"}; !reflect.DeepEqual(rels, want) {
+		t.Errorf("userSc55Roms = %v, want %v", rels, want)
+	}
+}

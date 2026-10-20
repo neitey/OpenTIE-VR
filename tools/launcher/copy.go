@@ -100,6 +100,7 @@ func (a *app) gameFiles() (files []gameFile, skipped int, err error) {
 	}
 	files = append(files, a.cockpits...)
 	files = append(files, userSoundfonts(a.exeDir)...)
+	files = append(files, userSc55Roms(a.exeDir)...)
 	sort.Slice(files, func(i, j int) bool { return files[i].Rel < files[j].Rel })
 	return files, skipped, nil
 }
@@ -127,6 +128,25 @@ func userSoundfonts(exeDir string) []gameFile {
 			continue
 		}
 		out = append(out, gameFile{Rel: soundfontsFolder + "/" + filepath.Base(p), Abs: p, Size: info.Size()})
+	}
+	return out
+}
+
+// userSc55Roms lists the files of a "sc55" folder next to the launcher (the
+// user's SC-55 ROM dumps; the app finds a ROM set by the files' hashes).
+func userSc55Roms(exeDir string) []gameFile {
+	entries, err := os.ReadDir(filepath.Join(exeDir, sc55Folder))
+	if err != nil {
+		return nil
+	}
+	var out []gameFile
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil || !info.Mode().IsRegular() || skipFileName(e.Name()) || info.Size() > 16<<20 {
+			continue
+		}
+		out = append(out, gameFile{Rel: sc55Folder + "/" + e.Name(), Abs: filepath.Join(exeDir, sc55Folder, e.Name()),
+			Size: info.Size()})
 	}
 	return out
 }
@@ -177,6 +197,8 @@ func folderLabel(dest string) string {
 		return "X-Wing Alliance cockpits"
 	case soundfontsFolder:
 		return "SoundFont for the music"
+	case sc55Folder:
+		return "SC-55 ROMs"
 	}
 	return dest
 }
@@ -618,8 +640,11 @@ func (a *app) copyGame() error {
 		say("No X-Wing Alliance cockpits: OpenTIE-VR uses TIE Fighter's own 2D cockpits.")
 	}
 	for _, f := range files {
-		if destFolder(f.Rel) == soundfontsFolder {
+		switch destFolder(f.Rel) {
+		case soundfontsFolder:
 			say("Music SoundFont to copy: %s", path.Base(f.Rel))
+		case sc55Folder:
+			say("SC-55 ROM file to copy: %s", path.Base(f.Rel))
 		}
 	}
 

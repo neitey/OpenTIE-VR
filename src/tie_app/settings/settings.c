@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <SDL3/SDL_platform_defines.h>
+
 #include "aeron/aeron.h"
 #include "aeron/scene/ui.h"
 #include "aeron/xr.h"
@@ -615,6 +617,8 @@ static void TieSettings_OpenSoundfontPicker(const char* initial_path) {
 
 static void TieSettings_OpenSc55Picker(const char* initial_path) {
 	char error[512];
+	char default_directory[TIE_GAME_DATA_PATH_MAX];
+	initial_path = TieMidiResources_EffectiveSc55Directory(initial_path, default_directory, sizeof default_directory);
 	const AeronUiFilePickerDesc desc = {
 		.mode = AERON_UI_FILE_PICKER_SELECT_DIRECTORY,
 		.title = "SELECT SC-55 ROM DIRECTORY",
@@ -929,7 +933,12 @@ static void TieSettings_AudioPage(AeronUiContext* ui) {
 			if (result & AERON_UI_INPUT_TEXT_ACTION_ACTIVATED)
 				TieSettings_OpenSc55Picker(launch.sc55_rom_directory);
 			launch_changed |= (result & AERON_UI_INPUT_TEXT_CHANGED) != 0;
+#if defined(SDL_PLATFORM_ANDROID)
+			AeronUi_Help(ui, "Requires SC-55 or SC-55mkII ROM dumps; prefers MKII when both are present. "
+							 "Empty: the headset's sc55 folder (the PC launcher copies ROMs there).");
+#else
 			AeronUi_Help(ui, "Requires SC-55 or SC-55mkII ROM dumps; prefers MKII when both are present.");
+#endif
 		}
 	} else {
 		AeronUi_Help(ui, "Uses the prerecorded soundtrack from the TIE98 installation.");

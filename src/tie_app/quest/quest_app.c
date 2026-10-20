@@ -420,13 +420,17 @@ static void quest_extract_resources(TieLaunchOptions* launch) {
  * 32 MB) is copied next to the extracted resources, where FluidSynth can open
  * it (midi_resources.c: <resources>/soundfonts). Copied in pieces, again only
  * when the size differs (a new APK with another version). files/soundfonts is
- * made for the user's own .sf2, which then wins (the PC launcher copies one). */
+ * made for the user's own .sf2, which then wins (the PC launcher copies one),
+ * files/sc55 for SC-55 ROM dumps. */
 #define TIE_QUEST_BUNDLED_SOUNDFONT "GeneralUser-GS.sf2"
 
 static void quest_extract_soundfont(void) {
 	char path[1300];
 	if (s_external[0]) {
 		snprintf(path, sizeof path, "%s/soundfonts", s_external);
+		quest_own_folder(path);
+		/* The user's SC-55 ROM dumps (Nuked SC-55; midi_resources.c). */
+		snprintf(path, sizeof path, "%s/sc55", s_external);
 		quest_own_folder(path);
 	}
 	if (!s_resource_root[0])

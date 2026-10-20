@@ -107,7 +107,26 @@ bool TieMidiResources_Soundfontvalidate(const char* path, char* error, size_t er
 	return true;
 }
 
+const char* TieMidiResources_EffectiveSc55Directory(const char* configured, char* buffer, size_t capacity) {
+	if (configured && configured[0])
+		return configured;
+#if defined(SDL_PLATFORM_ANDROID)
+	const char* external = SDL_GetAndroidExternalStoragePath();
+	if (buffer && capacity && external && external[0]) {
+		const int length = snprintf(buffer, capacity, "%s/sc55", external);
+		if (length > 0 && (size_t)length < capacity)
+			return buffer;
+	}
+#else
+	(void)buffer;
+	(void)capacity;
+#endif
+	return configured;
+}
+
 bool TieMidiResources_Sc55RomDirectoryvalidate(const char* path, char* error, size_t error_capacity) {
+	char default_directory[1024];
+	path = TieMidiResources_EffectiveSc55Directory(path, default_directory, sizeof default_directory);
 	ImuseNukedSc55Romset* romset = imuse_nuked_sc55_romset_load(path, error, error_capacity);
 	if (!romset)
 		return false;

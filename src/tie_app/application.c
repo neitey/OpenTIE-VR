@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <SDL3/SDL_platform_defines.h>
+
 #include "tie_app/application.h"
 #include "tie_app/quest/quest_app.h"
 #include "tie_app/test/test_harness.h"
@@ -66,6 +68,11 @@ static void TieApplication_WarnMidiFallback(const char* reason) {
 	char message[768];
 	snprintf(message, sizeof message, "%s\n\nThe OPL3 MIDI backend will be used for this session.", reason);
 	Aeron_LogWarn("tie.audio", "%s", message);
+#if defined(SDL_PLATFORM_ANDROID)
+	/* An Android dialog cannot be seen in the headset and would block the start. */
+	(void)button;
+	return;
+#endif
 	const AeronMessageBoxOptions options = {
 		.kind = AERON_MESSAGE_BOX_WARNING,
 		.title = "MIDI Synthesizer Warning",
@@ -317,15 +324,16 @@ int TieApplication_Run(const TieLaunchOptions* launch_options) {
 						  configured_soundfont[0] ? "" : " (default SoundFont)");
 		}
 	} else if (effective_midi_backend == TIE_MIDI_BACKEND_SC55) {
-		sc55_romset = imuse_nuked_sc55_romset_load(app_config.requested.sc55_rom_directory, config_error,
-												   sizeof config_error);
+		char default_sc55[1024];
+		const char* sc55_directory = TieMidiResources_EffectiveSc55Directory(
+			app_config.requested.sc55_rom_directory, default_sc55, sizeof default_sc55);
+		sc55_romset = imuse_nuked_sc55_romset_load(sc55_directory, config_error, sizeof config_error);
 		if (!sc55_romset) {
 			TieApplication_WarnMidiFallback(config_error);
 			effective_midi_backend = TIE_MIDI_BACKEND_FM4_OPL3;
 		} else {
 			const char* romset_name = imuse_nuked_sc55_romset_name(sc55_romset);
-			Aeron_LogInfo("tie.audio", "using Nuked SC-55 %s MIDI backend from %s", romset_name,
-						  app_config.requested.sc55_rom_directory);
+			Aeron_LogInfo("tie.audio", "using Nuked SC-55 %s MIDI backend from %s", romset_name, sc55_directory);
 		}
 	}
 	if (effective_midi_backend == TIE_MIDI_BACKEND_FM4_OPL3) {
