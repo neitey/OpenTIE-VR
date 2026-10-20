@@ -114,10 +114,9 @@ in a mission the settings also have a Briefing page (briefing and goals).
 
 Problems?
 ---------
-Choppy flight (below 72 fps): the instrument panels are drawn extra sharp.
-Add the line TIE_XR_ATLAS_SIZE=1024x768 to opentie-quest.cfg (in
-Android/data/org.opentie.quest/files on the headset) for slightly softer
-panels and less GPU work.
+Choppy flight (below 72 fps): in opentie-quest.cfg (Android/data/
+org.opentie.quest/files on the headset) try XWA_XR_FOVEATION=medium, or
+XWA_XR_DIRECT_OUTPUT=1 (no bloom glow, noticeably less GPU work).
 
 Run the launcher and choose "Collect logs" at the end (or start it with
 --logs): it copies the game's log files (opentie.log, opentie-prev.log,

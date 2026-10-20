@@ -56,8 +56,8 @@
 #define COCKPIT_ATLAS_H 1440
 #define COCKPIT_ATLAS_XR_W 1024
 #define COCKPIT_ATLAS_XR_H 768
-#define COCKPIT_ATLAS_XR_PANELS_W 1536
-#define COCKPIT_ATLAS_XR_PANELS_H 1152
+#define COCKPIT_ATLAS_XR_PANELS_W 1024
+#define COCKPIT_ATLAS_XR_PANELS_H 768
 #define COCKPIT_GROUP_HUD (-1)
 #define COCKPIT_GROUP_NONE (-2)
 #define COCKPIT_GROUP_TOP (-3) /* above the gunsight (T/A, T/D top bar): screen, or a VR HUD panel */
@@ -3508,8 +3508,9 @@ static void TieCockpitRenderer_AtlasSize(int* w, int* h) {
 	const bool xr = Aeron_XrIsPresenting() != 0;
 	*w = xr ? COCKPIT_ATLAS_XR_W : COCKPIT_ATLAS_W;
 	*h = xr ? COCKPIT_ATLAS_XR_H : COCKPIT_ATLAS_H;
-	/* The cockpit HUD's floating panels are larger and nearer (CMD 0.28 m at
-	 * 0.62 m): 1.5x the texels keep them about one texel per eye pixel. */
+	/* The cockpit HUD's floating panels (larger, nearer): same 1024x768 by
+	 * default since the headset's GPU is the limit in the cockpit; 1536x1152
+	 * (TIE_XR_ATLAS_SIZE) is sharper. */
 	if (xr && TieFlightXr_HudLayout() == TIE_FLIGHT_XR_HUD_COCKPIT) {
 		*w = COCKPIT_ATLAS_XR_PANELS_W;
 		*h = COCKPIT_ATLAS_XR_PANELS_H;

@@ -103,6 +103,9 @@ static const TieVrOptionRow k_rows[] = {
 	  "Hold the left grip still for a moment (no button with it), point at a command, pull the left trigger." },
 	{ "XWA_XR_SIDE_PANEL", "Side Panel", k_off_on, k_0_1, 2, 1, false,
 	  "On your right: tactical map, voice commands, button mapping." },
+	{ "XWA_XR_DIRECT_OUTPUT", "Direct Output (faster)", k_off_on, k_0_1, 2, 0, false,
+	  "On: the 3D view goes straight into the headset images, about 3 ms less GPU work per frame in "
+	  "flight; there is no bloom glow on lasers and engines." },
 	{ "AERON_XR_RESOLUTION_SCALE", "Resolution", k_res_labels, k_res_values, 4, 2, true, NULL },
 	{ "AERON_XR_REFRESH_RATE", "Refresh Rate", k_refresh_labels, k_refresh_values, 4, 0, true, NULL },
 	{ "XWA_XR_FOVEATION", "Foveation", k_fov_labels, k_fov_values, 4, 1, true,
