@@ -1,0 +1,129 @@
+# Controller-only playthrough of the frontend (no keyboard), fake headset:
+#   run.sh <build> tools/vrtest/scripts/controllers_only.txt <out> TIE_TEST_XR=1 XWA_HANGAR_PROMPT=1 TIE_TEST_TIMEOUT=9000
+# Only what Touch controllers produce on the Quest:
+#   mouse x y [click]   right-controller ray on the virtual screen + right trigger (logical 1440x1080)
+#   xrbutton a|b|x|...  A = Enter, B = Esc, X = Space outside flight; flight buttons in flight
+#   xrhand left|right <trigger> [grip]   triggers / grips (chords, launch hold)
+#   xrmenu b            B while the settings menu is open (closes it)
+#   key Escape          the left controller's menu button (the engine sends Escape)
+# title -> new pilot (VR keyboard) -> concourse -> training (pick craft, fly, end, debrief) ->
+# tech room -> film room -> combat chamber (briefing, Flight Officer, fly, settings VR/Briefing,
+# end, debrief) -> concourse. ~1500 host frames; one to two hours on SwiftShader under load.
+0 wait shell 8
++30 xrbutton a                 # A (= Enter) skips the crawl and the intro film
+0 wait shell 100 timeout=900
++40 mouse 657 189              # VR keyboard: T E S T
++3 mouse 657 189 click
++5 mouse 405 189
++3 mouse 405 189 click
++5 mouse 259 252
++3 mouse 259 252 click
++5 mouse 657 189
++3 mouse 657 189 click
++10 capture typed
++5 mouse 1249 252              # keyboard Enter: create the pilot
++3 mouse 1249 252 click
++60 capture registered
++30 mouse 1245 612             # the door on the right
++10 mouse 1245 612 click
+0 wait shell 110 timeout=900
++40 capture concourse
+# --- training simulator
++5 mouse 290 603               # training room door
++5 mouse 290 603 click
+0 wait shell 121 timeout=1500
++40 mouse 945 770              # Ship: next craft (TIE Interceptor)
++5 mouse 945 770 click
++30 capture training_room
++5 mouse 522 1044              # launch button
++5 mouse 522 1044 click
+0 wait scene flight timeout=3000
++20 capture training_hold      # "Pull the trigger to launch."
++2 xrhand right 1              # right trigger: launch
++4 xrhand right 0
+0 wait flying 5 timeout=2000
++10 capture training_flying
++2 xrhand left 0 1             # left grip + right stick click: end mission prompt
++2 xrbutton rs
++3 xrhand left 0 0
++10 xrhand left 1              # both triggers: confirm
++0 xrhand right 1
++4 xrhand left 0
++0 xrhand right 0
+0 wait shell 123 timeout=2000
++40 capture training_debrief
++5 mouse 1237 990              # debrief: exit button (bottom right)
++5 mouse 1237 990 click
+0 wait shell 122 timeout=1500
++30 mouse 1098 815             # training room: exit lever
++5 mouse 1098 815 click
+0 wait shell 110 timeout=1500
+# --- tech room
++40 mouse 1063 421             # tech room door
++5 mouse 1063 421 click
+0 wait shell 150 timeout=1500
++40 mouse 1310 821             # next ship
++5 mouse 1310 821 click
++40 capture tech_room
++5 mouse 179 416               # door (left panel)
++5 mouse 179 416 click
+0 wait shell 110 timeout=1500
+# --- film room
++40 mouse 1297 445             # film room door
++5 mouse 1297 445 click
+0 wait shell 140 timeout=1500
++40 capture film_room
++5 mouse 922 738               # "Exit Film Room"
++5 mouse 922 738 click
+0 wait shell 110 timeout=1500
+# --- combat chamber
++40 mouse 671 531              # combat chamber door
++5 mouse 671 531 click
+0 wait shell 131 timeout=1500
++40 mouse 513 877              # next mission (Mission 2)
++5 mouse 513 877 click
++30 mouse 1227 817             # start
++5 mouse 1227 817 click
+0 wait shell 133 timeout=1500
++40 capture briefing
++5 mouse 517 988               # skip section
++5 mouse 517 988 click
++30 mouse 720 988              # Flight Officer questions
++5 mouse 720 988 click
++40 capture officer
++5 mouse 1080 988              # enter the mission
++5 mouse 1080 988 click
+0 wait scene flight timeout=3000
++20 capture combat_hold
++2 xrhand right 1              # right trigger: launch
++4 xrhand right 0
+0 wait flying 5 timeout=2000
++10 capture combat_flying
++2 key Escape                  # menu button: settings
++10 mouse 1017 122             # VR tab
++5 mouse 1017 122 click
++10 capture settings_vr
++5 mouse 1134 122              # Briefing tab
++5 mouse 1134 122 click
++10 capture settings_briefing
++2 xrmenu b                    # B closes the settings
++10 capture settings_closed
++2 xrhand left 0 1             # end mission chord
++2 xrbutton rs
++3 xrhand left 0 0
++10 xrhand left 1
++0 xrhand right 1
++4 xrhand left 0
++0 xrhand right 0
++40 capture mission_end        # "Press X or button to continue"
++2 xrbutton x
+0 wait scene frontend timeout=2000
++60 capture debrief
++5 mouse 1237 990              # debrief exit
++5 mouse 1237 990 click
+0 wait shell 132 timeout=1500
++30 mouse 81 981               # combat chamber exit
++5 mouse 81 981 click
+0 wait shell 110 timeout=1500
++40 capture back_in_concourse
++2 quit
