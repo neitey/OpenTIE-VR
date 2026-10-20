@@ -46,6 +46,15 @@ game.fil) and XWA/FlightModels (the three cockpit models).
 
 OpenTIE-VR is a separate app from OpenXWA-VR; both can be installed.
 
+Music: TIE Fighter's adaptive iMUSE soundtrack (written for the Roland
+SC-55) plays through FluidSynth with the bundled GeneralUser GS SoundFont.
+Settings -> Audio -> Synthesizer switches back to the original OPL3 (FM)
+sound; Music Source "CD Music" plays the 1998 edition's recorded (not
+adaptive) soundtrack instead. To use your own General MIDI / GS SoundFont,
+put the .sf2 file in a folder named "soundfonts" next to
+OpenTIE-VR-Launcher.exe before running it: it goes to the headset's
+"soundfonts" folder and is used instead of GeneralUser GS (first by name).
+
 Steam Frame: turn on Developer Mode, start "Lepton Development" from your
 Steam Library and keep it running; the launcher then connects to it over
 the USB cable (or Wi-Fi). OpenTIE-VR appears in the Lepton window's

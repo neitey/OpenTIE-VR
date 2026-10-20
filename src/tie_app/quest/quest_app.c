@@ -416,12 +416,64 @@ static void quest_extract_resources(TieLaunchOptions* launch) {
 		launch->resource_root = s_resource_root;
 }
 
+/* The bundled SoundFont (packaging: assets/soundfonts/GeneralUser-GS.sf2, about
+ * 32 MB) is copied next to the extracted resources, where FluidSynth can open
+ * it (midi_resources.c: <resources>/soundfonts). Copied in pieces, again only
+ * when the size differs (a new APK with another version). files/soundfonts is
+ * made for the user's own .sf2, which then wins (the PC launcher copies one). */
+#define TIE_QUEST_BUNDLED_SOUNDFONT "GeneralUser-GS.sf2"
+
+static void quest_extract_soundfont(void) {
+	char path[1300];
+	if (s_external[0]) {
+		snprintf(path, sizeof path, "%s/soundfonts", s_external);
+		quest_own_folder(path);
+	}
+	if (!s_resource_root[0])
+		return;
+	SDL_IOStream* in = SDL_IOFromFile("soundfonts/" TIE_QUEST_BUNDLED_SOUNDFONT, "rb");
+	if (!in)
+		return; /* this APK has no SoundFont: OPL3 stays the default */
+	const Sint64 size = SDL_GetIOSize(in);
+	snprintf(path, sizeof path, "%s/soundfonts", s_resource_root);
+	mkdir(path, 0775);
+	snprintf(path, sizeof path, "%s/soundfonts/" TIE_QUEST_BUNDLED_SOUNDFONT, s_resource_root);
+	struct stat st;
+	if (size > 0 && stat(path, &st) == 0 && st.st_size == size) {
+		SDL_CloseIO(in);
+		return;
+	}
+	char temporary[1320];
+	snprintf(temporary, sizeof temporary, "%s.part", path);
+	FILE* out = fopen(temporary, "wb");
+	int ok = out != NULL;
+	static char buffer[1 << 16];
+	Sint64 copied = 0;
+	while (ok) {
+		const size_t n = SDL_ReadIO(in, buffer, sizeof buffer);
+		if (n == 0)
+			break;
+		ok = fwrite(buffer, 1, n, out) == n;
+		copied += (Sint64)n;
+	}
+	SDL_CloseIO(in);
+	if (out && fclose(out) != 0)
+		ok = 0;
+	if (ok && copied > 0 && (size <= 0 || copied == size) && rename(temporary, path) == 0) {
+		Aeron_LogInfo("tie.quest", "bundled SoundFont copied to %s (%lld bytes)", path, (long long)copied);
+	} else {
+		Aeron_LogError("tie.quest", "could not copy the bundled SoundFont to %s", path);
+		remove(temporary);
+	}
+}
+
 int TieQuest_PreInit(TieLaunchOptions* launch) {
 	const char* external = SDL_GetAndroidExternalStoragePath();
 	if (external && external[0])
 		snprintf(s_external, sizeof s_external, "%s", external);
 	quest_load_settings();
 	quest_extract_resources(launch);
+	quest_extract_soundfont();
 	quest_xr_defaults();
 	quest_game_folders(launch);
 	return 1;

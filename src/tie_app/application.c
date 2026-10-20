@@ -293,18 +293,28 @@ int TieApplication_Run(const TieLaunchOptions* launch_options) {
 				  (double)app_config.requested.flight_model_opt_projectile_emissive_strength);
 
 	const char* soundfont_path = NULL;
+	char default_soundfont[1024];
 	ImuseNukedSc55Romset* sc55_romset = NULL;
 	TieMidiBackendKind effective_midi_backend = app_config.requested.music_source == TIE_MUSIC_IMUSE
 													? app_config.requested.midi_backend
 													: TIE_MIDI_BACKEND_NONE;
 	if (effective_midi_backend == TIE_MIDI_BACKEND_FLUIDSYNTH) {
-		if (!TieMidiResources_Soundfontvalidate(app_config.requested.fluidsynth_soundfont_file, config_error,
-												sizeof config_error)) {
-			TieApplication_WarnMidiFallback(config_error);
-			effective_midi_backend = TIE_MIDI_BACKEND_FM4_OPL3;
-		} else {
-			soundfont_path = app_config.requested.fluidsynth_soundfont_file;
-			Aeron_LogInfo("tie.audio", "using FluidSynth MIDI backend with %s", soundfont_path);
+		const char* configured_soundfont = app_config.requested.fluidsynth_soundfont_file;
+		if (!TieMidiResources_Soundfontvalidate(configured_soundfont, config_error, sizeof config_error)) {
+			/* A configured SoundFont that went away: the default one beats OPL3. */
+			if (configured_soundfont[0] && TieMidiResources_Soundfontvalidate("", NULL, 0)) {
+				Aeron_LogWarn("tie.audio", "%s; using the default SoundFont", config_error);
+				configured_soundfont = "";
+			} else {
+				TieApplication_WarnMidiFallback(config_error);
+				effective_midi_backend = TIE_MIDI_BACKEND_FM4_OPL3;
+			}
+		}
+		if (effective_midi_backend == TIE_MIDI_BACKEND_FLUIDSYNTH) {
+			soundfont_path = TieMidiResources_EffectiveSoundfont(configured_soundfont, default_soundfont,
+																 sizeof default_soundfont);
+			Aeron_LogInfo("tie.audio", "using FluidSynth MIDI backend with %s%s", soundfont_path,
+						  configured_soundfont[0] ? "" : " (default SoundFont)");
 		}
 	} else if (effective_midi_backend == TIE_MIDI_BACKEND_SC55) {
 		sc55_romset = imuse_nuked_sc55_romset_load(app_config.requested.sc55_rom_directory, config_error,

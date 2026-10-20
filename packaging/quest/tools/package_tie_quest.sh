@@ -15,6 +15,11 @@
 #   ASSETS   folder with icon/, vr_splash.png   ($SP/tieassets)
 #   VOICE    speech model for voice commands    ($SP/vrassets/voice: encoder/decoder/joiner.onnx,
 #            tokens.txt; never in the repo; skipped when absent)
+#   SOUNDFONT bundled General MIDI/GS SoundFont for FluidSynth music
+#            (/root/android/soundfonts/GeneralUser-GS.sf2, GeneralUser GS 2.0.3,
+#            32 MB, freely redistributable; never in the repo; skipped when absent:
+#            the app then defaults to OPL3 music). Needs a libmain.so built with
+#            -DENABLE_FLUIDSYNTH=ON (FluidSynth from /root/android/prefix-music).
 #   KEY/CERT signing key and certificate (never in the repo)
 set -e
 CODE=$1
@@ -27,6 +32,7 @@ MANIFEST=${MANIFEST:-$SP/q21/base/AndroidManifest.xml}
 VKSHIM=${VKSHIM:-$(find /root/build-android -name libopenxwa_vkshim.so | head -1)}
 ASSETS=${ASSETS:-$SP/tieassets}
 VOICE=${VOICE:-$SP/vrassets/voice}
+SOUNDFONT=${SOUNDFONT:-/root/android/soundfonts/GeneralUser-GS.sf2}
 KEY=${KEY:-/root/android/signing/openxwa-quest-key.pem}
 CERT=${CERT:-/root/android/signing/openxwa-quest-cert.der}
 OUT=${OUT:-/root/out/OpenTIE-VR-$VER.apk}
@@ -87,6 +93,13 @@ if [ -f "$VOICE/encoder.onnx" ]; then
   for f in encoder.onnx decoder.onnx joiner.onnx tokens.txt; do EXTRA="$EXTRA assets/voice/$f=$VOICE/$f"; done
 else
   echo "warning: no speech model in $VOICE: voice commands will be off" >&2
+fi
+# Music: the SoundFont FluidSynth plays iMUSE with (quest_app.c copies it out;
+# its name is fixed there).
+if [ -f "$SOUNDFONT" ] && grep -q "HAVE_FLUIDSYNTH=1" "$BUILD/build.ninja" 2>/dev/null; then
+  EXTRA="$EXTRA assets/soundfonts/GeneralUser-GS.sf2=$SOUNDFONT"
+else
+  echo "warning: no SoundFont ($SOUNDFONT) or FluidSynth is off in $BUILD: OPL3 music only" >&2
 fi
 if [ -d "$ASSETS/vr" ]; then
   for f in "$ASSETS"/vr/*; do EXTRA="$EXTRA assets/vr/$(basename "$f")=$f"; done

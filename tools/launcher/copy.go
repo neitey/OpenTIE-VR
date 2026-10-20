@@ -99,8 +99,36 @@ func (a *app) gameFiles() (files []gameFile, skipped int, err error) {
 		}
 	}
 	files = append(files, a.cockpits...)
+	files = append(files, userSoundfonts(a.exeDir)...)
 	sort.Slice(files, func(i, j int) bool { return files[i].Rel < files[j].Rel })
 	return files, skipped, nil
+}
+
+// userSoundfonts lists the SoundFonts to copy to the headset's soundfonts
+// folder: the file named by OPENTIE_SOUNDFONT, else every *.sf2 in a
+// "soundfonts" folder next to the launcher. The app plays the music with the
+// first one (by name) instead of its bundled GeneralUser GS.
+func userSoundfonts(exeDir string) []gameFile {
+	var paths []string
+	if env := os.Getenv("OPENTIE_SOUNDFONT"); env != "" {
+		paths = append(paths, env)
+	} else if entries, err := os.ReadDir(filepath.Join(exeDir, soundfontsFolder)); err == nil {
+		for _, e := range entries {
+			if strings.EqualFold(filepath.Ext(e.Name()), ".sf2") {
+				paths = append(paths, filepath.Join(exeDir, soundfontsFolder, e.Name()))
+			}
+		}
+	}
+	var out []gameFile
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil || !info.Mode().IsRegular() {
+			logf("SoundFont %s: not a file, skipped", p)
+			continue
+		}
+		out = append(out, gameFile{Rel: soundfontsFolder + "/" + filepath.Base(p), Abs: p, Size: info.Size()})
+	}
+	return out
 }
 
 // destFolder is the app folder a file belongs to (TIE98, TIE95 or
@@ -147,6 +175,8 @@ func folderLabel(dest string) string {
 		return "TIE Fighter Collector's CD"
 	case cockpitsFolder:
 		return "X-Wing Alliance cockpits"
+	case soundfontsFolder:
+		return "SoundFont for the music"
 	}
 	return dest
 }
@@ -586,6 +616,11 @@ func (a *app) copyGame() error {
 	say("%d game files (%s).", len(files), humanSize(totalSize(files)))
 	if len(a.cockpits) == 0 {
 		say("No X-Wing Alliance cockpits: OpenTIE-VR uses TIE Fighter's own 2D cockpits.")
+	}
+	for _, f := range files {
+		if destFolder(f.Rel) == soundfontsFolder {
+			say("Music SoundFont to copy: %s", path.Base(f.Rel))
+		}
 	}
 
 	for attempt := 1; ; attempt++ {

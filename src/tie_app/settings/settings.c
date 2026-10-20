@@ -591,7 +591,10 @@ static void TieSettings_OpenSoundfontPicker(const char* initial_path) {
 		{ .label = "SoundFont files (.sf2)", .extensions = extensions, .extension_count = 1 },
 	};
 	char initial_directory[TIE_GAME_DATA_PATH_MAX];
+	char default_soundfont[TIE_GAME_DATA_PATH_MAX];
 	char error[512];
+	/* Empty field: start where the default SoundFont lives. */
+	initial_path = TieMidiResources_EffectiveSoundfont(initial_path, default_soundfont, sizeof default_soundfont);
 	const AeronUiFilePickerDesc desc = {
 		.mode = AERON_UI_FILE_PICKER_OPEN_FILE,
 		.title = "SELECT SOUNDFONT",
@@ -905,7 +908,20 @@ static void TieSettings_AudioPage(AeronUiContext* ui) {
 			if (result & AERON_UI_INPUT_TEXT_ACTION_ACTIVATED)
 				TieSettings_OpenSoundfontPicker(launch.fluidsynth_soundfont_file);
 			launch_changed |= (result & AERON_UI_INPUT_TEXT_CHANGED) != 0;
-			AeronUi_Help(ui, "FluidSynth requires a SoundFont 2 file.");
+			if (launch.fluidsynth_soundfont_file[0]) {
+				AeronUi_Help(ui, "FluidSynth plays the music with this SoundFont 2 (.sf2) file. "
+								 "Clear the field to use the default SoundFont.");
+			} else {
+				char default_soundfont[TIE_GAME_DATA_PATH_MAX];
+				char help[TIE_GAME_DATA_PATH_MAX + 96];
+				if (TieMidiResources_DefaultSoundfont(default_soundfont, sizeof default_soundfont)) {
+					const char* name = strrchr(default_soundfont, '/');
+					snprintf(help, sizeof help, "Empty: the default SoundFont, %s.", name ? name + 1 : default_soundfont);
+				} else {
+					snprintf(help, sizeof help, "FluidSynth requires a SoundFont 2 (.sf2) file.");
+				}
+				AeronUi_Help(ui, help);
+			}
 		} else if (launch.midi_backend == TIE_MIDI_BACKEND_SC55) {
 			const uint32_t result = AeronUi_InputTextWithAction(
 				ui, "SC-55 ROM Directory", launch.sc55_rom_directory, sizeof launch.sc55_rom_directory,

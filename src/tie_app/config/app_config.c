@@ -3,6 +3,9 @@
 #include "tie_app/config/keyboard_config.h"
 
 #include "aeron/log.h"
+#include "tie_app/midi_resources.h"
+
+#include <SDL3/SDL_platform_defines.h>
 
 #include <float.h>
 #include <math.h>
@@ -603,6 +606,21 @@ bool TieAppConfig_Load(AeronVfs* vfs, TieAppConfigState* state, char* error, siz
 		TieAppConfig_LogAeronError(&aeron_error, error, capacity);
 		goto done;
 	}
+#if defined(SDL_PLATFORM_ANDROID)
+	/* Quest: FluidSynth with the bundled GeneralUser GS (or the user's own
+	 * SoundFont in files/soundfonts) is the default synthesizer, not OPL3. */
+	{
+		char soundfont[1024];
+		const char* shipped_backend = AeronConfigFile_GetString(shipped, "audio.midi_backend", "");
+		if (strcmp(shipped_backend, "fm4_opl3") == 0 && TieMidiResources_DefaultSoundfont(soundfont, sizeof soundfont)) {
+			if (!AeronConfigFile_SetString(shipped, "audio.midi_backend", "fluidsynth", &aeron_error)) {
+				TieAppConfig_LogAeronError(&aeron_error, error, capacity);
+				goto done;
+			}
+			Aeron_LogInfo("tie.config", "default music synthesizer: FluidSynth with %s", soundfont);
+		}
+	}
+#endif
 	if (!TieAppConfig_CheckVersion(shipped, error, capacity) ||
 		!TieAppConfig_ValidateSchemaKeys(shipped, false, error, capacity) ||
 		!TieAppConfig_ParseComplete(shipped, &baseline_ssao, &baseline_shadows, &baseline_tonemap,
