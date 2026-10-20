@@ -3,6 +3,8 @@
 #include "aeron/log.h"
 #include "tie/shell.h"
 #include "tie/shipext.h"
+#include "tie/tie.h"
+#include "tie/user.h"
 #include "tie_runtime/runtime/shell_task.h"
 #include "tie_runtime/snapshot/snapshot.h"
 #include <SDL3/SDL.h>
@@ -50,6 +52,10 @@
  *                            replaces TIE_TEST_XR_LHAND/RHAND from then on
  *   (the game's flight stick, Aeron_XrSetVirtualStick, moves the xrpad's
  *   right-stick axes like the engine does: logged as "xr vstick")
+ *   warp <d> [cargo]         player <d> world units in front of its craft
+ *                            target, facing it (proximity events: inspection);
+ *                            'cargo' first targets the next uninspected craft
+ *                            with cargo
  *   log <text>, quit
  *   (env TIE_TEST_GHOST_PADS=N: N idle 'Device 0x...' gamepads in slots 0..,
  *   as Android lists the Quest's Touch controllers)
@@ -77,6 +83,7 @@ enum {
 	TT_CMD_XRHAND,
 	TT_CMD_XRPOSE,
 	TT_CMD_XRPAD,
+	TT_CMD_WARP,
 };
 
 enum {
@@ -320,6 +327,7 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 		{ "xrhand", TT_CMD_XRHAND },
 		{ "xrpose", TT_CMD_XRPOSE },
 		{ "xrpad", TT_CMD_XRPAD },
+		{ "warp", TT_CMD_WARP },
 	};
 	out->cmd = -1;
 	for (size_t i = 0; i < SDL_arraysize(commands); ++i)
@@ -437,6 +445,14 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 			}
 			return true;
 		}
+		case TT_CMD_WARP:
+			arg = TieTest_NextToken(&cursor);
+			out->fvalue[0] = arg ? (float)SDL_atof(arg) : 0.0f;
+			{
+				char* mode = TieTest_NextToken(&cursor);
+				out->ivalue[0] = mode && SDL_strcasecmp(mode, "cargo") == 0;
+			}
+			return arg != NULL;
 		case TT_CMD_XRTHROTTLE:
 			arg = TieTest_NextToken(&cursor);
 			out->fvalue[0] = arg ? (float)SDL_atof(arg) : 0.0f;
@@ -830,6 +846,46 @@ static bool TieTest_WaitDone(const TieTestLine* line) {
 	}
 }
 
+/* 'warp <d>': puts the player <d> world units in front of the current
+ * target (craft targets only), keeping the player's orientation, so it
+ * faces the target. Lets scripts reach proximity events (inspection,
+ * docking range) without steering there. */
+static void TieTest_WarpToTarget(float distance, int pick_cargo, int line_no) {
+	if (pick_cargo) {
+		/* Next craft after the current target that carries cargo and is
+		 * not inspected yet, selected the way the target keys do. */
+		const uint16_t start = pstate.target_obj_idx < NUM_CRAFTS ? pstate.target_obj_idx : 0;
+		for (uint16_t n = 1; n <= NUM_CRAFTS; ++n) {
+			const uint16_t i = (uint16_t)((start + n) % NUM_CRAFTS);
+			const CraftData* c = objects[i].craft_ptr;
+			if (i == pstate.object_idx || !c || objects[i].category || !c->status_flags || c->inspected ||
+				!c->cargo[0])
+				continue;
+			user_setnewtarget(i);
+			TieTest_Log("warp: targeting craft %u (species %u, cargo '%.16s')", (unsigned)i,
+						(unsigned)objects[i].ship_idx, c->cargo);
+			break;
+		}
+	}
+	const uint16_t target = pstate.target_obj_idx;
+	FlightObject* player = pstate.player;
+	if (!player || target >= NUM_CRAFTS || !objects[target].craft_ptr) {
+		TieTest_Log("script line %d: warp needs a craft target (target %u)", line_no, (unsigned)target);
+		return;
+	}
+	const FlightObject* t = &objects[target];
+	const int32_t d = (int32_t)distance;
+	player->world_x = t->world_x - (int32_t)(((int64_t)player->fwd_x * d) >> 15);
+	player->world_y = t->world_y - (int32_t)(((int64_t)player->fwd_y * d) >> 15);
+	player->world_z = t->world_z - (int32_t)(((int64_t)player->fwd_z * d) >> 15);
+	player->world_x_prev = player->world_x;
+	player->world_y_prev = player->world_y;
+	player->world_z_prev = player->world_z;
+	TieTest_Log("warp: player %u to %d units from target %u (species %u, bound_hwidth %u)",
+				(unsigned)pstate.object_idx, d, (unsigned)target, (unsigned)t->ship_idx,
+				(unsigned)species_table[t->ship_idx].bound_hwidth);
+}
+
 static void TieTest_Execute(AeronInputSnapshot* input, const TieTestLine* line) {
 	switch (line->cmd) {
 		case TT_CMD_KEY:
@@ -947,6 +1003,9 @@ static void TieTest_Execute(AeronInputSnapshot* input, const TieTestLine* line) 
 		case TT_CMD_XRPAD:
 			g_test.pad_used = true;
 			g_test.pad_is_xr = true;
+			break;
+		case TT_CMD_WARP:
+			TieTest_WarpToTarget(line->fvalue[0], line->ivalue[0], line->line_no);
 			break;
 		case TT_CMD_QUIT:
 			TieTest_Log("quit (script line %d)", line->line_no);
