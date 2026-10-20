@@ -22,6 +22,11 @@
 #            -DENABLE_FLUIDSYNTH=ON (and -DENABLE_NUKED_SC55=ON for the optional
 #            SC-55 emulation): FluidSynth and SpeexDSP come from
 #            /root/android/prefix-music, toolchain /root/android/toolchain-music.cmake.
+#   FFMPEG   FFmpeg 8.0 shared libraries replacing the base APK's (which only
+#            decode XWA's SMUSH films): adds the Ogg demuxer + Vorbis decoder
+#            (TIE98's recorded flight music, MUSIC/Track0N.ogg) and WAV/PCM, same
+#            ABI (/root/android/prefix-ffmpeg-ogg/lib; configure line in its
+#            libavcodec.so; skipped when absent: then TIE98 music is silent)
 #   KEY/CERT signing key and certificate (never in the repo)
 set -e
 CODE=$1
@@ -35,6 +40,7 @@ VKSHIM=${VKSHIM:-$(find /root/build-android -name libopenxwa_vkshim.so | head -1
 ASSETS=${ASSETS:-$SP/tieassets}
 VOICE=${VOICE:-$SP/vrassets/voice}
 SOUNDFONT=${SOUNDFONT:-/root/android/soundfonts/GeneralUser-GS.sf2}
+FFMPEG=${FFMPEG:-/root/android/prefix-ffmpeg-ogg/lib}
 KEY=${KEY:-/root/android/signing/openxwa-quest-key.pem}
 CERT=${CERT:-/root/android/signing/openxwa-quest-cert.der}
 OUT=${OUT:-/root/out/OpenTIE-VR-$VER.apk}
@@ -105,6 +111,16 @@ else
 fi
 if [ -d "$ASSETS/vr" ]; then
   for f in "$ASSETS"/vr/*; do EXTRA="$EXTRA assets/vr/$(basename "$f")=$f"; done
+fi
+
+# FFmpeg with Ogg Vorbis (see FFMPEG above).
+if [ -f "$FFMPEG/libavcodec.so" ]; then
+  for l in avcodec avformat avutil swresample swscale; do
+    /usr/bin/llvm-strip -o stage/lib$l.so "$FFMPEG/lib$l.so"
+    EXTRA="$EXTRA lib/arm64-v8a/lib$l.so=stage/lib$l.so"
+  done
+else
+  echo "warning: no FFmpeg with Ogg in $FFMPEG: TIE98 recorded flight music will be silent" >&2
 fi
 
 python3 /root/android/apk_repack_sign.py base.apk "$OUT" "$KEY" "$CERT" \
