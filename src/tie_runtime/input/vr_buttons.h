@@ -55,6 +55,14 @@ typedef enum TieVrControl {
 const char* TieVrButtons_ControlName(TieVrControl control, bool compact);
 const char* TieVrButtons_ControlLabel(TieVrControl control);
 
+/* Swapped thumbsticks (XWA_XR_SWAP_STICKS=1, the VR settings' "Swap
+ * Thumbsticks", read every call): in flight the two thumbsticks trade what
+ * they do - the left one steers (yaw / pitch), the right one rolls and
+ * moves the throttle lever - on top of left-handed controls. Only the stick
+ * axes: the stick clicks and every other button stay where they are. Aeron
+ * does the swap (Aeron_XrSetSwapSticks, set by vr_controls.c in flight). */
+bool TieVrButtons_SticksSwapped(void);
+
 /* Both triggers pulled within this window and past this travel: the chord. */
 #define TIE_VR_CHORD_PULL 0.75f
 #define TIE_VR_CHORD_RELEASE 0.3f

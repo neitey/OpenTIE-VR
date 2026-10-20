@@ -47,8 +47,10 @@ const TieControllerProfile* TieControllerMapping_XrProfile(void) {
 	 * (left stick Y) -> RIGHT_TRIGGER (absolute), right trigger -> SOUTH.
 	 * Stick forward reports negative LEFTY like an SDL pad pushed up; the
 	 * player-facing pitch invert makes that nose down, like a flight stick
-	 * (AERON_XR_INVERT_PITCH=1 flips it in the engine). Everything else on
-	 * the Touch controllers is a flight button (vr_buttons.c). */
+	 * (AERON_XR_INVERT_PITCH=1 flips it in the engine). Swapped thumbsticks
+	 * (XWA_XR_SWAP_STICKS) trade the two sticks in the engine before this
+	 * mapping, as left-handed controls do, so the profile stays. Everything
+	 * else on the Touch controllers is a flight button (vr_buttons.c). */
 	static TieControllerProfile profile;
 	static bool built;
 	if (!built) {

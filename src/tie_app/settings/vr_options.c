@@ -90,6 +90,8 @@ static const TieVrOptionRow k_rows[] = {
 	  "Precise: small thumbstick movements turn gently for fine aim; full deflection still turns at full rate." },
 	{ "AERON_XR_INVERT_PITCH", "Invert Pitch", k_off_on, k_0_1, 2, 0, false, NULL },
 	{ "AERON_XR_LEFT_HANDED", "Left-Handed Controls", k_off_on, k_0_1, 2, 0, false, NULL },
+	{ "XWA_XR_SWAP_STICKS", "Swap Thumbsticks", k_off_on, k_0_1, 2, 0, false,
+	  "Swaps what the two thumbsticks do in flight; buttons stay where they are." },
 	{ "XWA_XR_VOICE", "Voice Commands", k_voice_labels, k_voice_values, 3, 1, false,
 	  "In flight: double-tap a thumb rest (or hold it), then speak, e.g. \"attack my target\", \"next target\", "
 	  "\"full throttle\", \"lasers to shields\", \"cover me\"." },

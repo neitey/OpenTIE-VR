@@ -103,6 +103,9 @@ Flying: when a mission has loaded, it waits until you pull the trigger.
   Hold left grip + L trig. beam weapon on/off
   Both triggers .......... confirm (when the game asks, e.g. end mission)
   Hold left grip still ... radial menu: point, pull the left trigger
+Settings -> VR: "Swap Thumbsticks" trades what the two sticks do (left
+stick: pitch and turn; right stick: roll and throttle), every button stays
+where it is; "Left-Handed Controls" mirrors both controllers, buttons too.
 Look down: the lap console (energy, targeting, wingmen, ship), touch or
 point and pull the trigger. On your right: the side panel (tactical map,
 voice commands, button list). Look at a controller to see its labels.
