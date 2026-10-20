@@ -3366,13 +3366,19 @@ static void TieCockpitRenderer_ClassifyInstruments(TieCockpitRenderer* cg, const
 		float ax, ay;
 		TieCockpitRenderer_InsAnchor(entry, id, ins->x, ins->y, snap, &ax, &ay);
 		const float dx = ax - sight_x, dy = ay - sight_y;
-		if (dx * dx + dy * dy < hud_radius * hud_radius) {
+		/* The top bar above the gunsight (T/A, T/D laser and ion charge
+		 * lights) stays on the screen like the gunsight: as a gauge panel its
+		 * box would span half the 2D cockpit and shrink everything on it. */
+		if (dx * dx + dy * dy < hud_radius * hud_radius || (sight_y > -1e8f && dy < -hud_radius)) {
 			cg->ins_group[id] = COCKPIT_GROUP_HUD;
 			continue;
 		}
 		int panel;
+		/* Right above the CRT, within its width (the gunboat's laser block),
+		 * still belongs to the centre console. */
+		const float cmd_reach_up = ax > cmd_core.x0 && ax < cmd_core.x1 ? 100.0f * pixel_sy : cmd_reach;
 		if (cmd_core.any && ax > cmd_core.x0 - cmd_reach && ax < cmd_core.x1 + cmd_reach &&
-			ay > cmd_core.y0 - cmd_reach && ay < cmd_core.y1 + cmd_reach)
+			ay > cmd_core.y0 - cmd_reach_up && ay < cmd_core.y1 + cmd_reach)
 			panel = TIE_COCKPIT_PANEL_CMD;
 		else
 			panel = ax < cmd_cx ? TIE_COCKPIT_PANEL_GAUGES_L : TIE_COCKPIT_PANEL_GAUGES_R;
