@@ -12,7 +12,22 @@
  * front of it. The right controller's pointer beam is drawn over the screen.
  *
  * Settings (environment, read live; names shared with OpenXWA-VR):
- *   XWA_XR_ENVIRONMENT      1 (default) the fleet | 0 stars only | off nothing
+ *   XWA_XR_ENVIRONMENT      tiefighter (default, also unset) the TIE Fighter box art |
+ *                           fleet (or 1) the Imperial fleet | 0 (or stars) stars only |
+ *                           off nothing
+ *   XWA_XR_ENV_FADE_SECONDS the TIE Fighter scene's fade in [1.5]
+ *   XWA_XR_ENV_BACK         the viewer's distance behind the TIE Fighter scene's
+ *                           centre [1.1 m]
+ *   XWA_XR_TIEART_SPEED     the TIE Fighter scene's craft speed factor [1.0]
+ *   XWA_XR_VADER            the helmet image: a path, 0 = none
+ *                           [assets/vr/vader.rgba, packaged; never in the repo]
+ *   XWA_XR_VADER_BRIGHTNESS / _PITCH / _FADE_SECONDS   the helmet [1.0, 31 deg, 2.5 s]
+ *   XWA_XR_ENDOR_SUN        the TIE Fighter scene's key light [1.6]
+ *   XWA_XR_SCENE_SFX_VOLUME the TIE Fighter scene's sounds, on top of the
+ *                           in-flight effects volume [1.0; 0 = silent]
+ *   XWA_XR_TITLE            0: no startup show (the screen stays up while the
+ *                           TIE Fighter scene's fight first plays) [1]
+ *   TIE_XR_ENV_TIME         tests: the scene held at this many seconds
  *   XWA_XR_ENV_BRIGHTNESS   displayed brightness of the scene [0.8]
  *   XWA_XR_ENV_FILM_DIM     brightness factor during films/loading [0.5]
  *   XWA_XR_FRAME            the frame round the screen: an image path, 0 = none
@@ -36,6 +51,7 @@ typedef enum TieFlightXrEnvMode {
 	TIE_FLIGHT_XR_ENV_OFF = 0,
 	TIE_FLIGHT_XR_ENV_STARS = 1,
 	TIE_FLIGHT_XR_ENV_FLEET = 2,
+	TIE_FLIGHT_XR_ENV_TIEFIGHTER = 3,
 } TieFlightXrEnvMode;
 
 TieFlightXrEnvMode TieFlightXrEnv_Mode(void);
