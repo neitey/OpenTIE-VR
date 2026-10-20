@@ -1138,6 +1138,30 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	 * show keeps the screen away (and the controllers on A only) until the
 	 * fight has come to the cover's moment. */
 	float reveal = 1.0f;
+	if (art) {
+		/* Where the screen and its frame are, for the logo above them and the
+		 * startup title (OpenXWA-VR's env_screen). */
+		float dist = 2.1f, sw = 2.1f, sh = 1.575f, lift = 0.0f;
+		if (!Aeron_XrVirtualScreenGeometry(&dist, &sw, &sh, &lift)) {
+			dist = TieXrEnv_EnvFloat("AERON_XR_SCREEN_DISTANCE", dist);
+			sw = TieXrEnv_EnvFloat("AERON_XR_SCREEN_WIDTH", sw);
+			sh = 0.75f * sw;
+			lift = TieXrEnv_EnvFloat("AERON_XR_SCREEN_HEIGHT_OFFSET", lift);
+		}
+		const float w = fminf(sw, sh * 4.0f / 3.0f);
+		const float overscan = fmaxf(TieXrEnv_EnvFloat("XWA_XR_FRAME_OVERSCAN", 1.0f), 0.5f);
+		TieXrArtScreen screen;
+		screen.dist = dist;
+		screen.lift = lift;
+		screen.pic_w = w / overscan;
+		screen.pic_h = 0.75f * w / overscan;
+		screen.frame_dist = fmaxf(dist - TieXrEnv_EnvFloat("XWA_XR_FRAME_DEPTH", 0.02f), 0.2f);
+		screen.frame_scale = dist > 0.01f ? screen.frame_dist / dist : 1.0f;
+		screen.frame_top =
+			s_env.frame ? k_frame_opening[1] * screen.pic_w / (k_frame_opening[2] - k_frame_opening[0]) : 0.0f;
+		screen.units = TieFlightXr_UnitsPerMeter();
+		TieXrArt_SetScreen(&screen);
+	}
 	if (art && s_env.art_up) {
 		if (ships)
 			TieXrArt_Advance(dt, xr.views[0].orientation);

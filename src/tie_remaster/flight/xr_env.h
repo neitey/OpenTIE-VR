@@ -25,8 +25,14 @@
  *   XWA_XR_ENDOR_SUN        the TIE Fighter scene's key light [1.6]
  *   XWA_XR_SCENE_SFX_VOLUME the TIE Fighter scene's sounds, on top of the
  *                           in-flight effects volume [1.0; 0 = silent]
+ *   XWA_XR_LOGO             the logo above the screen and on the startup title:
+ *                           an image path, 0 = none
+ *                           [assets/vr/logo.rgba, packaged; never in the repo]
+ *   XWA_XR_LOGO_SCALE       the logo's size [1.0]
  *   XWA_XR_TITLE            0: no startup show (the screen stays up while the
- *                           TIE Fighter scene's fight first plays) [1]
+ *                           TIE Fighter scene's fight first plays, then no title)
+ *                           [1]
+ *   XWA_XR_TITLE_FADE_SECONDS the title's fade in [1.2]
  *   TIE_XR_ENV_TIME         tests: the scene held at this many seconds
  *   XWA_XR_ENV_BRIGHTNESS   displayed brightness of the scene [0.8]
  *   XWA_XR_ENV_FILM_DIM     brightness factor during films/loading [0.5]
