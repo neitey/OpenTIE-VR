@@ -1,7 +1,14 @@
 /* VR cockpit HUD panels; see vr_cockpit_hud.h. Ported from OpenXWA-VR's
  * xwa_remaster/vr_cockpit_hud.c (placement, grab, per-cockpit layouts); the
  * panel contents come from TIE's instrument atlas instead of XWA's HUD
- * widgets. */
+ * widgets.
+ *
+ * Panel definitions, all in tables here (to redesign the HUD, change these):
+ *   CK_* enum + k_ids   the panels and their saved-layout ids
+ *   k_rules             which TIE instruments go on which panel
+ *   k_pad               margin of TIE's cockpit art around each panel's instruments
+ *   k_spec_tie/_sim/_2d where each panel floats per cockpit and its size
+ *                       (metres per TIE cockpit pixel, capped by a box) */
 
 #include "tie_remaster/vr/vr_cockpit_hud.h"
 
@@ -24,76 +31,91 @@ enum {
 	CK_POD_R,
 	CK_MSG,
 	CK_THREAT,
+	CK_TOPBAR,
 	CK_CMD,
 	CK_POWER_L,
 	CK_POWER_R,
 	CK_GAUGES_L,
 	CK_GAUGES_R,
+	CK_READOUTS_L,
+	CK_READOUTS_R,
 	CK_COUNT
 };
 
 _Static_assert(CK_COUNT <= TIE_VR_COCKPIT_HUD_MAX_PANELS, "panel count");
 
 /* Placement relative to the seated eye point: yaw (+ right) and pitch (+ up)
- * in degrees, distance in metres, and the box (metres) the panel's rectangle
- * is fitted into, keeping its aspect. m_per_unit > 0: fixed size instead,
- * metres per classic HUD unit (1/480 of the HUD height), so text keeps one
- * size whatever its length. */
+ * in degrees, distance in metres. Size: m_per_px metres per pixel of TIE's
+ * 640x480 cockpit (the message bar: per 1/480 of the HUD height), so a panel
+ * is as big as its instruments are in TIE (whatever the craft's 2D layout),
+ * at most box_w x box_h (aspect kept). */
 typedef struct CkSpec {
 	float yaw, pitch, distance;
 	float box_w, box_h;
-	float m_per_unit;
+	float m_per_px;
 } CkSpec;
 
 /* TIE fighter / bomber pod (XWA's TIECOCKPIT, TIEBOMBERCOCKPIT: a 1.46 m ball,
  * round front window): the sensors either side of the window like OpenXWA's
  * radar pods, the power bars under them, the CMD over the dashboard's centre
- * console, the shield/hull and speed/throttle/clock groups beside it. */
+ * console with the T/A, T/D top bar (lasers, warheads, speed, clock) on it
+ * like OpenXWA's readout row, the shield/hull and speed/throttle/clock
+ * groups beside it, the threat readouts above. */
 static const CkSpec k_spec_tie[CK_COUNT] = {
-	[CK_POD_L] = { -37.0f, 1.0f, 0.75f, 0.20f, 0.20f, 0.0f },
-	[CK_POD_R] = { 37.0f, 1.0f, 0.75f, 0.20f, 0.20f, 0.0f },
+	[CK_POD_L] = { -37.0f, 1.0f, 0.75f, 0.21f, 0.21f, 0.0018f },
+	[CK_POD_R] = { 37.0f, 1.0f, 0.75f, 0.21f, 0.21f, 0.0018f },
 	[CK_MSG] = { 0.0f, -9.0f, 0.95f, 0.0f, 0.0f, 0.0022f },
-	[CK_THREAT] = { 0.0f, -18.5f, 0.70f, 0.24f, 0.05f, 0.0f },
-	[CK_CMD] = { 0.0f, -30.0f, 0.62f, 0.28f, 0.21f, 0.0f },
-	[CK_POWER_L] = { -40.0f, -16.0f, 0.72f, 0.06f, 0.16f, 0.0f },
-	[CK_POWER_R] = { 40.0f, -16.0f, 0.72f, 0.06f, 0.16f, 0.0f },
-	[CK_GAUGES_L] = { -27.0f, -29.0f, 0.62f, 0.13f, 0.13f, 0.0f },
-	[CK_GAUGES_R] = { 27.0f, -29.0f, 0.62f, 0.13f, 0.19f, 0.0f },
+	[CK_THREAT] = { 0.0f, -13.5f, 0.78f, 0.30f, 0.05f, 0.0013f },
+	[CK_TOPBAR] = { 0.0f, -19.5f, 0.68f, 0.40f, 0.07f, 0.0013f },
+	[CK_CMD] = { 0.0f, -30.0f, 0.62f, 0.30f, 0.22f, 0.00115f },
+	[CK_POWER_L] = { -42.0f, -16.0f, 0.72f, 0.07f, 0.17f, 0.0016f },
+	[CK_POWER_R] = { 42.0f, -16.0f, 0.72f, 0.07f, 0.17f, 0.0016f },
+	[CK_GAUGES_L] = { -21.0f, -33.0f, 0.60f, 0.15f, 0.15f, 0.00145f },
+	[CK_GAUGES_R] = { 21.0f, -33.0f, 0.60f, 0.15f, 0.15f, 0.00145f },
+	[CK_READOUTS_L] = { -33.0f, -26.0f, 0.62f, 0.12f, 0.20f, 0.00145f },
+	[CK_READOUTS_R] = { 33.0f, -26.0f, 0.62f, 0.12f, 0.20f, 0.00145f },
 };
 
 /* Gunboat / missile boat (COMBATSIMCOCKPIT): a wider, flatter canopy and a
  * lower dashboard. */
 static const CkSpec k_spec_sim[CK_COUNT] = {
-	[CK_POD_L] = { -36.0f, 4.0f, 0.78f, 0.20f, 0.20f, 0.0f },
-	[CK_POD_R] = { 36.0f, 4.0f, 0.78f, 0.20f, 0.20f, 0.0f },
+	[CK_POD_L] = { -36.0f, 4.0f, 0.78f, 0.21f, 0.21f, 0.0018f },
+	[CK_POD_R] = { 36.0f, 4.0f, 0.78f, 0.21f, 0.21f, 0.0018f },
 	[CK_MSG] = { 0.0f, -8.0f, 0.95f, 0.0f, 0.0f, 0.0022f },
-	[CK_THREAT] = { 0.0f, -17.0f, 0.72f, 0.24f, 0.05f, 0.0f },
-	[CK_CMD] = { 0.0f, -28.0f, 0.64f, 0.28f, 0.21f, 0.0f },
-	[CK_POWER_L] = { -40.0f, -14.0f, 0.74f, 0.06f, 0.16f, 0.0f },
-	[CK_POWER_R] = { 40.0f, -14.0f, 0.74f, 0.06f, 0.16f, 0.0f },
-	[CK_GAUGES_L] = { -27.0f, -27.0f, 0.64f, 0.13f, 0.13f, 0.0f },
-	[CK_GAUGES_R] = { 27.0f, -27.0f, 0.64f, 0.13f, 0.19f, 0.0f },
+	[CK_THREAT] = { 0.0f, -12.5f, 0.80f, 0.30f, 0.05f, 0.0013f },
+	[CK_TOPBAR] = { 0.0f, -18.0f, 0.70f, 0.40f, 0.07f, 0.0013f },
+	[CK_CMD] = { 0.0f, -28.0f, 0.64f, 0.30f, 0.22f, 0.00115f },
+	[CK_POWER_L] = { -42.0f, -14.0f, 0.74f, 0.07f, 0.17f, 0.0016f },
+	[CK_POWER_R] = { 42.0f, -14.0f, 0.74f, 0.07f, 0.17f, 0.0016f },
+	[CK_GAUGES_L] = { -21.0f, -31.0f, 0.62f, 0.15f, 0.15f, 0.00145f },
+	[CK_GAUGES_R] = { 21.0f, -31.0f, 0.62f, 0.15f, 0.15f, 0.00145f },
+	[CK_READOUTS_L] = { -33.0f, -24.0f, 0.64f, 0.12f, 0.20f, 0.00145f },
+	[CK_READOUTS_R] = { 33.0f, -24.0f, 0.64f, 0.12f, 0.20f, 0.00145f },
 };
 
 /* 2D cockpit mode (no cockpit model, open space around): TIE's own screen
  * arrangement around the line of sight, sensors up in the corners. */
 static const CkSpec k_spec_2d[CK_COUNT] = {
-	[CK_POD_L] = { -33.0f, 14.0f, 0.80f, 0.20f, 0.20f, 0.0f },
-	[CK_POD_R] = { 33.0f, 14.0f, 0.80f, 0.20f, 0.20f, 0.0f },
+	[CK_POD_L] = { -33.0f, 14.0f, 0.80f, 0.21f, 0.21f, 0.0018f },
+	[CK_POD_R] = { 33.0f, 14.0f, 0.80f, 0.21f, 0.21f, 0.0018f },
 	[CK_MSG] = { 0.0f, -10.0f, 0.95f, 0.0f, 0.0f, 0.0022f },
-	[CK_THREAT] = { 0.0f, -18.0f, 0.72f, 0.24f, 0.05f, 0.0f },
-	[CK_CMD] = { 0.0f, -29.0f, 0.64f, 0.28f, 0.21f, 0.0f },
-	[CK_POWER_L] = { -38.0f, -6.0f, 0.75f, 0.06f, 0.16f, 0.0f },
-	[CK_POWER_R] = { 38.0f, -6.0f, 0.75f, 0.06f, 0.16f, 0.0f },
-	[CK_GAUGES_L] = { -28.0f, -27.0f, 0.64f, 0.13f, 0.13f, 0.0f },
-	[CK_GAUGES_R] = { 28.0f, -27.0f, 0.64f, 0.13f, 0.19f, 0.0f },
+	[CK_THREAT] = { 0.0f, -14.0f, 0.80f, 0.30f, 0.05f, 0.0013f },
+	[CK_TOPBAR] = { 0.0f, 20.0f, 0.80f, 0.40f, 0.07f, 0.0013f },
+	[CK_CMD] = { 0.0f, -29.0f, 0.64f, 0.30f, 0.22f, 0.00115f },
+	[CK_POWER_L] = { -40.0f, -6.0f, 0.75f, 0.07f, 0.17f, 0.0016f },
+	[CK_POWER_R] = { 40.0f, -6.0f, 0.75f, 0.07f, 0.17f, 0.0016f },
+	[CK_GAUGES_L] = { -21.0f, -31.0f, 0.62f, 0.15f, 0.15f, 0.00145f },
+	[CK_GAUGES_R] = { 21.0f, -31.0f, 0.62f, 0.15f, 0.15f, 0.00145f },
+	[CK_READOUTS_L] = { -32.0f, -24.0f, 0.64f, 0.12f, 0.20f, 0.00145f },
+	[CK_READOUTS_R] = { 32.0f, -24.0f, 0.64f, 0.12f, 0.20f, 0.00145f },
 };
 
 /* Short ids for the saved layout. */
 static const char* const k_ids[CK_COUNT] = {
-	[CK_POD_L] = "pod_l",		[CK_POD_R] = "pod_r",		[CK_MSG] = "msg",
-	[CK_THREAT] = "threat",		[CK_CMD] = "cmd",			[CK_POWER_L] = "power_l",
-	[CK_POWER_R] = "power_r",	[CK_GAUGES_L] = "gauges_l", [CK_GAUGES_R] = "gauges_r",
+	[CK_POD_L] = "pod_l",	  [CK_POD_R] = "pod_r",		  [CK_MSG] = "msg",
+	[CK_THREAT] = "threat",	  [CK_TOPBAR] = "topbar",	  [CK_CMD] = "cmd",
+	[CK_POWER_L] = "power_l", [CK_POWER_R] = "power_r",	  [CK_GAUGES_L] = "gauges_l",
+	[CK_GAUGES_R] = "gauges_r", [CK_READOUTS_L] = "readouts_l", [CK_READOUTS_R] = "readouts_r",
 };
 
 #define CK_GRAB_MARGIN_M 0.025f
@@ -107,11 +129,13 @@ static const char* const k_ids[CK_COUNT] = {
 
 /* Extra padding per panel (UV): the art frames around the drawn gauges. */
 static const float k_pad[CK_COUNT][2] = {
-	[CK_CMD] = { 0.012f, 0.0f },
+	[CK_CMD] = { 0.012f, 0.022f },
 	[CK_POWER_L] = { 0.004f, 0.006f },
 	[CK_POWER_R] = { 0.004f, 0.006f },
 	[CK_GAUGES_L] = { 0.030f, 0.028f },
-	[CK_GAUGES_R] = { 0.012f, 0.012f },
+	[CK_GAUGES_R] = { 0.030f, 0.028f },
+	[CK_READOUTS_L] = { 0.016f, 0.010f },
+	[CK_READOUTS_R] = { 0.016f, 0.010f },
 };
 
 static struct {
@@ -343,33 +367,80 @@ int TieVrCockpitHud_TakeLayout(char* key, int key_size, char* value, int value_s
 
 /* ---- content ---- */
 
+/* What goes on which panel: the first rule that matches an instrument wins.
+ * group: the cockpit renderer's classification (TieCockpitPanelId 0..4;
+ * -2 unsorted; -3 the T/A, T/D top bar above the gunsight; -1 the gunsight
+ * cluster, which stays on the far world quad; -7 any of 0..4; -9 any, a
+ * subsystem check only). slider: 1 power bars only, 0
+ * none of them, -1 either. first..last: instrument ids (TIE_HUDI_*), -1 any.
+ * needs: subsystem bits (snapshot hud.subsystem_active) without which the
+ * instrument is left out (TIE covers it up). drawn_only: only what it drew
+ * counts (no anchor estimate). top/right: other panels when the instrument
+ * sits in the top 20 % of TIE's cockpit / right of the CMD (-1 = panel). */
+typedef struct CkRule {
+	int8_t group, slider;
+	int16_t first, last;
+	uint16_t needs;
+	uint8_t drawn_only;
+	int8_t panel, top, right;
+} CkRule;
+
+#define CK_SF_BEAM 0x0100u	 /* SF_TRACTOR_BEAM */
+#define CK_SF_SHIELDS 0x0001u /* SF_SHIELDS */
+
+static const CkRule k_rules[] = {
+	/* Tractor beam gauges only on craft that have one, the shield slider only
+	 * with shields (else TIE shows a cover plate there). */
+	{ -9, -1, TIE_HUDI_POWER_BEAM, TIE_HUDI_POWER_BEAM, CK_SF_BEAM, 0, -1, -1, -1 },
+	{ -9, -1, TIE_HUDI_BEAM_ARC, TIE_HUDI_BEAM_ARC, CK_SF_BEAM, 0, -1, -1, -1 },
+	{ -9, -1, TIE_HUDI_BEAM_FIRE, TIE_HUDI_BEAM_FIRE, CK_SF_BEAM, 0, -1, -1, -1 },
+	{ -9, -1, TIE_HUDI_POWER_SHIELDS, TIE_HUDI_POWER_SHIELDS, CK_SF_SHIELDS, 0, -1, -1, -1 },
+	{ TIE_COCKPIT_PANEL_SENSOR_FWD, -1, -1, -1, 0, 0, CK_POD_L, -1, -1 },
+	{ TIE_COCKPIT_PANEL_SENSOR_REAR, -1, -1, -1, 0, 0, CK_POD_R, -1, -1 },
+	/* Power sliders and speed/throttle/clock/recorder by the side of the CMD
+	 * they are on, also where TIE's layout put them next to the CRT (T/I,
+	 * gunboat, missile boat). */
+	{ -7, 1, -1, -1, 0, 0, CK_POWER_L, -1, CK_POWER_R },
+	{ -7, -1, TIE_HUDI_SPEED_DIGITS, TIE_HUDI_THROTTLE_DIGITS, 0, 0, CK_READOUTS_L, -1, CK_READOUTS_R },
+	{ -7, -1, TIE_HUDI_CLOCK_DIGITS, TIE_HUDI_REC_PCT, 0, 0, CK_READOUTS_L, -1, CK_READOUTS_R },
+	{ TIE_COCKPIT_PANEL_CMD, -1, -1, -1, 0, 0, CK_CMD, -1, -1 },
+	{ TIE_COCKPIT_PANEL_GAUGES_L, -1, -1, -1, 0, 0, CK_GAUGES_L, -1, -1 },
+	{ TIE_COCKPIT_PANEL_GAUGES_R, -1, -1, -1, 0, 0, CK_GAUGES_R, -1, -1 },
+	{ -3, -1, -1, -1, 0, 0, CK_TOPBAR, -1, -1 },
+	/* Unsorted instruments that showed something. */
+	{ -2, -1, TIE_HUDI_THREAT_ION, TIE_HUDI_THREAT_HULL_PCT, 0, 1, CK_THREAT, -1, -1 },
+	{ -2, -1, TIE_HUDI_THREAT_DIST_KM_INT, TIE_HUDI_THREAT_DIST_KM_FRAC, 0, 1, CK_THREAT, CK_TOPBAR, -1 },
+	{ -2, -1, TIE_HUDI_REC_LED, TIE_HUDI_REC_PCT, 0, 1, CK_READOUTS_L, CK_TOPBAR, CK_READOUTS_R },
+};
+
 /* Which panel an instrument belongs to (-1 none) and whether only what it
- * drew counts (not its anchor estimate). */
-static int ck_panel_of(int id, const TieCockpitInstrumentBox* b, float cmd_cu, int* drawn_only) {
+ * drew counts (not its anchor estimate). A rule with group -9 matches any
+ * group (used for the subsystem checks). */
+static int ck_panel_of(int id, const TieCockpitInstrumentBox* b, float cmd_cu, uint16_t subsystems, int* drawn_only) {
 	*drawn_only = 0;
-	switch (b->group) {
-		case TIE_COCKPIT_PANEL_SENSOR_FWD:
-			return CK_POD_L;
-		case TIE_COCKPIT_PANEL_SENSOR_REAR:
-			return CK_POD_R;
-		case TIE_COCKPIT_PANEL_CMD:
-			return CK_CMD;
-		case TIE_COCKPIT_PANEL_GAUGES_L:
-			return b->slider ? CK_POWER_L : CK_GAUGES_L;
-		case TIE_COCKPIT_PANEL_GAUGES_R:
-			return b->slider ? CK_POWER_R : CK_GAUGES_R;
-		default:
-			break;
+	for (size_t i = 0; i < sizeof k_rules / sizeof k_rules[0]; ++i) {
+		const CkRule* r = &k_rules[i];
+		if (r->group == -7 ? (b->group < 0 || b->group >= TIE_COCKPIT_PANEL_COUNT)
+						   : (r->group != -9 && r->group != b->group))
+			continue;
+		if (r->slider >= 0 && r->slider != (b->slider ? 1 : 0))
+			continue;
+		if (r->first >= 0 && (id < r->first || id > r->last))
+			continue;
+		if (r->needs && !(subsystems & r->needs))
+			return -1;
+		if (r->group == -9)
+			continue; /* only a check */
+		if (r->drawn_only && !b->drawn)
+			return -1;
+		*drawn_only = r->drawn_only;
+		const float* box = b->drawn ? b->drawn_uv : b->est;
+		if (r->top >= 0 && 0.5f * (box[1] + box[3]) < 0.2f)
+			return r->top;
+		if (r->right >= 0 && 0.5f * (box[0] + box[2]) > cmd_cu)
+			return r->right;
+		return r->panel;
 	}
-	if (b->group != -2 || !b->drawn)
-		return -1;
-	/* Unsorted instruments that showed something: the threat readouts and
-	 * the recorder light. */
-	*drawn_only = 1;
-	if (id >= TIE_HUDI_THREAT_DIST_KM_INT && id <= TIE_HUDI_THREAT_HULL_PCT)
-		return CK_THREAT;
-	if (id == TIE_HUDI_REC_LED || id == TIE_HUDI_REC_PCT)
-		return 0.5f * (b->drawn_uv[0] + b->drawn_uv[2]) < cmd_cu ? CK_GAUGES_L : CK_GAUGES_R;
 	return -1;
 }
 
@@ -454,7 +525,7 @@ int TieVrCockpitHud_RenderContent(AeronCommandBuffer* cmd, const AeronXrStereoFr
 		if (!b->valid && !b->drawn)
 			continue;
 		int drawn_only = 0;
-		const int p = ck_panel_of(i, b, cmd_cu, &drawn_only);
+		const int p = ck_panel_of(i, b, cmd_cu, snap->hud.subsystem_active, &drawn_only);
 		if (p < 0)
 			continue;
 		if (b->valid && !drawn_only)
@@ -720,18 +791,24 @@ int TieVrCockpitHud_Build(const AeronXrStereoFrame* xr, const char* cockpit_name
 		memset(panel, 0, sizeof *panel);
 		memcpy(panel->rect, r, sizeof panel->rect);
 		panel->source = s_ck.source[p];
-		const float w = (float)r[2], h = (float)r[3];
-		float size_w, size_h;
-		if (spec->m_per_unit > 0.0f) {
-			size_w = w * spec->m_per_unit * s_ck.msg_m_per_px;
-			size_h = h * spec->m_per_unit * s_ck.msg_m_per_px;
+		/* As big as in TIE's 640x480 cockpit times the panel's scale, capped
+		 * by its box. */
+		float cw, ch;
+		if (p == CK_MSG) {
+			cw = (float)r[2] * s_ck.msg_m_per_px;
+			ch = (float)r[3] * s_ck.msg_m_per_px;
 		} else {
+			cw = (s_ck.latched[p][2] - s_ck.latched[p][0]) * 640.0f;
+			ch = (s_ck.latched[p][3] - s_ck.latched[p][1]) * 480.0f;
+		}
+		float size_w = cw * spec->m_per_px, size_h = ch * spec->m_per_px;
+		if (spec->box_w > 0.0f && size_w > spec->box_w) {
+			size_h *= spec->box_w / size_w;
 			size_w = spec->box_w;
-			size_h = spec->box_w * h / w;
-			if (size_h > spec->box_h) {
-				size_h = spec->box_h;
-				size_w = spec->box_h * w / h;
-			}
+		}
+		if (spec->box_h > 0.0f && size_h > spec->box_h) {
+			size_w *= spec->box_h / size_h;
+			size_h = spec->box_h;
 		}
 		panel->size[0] = size_w / world_scale;
 		panel->size[1] = size_h / world_scale;

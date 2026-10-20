@@ -60,6 +60,7 @@
 #define COCKPIT_ATLAS_XR_PANELS_H 1152
 #define COCKPIT_GROUP_HUD (-1)
 #define COCKPIT_GROUP_NONE (-2)
+#define COCKPIT_GROUP_TOP (-3) /* above the gunsight (T/A, T/D top bar): screen, or a VR HUD panel */
 
 /* CMD CRT mask cache — 7 SVGA variants + 4 VGA variants = 11 max. */
 #define COCKPIT_CRT_MASK_MAX 11
@@ -2810,6 +2811,13 @@ static bool TieCockpitRenderer_ViewAllowsWidget(uint8_t view_idx, int idx,
 	}
 }
 
+/* 3D cockpit: drawn on the screen (world quad in stereo) with the gunsight
+ * rather than into the instrument atlas. The T/A, T/D top bar is too, except
+ * with the VR cockpit HUD's floating panels (its own panel there). */
+static bool TieCockpitRenderer_OnScreen(const TieCockpitRenderer* cg, int idx) {
+	return cg->ins_group[idx] == COCKPIT_GROUP_HUD || (cg->ins_group[idx] == COCKPIT_GROUP_TOP && !cg->xr_panels);
+}
+
 /* Pilotview dispatch. Full view runs the whole widget table;
  * forward / threat / padlock variants are subsets via TieCockpitRenderer_ViewAllowsWidget. */
 static void TieCockpitRenderer_DrawWidgetsForView(TieCockpitRenderer* cg, AeronCommandBuffer* cmd,
@@ -2833,9 +2841,9 @@ static void TieCockpitRenderer_DrawWidgetsForView(TieCockpitRenderer* cg, AeronC
 			continue;
 		/* 3D cockpit: the gunsight cluster stays a screen-space HUD element,
 		 * everything else goes to the instrument atlas. */
-		if (cg->widget_filter == 1 && cg->ins_group[idx] == COCKPIT_GROUP_HUD)
+		if (cg->widget_filter == 1 && TieCockpitRenderer_OnScreen(cg, idx))
 			continue;
-		if (cg->widget_filter == 2 && cg->ins_group[idx] != COCKPIT_GROUP_HUD)
+		if (cg->widget_filter == 2 && !TieCockpitRenderer_OnScreen(cg, idx))
 			continue;
 		/* XR world split: the gunsight (36) and its weapon fire-status marks
 		 * (37..44) belong to the craft-fixed world quad with the target box,
@@ -3434,8 +3442,15 @@ static void TieCockpitRenderer_ClassifyInstruments(TieCockpitRenderer* cg, const
 		/* The top bar above the gunsight (T/A, T/D laser and ion charge
 		 * lights) stays on the screen like the gunsight: as a gauge panel its
 		 * box would span half the 2D cockpit and shrink everything on it. */
-		if (dx * dx + dy * dy < hud_radius * hud_radius || (sight_y > -1e8f && dy < -hud_radius)) {
+		if (dx * dx + dy * dy < hud_radius * hud_radius) {
 			cg->ins_group[id] = COCKPIT_GROUP_HUD;
+			continue;
+		}
+		if (sight_y > -1e8f && dy < -hud_radius) {
+			/* The VR cockpit HUD shows the top bar as a panel of its own. */
+			cg->ins_group[id] = COCKPIT_GROUP_TOP;
+			TieCockpitRenderer_InsEstimate(cg, id, ax - 4.0f * pixel_sx, ay - 4.0f * pixel_sy, ax + 24.0f * pixel_sx,
+										   ay + 18.0f * pixel_sy);
 			continue;
 		}
 		int panel;

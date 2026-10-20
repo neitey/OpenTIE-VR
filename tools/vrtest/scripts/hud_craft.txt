@@ -1,0 +1,13 @@
+# VR cockpit HUD per craft (TIE_TEST_XR=1 TIE_TEST_MISSION=<HF1W|HI1W|HB1W|HA1W|HD1W|HG1W|HM1W>):
+# past a hyperspace arrival, target, then ahead / down at the CMD / down-left / down-right.
+0 xrpad
+0 wait flying 140 timeout=6000
++2 key t
++20 capture ahead
++2 head 0 -28
++6 capture down
++2 head 30 -20
++6 capture down_left
++2 head -30 -20
++6 capture down_right
++2 quit
