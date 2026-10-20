@@ -129,7 +129,7 @@ static const char* const k_ids[CK_COUNT] = {
 
 /* Extra padding per panel (UV): the art frames around the drawn gauges. */
 static const float k_pad[CK_COUNT][2] = {
-	[CK_CMD] = { 0.012f, 0.012f },
+	[CK_CMD] = { 0.012f, 0.022f },
 	[CK_POWER_L] = { 0.004f, 0.006f },
 	[CK_POWER_R] = { 0.004f, 0.006f },
 	[CK_GAUGES_L] = { 0.030f, 0.028f },
