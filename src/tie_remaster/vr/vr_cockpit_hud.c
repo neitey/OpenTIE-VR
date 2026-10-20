@@ -134,8 +134,8 @@ static const float k_pad[CK_COUNT][2] = {
 	[CK_POWER_R] = { 0.004f, 0.006f },
 	[CK_GAUGES_L] = { 0.030f, 0.028f },
 	[CK_GAUGES_R] = { 0.030f, 0.028f },
-	[CK_READOUTS_L] = { 0.008f, 0.008f },
-	[CK_READOUTS_R] = { 0.008f, 0.008f },
+	[CK_READOUTS_L] = { 0.016f, 0.010f },
+	[CK_READOUTS_R] = { 0.016f, 0.010f },
 };
 
 static struct {
@@ -370,7 +370,8 @@ int TieVrCockpitHud_TakeLayout(char* key, int key_size, char* value, int value_s
 /* What goes on which panel: the first rule that matches an instrument wins.
  * group: the cockpit renderer's classification (TieCockpitPanelId 0..4;
  * -2 unsorted; -3 the T/A, T/D top bar above the gunsight; -1 the gunsight
- * cluster, which stays on the far world quad). slider: 1 power bars only, 0
+ * cluster, which stays on the far world quad; -7 any of 0..4; -9 any, a
+ * subsystem check only). slider: 1 power bars only, 0
  * none of them, -1 either. first..last: instrument ids (TIE_HUDI_*), -1 any.
  * needs: subsystem bits (snapshot hud.subsystem_active) without which the
  * instrument is left out (TIE covers it up). drawn_only: only what it drew
@@ -384,7 +385,8 @@ typedef struct CkRule {
 	int8_t panel, top, right;
 } CkRule;
 
-#define CK_SF_BEAM 0x0100u /* SF_TRACTOR_BEAM */
+#define CK_SF_BEAM 0x0100u	 /* SF_TRACTOR_BEAM */
+#define CK_SF_SHIELDS 0x0001u /* SF_SHIELDS */
 
 static const CkRule k_rules[] = {
 	/* Tractor beam gauges only on craft that have one (else TIE's cover plate). */
@@ -394,11 +396,12 @@ static const CkRule k_rules[] = {
 	{ TIE_COCKPIT_PANEL_SENSOR_FWD, -1, -1, -1, 0, 0, CK_POD_L, -1, -1 },
 	{ TIE_COCKPIT_PANEL_SENSOR_REAR, -1, -1, -1, 0, 0, CK_POD_R, -1, -1 },
 	{ TIE_COCKPIT_PANEL_CMD, -1, -1, -1, 0, 0, CK_CMD, -1, -1 },
-	/* Speed, throttle, clock, recorder: a readout block per side. */
-	{ TIE_COCKPIT_PANEL_GAUGES_L, -1, TIE_HUDI_SPEED_DIGITS, TIE_HUDI_THROTTLE_DIGITS, 0, 0, CK_READOUTS_L, -1, -1 },
-	{ TIE_COCKPIT_PANEL_GAUGES_L, -1, TIE_HUDI_CLOCK_DIGITS, TIE_HUDI_REC_PCT, 0, 0, CK_READOUTS_L, -1, -1 },
-	{ TIE_COCKPIT_PANEL_GAUGES_R, -1, TIE_HUDI_SPEED_DIGITS, TIE_HUDI_THROTTLE_DIGITS, 0, 0, CK_READOUTS_R, -1, -1 },
-	{ TIE_COCKPIT_PANEL_GAUGES_R, -1, TIE_HUDI_CLOCK_DIGITS, TIE_HUDI_REC_PCT, 0, 0, CK_READOUTS_R, -1, -1 },
+	/* The shield slider only on craft with shields. */
+	{ -9, -1, TIE_HUDI_POWER_SHIELDS, TIE_HUDI_POWER_SHIELDS, CK_SF_SHIELDS, 0, -1, -1, -1 },
+	/* Speed, throttle, clock, recorder: a readout block on the side of the
+	 * CMD they are on (also when TIE put them with the CMD, as the T/I). */
+	{ -7, -1, TIE_HUDI_SPEED_DIGITS, TIE_HUDI_THROTTLE_DIGITS, 0, 0, CK_READOUTS_L, -1, CK_READOUTS_R },
+	{ -7, -1, TIE_HUDI_CLOCK_DIGITS, TIE_HUDI_REC_PCT, 0, 0, CK_READOUTS_L, -1, CK_READOUTS_R },
 	{ TIE_COCKPIT_PANEL_GAUGES_L, 1, -1, -1, 0, 0, CK_POWER_L, -1, -1 },
 	{ TIE_COCKPIT_PANEL_GAUGES_L, 0, -1, -1, 0, 0, CK_GAUGES_L, -1, -1 },
 	{ TIE_COCKPIT_PANEL_GAUGES_R, 1, -1, -1, 0, 0, CK_POWER_R, -1, -1 },
@@ -417,7 +420,8 @@ static int ck_panel_of(int id, const TieCockpitInstrumentBox* b, float cmd_cu, u
 	*drawn_only = 0;
 	for (size_t i = 0; i < sizeof k_rules / sizeof k_rules[0]; ++i) {
 		const CkRule* r = &k_rules[i];
-		if (r->group != -9 && r->group != b->group)
+		if (r->group == -7 ? (b->group < 0 || b->group >= TIE_COCKPIT_PANEL_COUNT)
+						   : (r->group != -9 && r->group != b->group))
 			continue;
 		if (r->slider >= 0 && r->slider != (b->slider ? 1 : 0))
 			continue;
