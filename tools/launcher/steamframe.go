@@ -71,9 +71,15 @@ func (a *app) connectLepton(usb string) error {
 		ans := ui.Ask(Question{
 			Kind:  "buttons",
 			Title: "Steam Frame found",
-			Text: "OpenTIE-VR runs in the Steam Frame's Android layer (Lepton).\n" +
-				"On the headset, open your Steam Library and start \"Lepton Development\"\n" +
-				"(keep it running), then press Continue.\n\n" +
+			Text: "OpenTIE-VR runs in the Steam Frame's Android layer (Lepton).\n\n" +
+				"Once, before starting it: in the Steam Library, open the Properties of\n" +
+				"\"Lepton Development\" and set its Launch Options to:\n" +
+				"    LEPTON_NO_CLEANUP=1 %command%\n\n" +
+				"Without this, closing Lepton Development deletes OpenTIE-VR and the copied\n" +
+				"game files; with it they should stay. (If it is running already, close it\n" +
+				"first so the setting applies.)\n\n" +
+				"Then start \"Lepton Development\" on the headset (keep it running) and\n" +
+				"press Continue.\n\n" +
 				"Developer Mode must be on. A PC USB port may not power the headset for\n" +
 				"long; a powered USB-C cable or charger helps.",
 			Problem: problem,

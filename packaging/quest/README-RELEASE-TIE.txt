@@ -59,10 +59,15 @@ named "sc55" next to the launcher; Settings -> Audio -> Synthesizer ->
 Roland SC-55 then emulates it (Nuked SC-55; heavier on the CPU, not tested
 on a headset yet). No Roland ROMs are included.
 
-Steam Frame: turn on Developer Mode, start "Lepton Development" from your
-Steam Library and keep it running; the launcher then connects to it over
-the USB cable (or Wi-Fi). OpenTIE-VR appears in the Lepton window's
-Android home screen. Not tested on a Steam Frame yet.
+Steam Frame: turn on Developer Mode. Once, before starting "Lepton
+Development": in your Steam Library, open its Properties and set Launch
+Options to
+   LEPTON_NO_CLEANUP=1 %command%
+Without this, closing Lepton Development deletes OpenTIE-VR and the
+copied game files; with it they should stay. Then start "Lepton
+Development" and keep it running; the launcher connects to it over the
+USB cable (or Wi-Fi). OpenTIE-VR appears in the Lepton Development
+window's Android home screen. Not tested on a Steam Frame yet.
 
 Windows may say "Windows protected your PC": the launcher is not
 code-signed yet. Click "More info", then "Run anyway".
