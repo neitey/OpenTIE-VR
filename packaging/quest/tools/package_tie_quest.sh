@@ -27,6 +27,7 @@
 #            (TIE98's recorded flight music, MUSIC/Track0N.ogg) and WAV/PCM, same
 #            ABI (/root/android/prefix-ffmpeg-ogg/lib; configure line in its
 #            libavcodec.so; skipped when absent: then TIE98 music is silent)
+#   APKTOOL  Apktool jar for sdl_clipboard_dex.py (/root/android/apktool_2.12.1.jar)
 #   KEY/CERT signing key and certificate (never in the repo)
 set -e
 CODE=$1
@@ -89,6 +90,10 @@ python3 "$HERE/manifest_add_provider.py" m4.xml m5.xml org.openxwa.quest.SetupPr
 python3 "$HERE/manifest_rename.py" m5.xml AndroidManifest.xml org.opentie.quest "OpenTIE-VR"
 python3 "$HERE/dexgen_setup_provider.py" classes2.dex
 EXTRA="$EXTRA classes2.dex=classes2.dex"
+# Steam Frame: SDL's clipboard handler made safe for a missing clipboard
+# service (needs Java and Apktool, see sdl_clipboard_dex.py).
+python3 "$HERE/sdl_clipboard_dex.py" "$BASE" classes.dex
+EXTRA="$EXTRA classes.dex=classes.dex"
 
 cp "$HERE/../THIRD-PARTY-NOTICES-TIE.txt" stage/THIRD-PARTY-NOTICES.txt
 EXTRA="$EXTRA assets/THIRD-PARTY-NOTICES.txt=stage/THIRD-PARTY-NOTICES.txt"

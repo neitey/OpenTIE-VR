@@ -24,6 +24,49 @@ import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# Steam Frame: its Android layer (Lepton) has no clipboard service, so
+# getSystemService(CLIPBOARD_SERVICE) returns null and SDL's activity crashes
+# in SDLClipboardHandler's constructor at startup. The copy of SDLActivity.java
+# compiled here tolerates a null ClipboardManager (no clipboard then); with a
+# clipboard (Quest, Pico) nothing changes. tools/sdl_clipboard_dex.py does the
+# same to the classes.dex of the repack builds; keep the two in step.
+SDL_CLIPBOARD_PATCHES = [
+    ("       mClipMgr = (ClipboardManager) SDL.getContext().getSystemService(Context.CLIPBOARD_SERVICE);\n"
+     "       mClipMgr.addPrimaryClipChangedListener(this);\n",
+     "       mClipMgr = (ClipboardManager) SDL.getContext().getSystemService(Context.CLIPBOARD_SERVICE);\n"
+     "       if (mClipMgr != null) {\n"
+     "           mClipMgr.addPrimaryClipChangedListener(this);\n"
+     "       }\n"),
+    ("    public boolean clipboardHasText() {\n",
+     "    public boolean clipboardHasText() {\n"
+     "        if (mClipMgr == null) {\n"
+     "            return false;\n"
+     "        }\n"),
+    ("    public String clipboardGetText() {\n",
+     "    public String clipboardGetText() {\n"
+     "        if (mClipMgr == null) {\n"
+     "            return null;\n"
+     "        }\n"),
+    ("    public void clipboardSetText(String string) {\n",
+     "    public void clipboardSetText(String string) {\n"
+     "        if (mClipMgr == null) {\n"
+     "            return;\n"
+     "        }\n"),
+]
+
+
+def patch_sdl_clipboard(text):
+    """SDLActivity.java with the null-clipboard guards. Stops the build if SDL's
+    source no longer has the expected text (an SDL update must not silently
+    drop the patch)."""
+    for old, new in SDL_CLIPBOARD_PATCHES:
+        n = text.count(old)
+        if n != 1:
+            sys.exit("SDLActivity.java: the Steam Frame clipboard patch expects %r once, found it %d times; "
+                     "update SDL_CLIPBOARD_PATCHES in build_apk.py" % (old.strip().splitlines()[-1], n))
+        text = text.replace(old, new)
+    return text
+
 
 def run(cmd, **kwargs):
     print("+", " ".join(cmd), flush=True)
@@ -110,9 +153,17 @@ def main():
         with open(manifest_path, "w") as f:
             f.write(manifest)
 
-        # 2. Java: SDL's activity sources + OpenXwaActivity -> classes.dex
+        # 2. Java: SDL's activity sources (copied, SDLActivity.java with the
+        #    clipboard patch above) + OpenXwaActivity -> classes.dex
+        sdl_java = os.path.join(work, "sdl-java")
+        shutil.copytree(os.path.join(a.sdl_source, "android-project/app/src/main/java"), sdl_java)
+        activity = os.path.join(sdl_java, "org/libsdl/app/SDLActivity.java")
+        with open(activity, encoding="utf-8", newline="") as f:
+            text = f.read()
+        with open(activity, "w", encoding="utf-8", newline="") as f:
+            f.write(patch_sdl_clipboard(text))
         java_files = []
-        for root in (os.path.join(a.sdl_source, "android-project/app/src/main/java"), os.path.join(HERE, "java")):
+        for root in (sdl_java, os.path.join(HERE, "java")):
             for d, _, files in os.walk(root):
                 java_files += [os.path.join(d, n) for n in files if n.endswith(".java")]
         classes = os.path.join(work, "classes")
