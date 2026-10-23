@@ -608,8 +608,8 @@ func (a *app) chooseGame(arg string) error {
 	}
 }
 
-const noXWAText = "Without X-Wing Alliance OpenTIE-VR still runs: it shows TIE Fighter's own\n" +
-	"2D cockpits instead of the 3D ones."
+const noXWAText = "Without X-Wing Alliance OpenTIE-VR still has 3D cockpits for every TIE craft:\n" +
+	"the X-Wing Revival cockpits that come with the app."
 
 func (a *app) setXWA(dir string) error {
 	a.xwaDir = dir
@@ -621,7 +621,7 @@ func (a *app) setXWA(dir string) error {
 	say("X-Wing Alliance folder: %s", dir)
 	say("Cockpit models to copy: %s", strings.Join(names, ", "))
 	if len(a.cockpits) < len(xwaCockpitNames) {
-		say("Some cockpit models are missing there; those cockpits stay 2D.")
+		say("Some cockpit models are missing there; those crafts use the included X-Wing Revival cockpits.")
 	}
 	return nil
 }
@@ -634,7 +634,8 @@ func (a *app) noXWA() error {
 
 // chooseXWA is step 3: X-Wing Alliance is optional. Only its three TIE
 // cockpit models (FlightModels/TIECOCKPIT.OPT, TIEBOMBERCOCKPIT.OPT,
-// COMBATSIMCOCKPIT.OPT) are copied, for the 3D cockpits.
+// COMBATSIMCOCKPIT.OPT) are copied; the app then uses them instead of the
+// X-Wing Revival cockpits it brings along.
 func (a *app) chooseXWA() error {
 	if env := os.Getenv("OPENTIE_XWA"); env != "" { // tests and power users
 		if env == "none" {
@@ -644,7 +645,7 @@ func (a *app) chooseXWA() error {
 			return a.setXWA(r)
 		}
 	}
-	say("Looking for X-Wing Alliance (optional, for the 3D cockpits)...")
+	say("Looking for X-Wing Alliance (optional, for its own 3D cockpits)...")
 	found := detectXWA()
 	logf("detected X-Wing Alliance folders: %q", found)
 	if len(found) > 0 {
@@ -653,8 +654,8 @@ func (a *app) chooseXWA() error {
 	ans := ui.Ask(Question{
 		Kind:  "buttons",
 		Title: "X-Wing Alliance was not found",
-		Text: "OpenTIE-VR shows the TIE cockpits in 3D with three cockpit models from\n" +
-			"X-Wing Alliance (Steam or GOG), if you own it. " + noXWAText + "\n\n" +
+		Text: "If you own X-Wing Alliance (Steam or GOG), OpenTIE-VR can use its three TIE\n" +
+			"cockpit models for the 3D cockpits (optional). " + noXWAText + "\n\n" +
 			"If X-Wing Alliance is installed, choose its folder.",
 		Options: []Option{
 			{ID: "skip", Label: "Continue without", Key: "", Style: "primary"},

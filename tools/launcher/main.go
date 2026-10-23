@@ -90,7 +90,8 @@ func usage() string {
 
 Puts OpenTIE-VR and your own TIE Fighter game files on your VR headset
 (Meta Quest, Pico, Steam Frame) over a USB cable. If X-Wing Alliance is
-installed, its three TIE cockpit models are copied too (3D cockpits).
+installed, its three TIE cockpit models are copied too (used instead of the
+included X-Wing Revival 3D cockpits).
 SoundFonts (*.sf2) in a "soundfonts" folder next to the launcher are
 copied too (the game plays its music with the first one), and so are
 Roland SC-55 ROM dumps in a "sc55" folder (Settings > Audio > Roland SC-55).
@@ -223,7 +224,7 @@ type app struct {
 	apkVersion  string
 	gameDir     string     // the TIE Fighter folder the user chose (or that was found)
 	game        tieInstall // its editions
-	xwaDir      string     // X-Wing Alliance folder ("" = none: 2D cockpits)
+	xwaDir      string     // X-Wing Alliance folder ("" = none: the included Revival cockpits)
 	cockpits    []gameFile // the cockpit models found there
 	storage     string     // "/sdcard" or a fallback such as "/storage/emulated/0"
 	logsDir     string     // last folder logs were collected into
@@ -289,7 +290,7 @@ func (a *app) flow(opts options) error {
 			return a.setupADB()
 		}},
 		{"Finding your TIE Fighter folder", func() error { return a.chooseGame(opts.gameArg) }},
-		{"Finding X-Wing Alliance (3D cockpits)", a.chooseXWA},
+		{"Finding X-Wing Alliance (optional cockpits)", a.chooseXWA},
 		{"Connecting to the headset", a.connect},
 		{"Installing the OpenTIE-VR app", a.installApp},
 		{"Preparing the OpenTIE-VR folders on the headset", a.prepareAppFolder},

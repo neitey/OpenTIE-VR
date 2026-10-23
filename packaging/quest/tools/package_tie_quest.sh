@@ -28,6 +28,15 @@
 #            ABI (/root/android/prefix-ffmpeg-ogg/lib; configure line in its
 #            libavcodec.so; skipped when absent: then TIE98 music is silent)
 #   APKTOOL  Apktool jar for sdl_clipboard_dex.py (/root/android/apktool_2.12.1.jar)
+#   REVIVAL_DATA X-Wing Revival's TIE cockpits, staged out of a Revival download
+#            ($SP/vrassets/revival_tie/data, made by
+#            tools/revival_cockpits/gen_revival_cockpits.py stage <Revival zip> <dir>;
+#            third-party models bundled with Raptor007's permission, never in the
+#            repo). Converted here into REVIVAL_GLB ($SP/vrassets/revival_tie/glb)
+#            with REVIVAL_COOK (a host aeron_gltf_cook,
+#            $SP/vrassets/revival_tie/tools/aeron_gltf_cook) and packed as the
+#            app resources cockpit/revival/*.glb. Skipped with a warning when
+#            absent: the game then falls back to its own 3D cockpit.
 #   KEY/CERT signing key and certificate (never in the repo)
 set -e
 CODE=$1
@@ -46,6 +55,9 @@ KEY=${KEY:-/root/android/signing/openxwa-quest-key.pem}
 CERT=${CERT:-/root/android/signing/openxwa-quest-cert.der}
 OUT=${OUT:-/root/out/OpenTIE-VR-$VER.apk}
 WORK=${WORK:-$SP/tieapk/$CODE}
+REVIVAL_DATA=${REVIVAL_DATA:-$SP/vrassets/revival_tie/data}
+REVIVAL_GLB=${REVIVAL_GLB:-$SP/vrassets/revival_tie/glb}
+REVIVAL_COOK=${REVIVAL_COOK:-$SP/vrassets/revival_tie/tools/aeron_gltf_cook}
 
 cmake -DTIE_VERSION=$VER "$BUILD" > /dev/null
 ninja -C "$BUILD" -j2 tie > "$WORK.build.log" 2>&1 || { mkdir -p "$(dirname "$WORK")"; tail -30 "$WORK.build.log"; exit 1; }
@@ -70,14 +82,28 @@ for info in src.infolist():
 dst.close()
 EOF
 
+# X-Wing Revival's TIE cockpits, converted from the staged data.
+REVIVAL_FILES=()
+if [ -d "$REVIVAL_DATA/Models" ] && [ -x "$REVIVAL_COOK" ]; then
+  rm -rf "$REVIVAL_GLB"
+  python3 "$HERE/../../../tools/revival_cockpits/gen_revival_cockpits.py" build "$REVIVAL_COOK" "$REVIVAL_DATA" "$REVIVAL_GLB"
+  REVIVAL_FILES=("$REVIVAL_GLB"/*.glb)
+else
+  echo "warning: no X-Wing Revival cockpits ($REVIVAL_DATA, $REVIVAL_COOK): the 3D cockpit without X-Wing Alliance is OpenTIE-VR's own" >&2
+fi
+
 EXTRA=""
 for f in "$BUILD"/shaders/*.spv; do EXTRA="$EXTRA assets/shaders/$(basename "$f")=$f"; done
 # App resources, plus the list the app extracts them by (quest_app.c).
 # First line: what makes a new APK re-extract them (version + content hash).
-echo "# $VER $CODE $(cd "$BUILD" && find resources -type f | sort | xargs sha256sum | sha256sum | cut -c1-16)" > stage/resources.lst
+echo "# $VER $CODE $( (cd "$BUILD" && find resources -type f | sort | xargs sha256sum; \
+  for f in "${REVIVAL_FILES[@]}"; do sha256sum "$f" | cut -c1-64; done) | sha256sum | cut -c1-16)" > stage/resources.lst
 while IFS= read -r f; do
   rel=${f#$BUILD/}; EXTRA="$EXTRA assets/$rel=$f"; echo "$rel" >> stage/resources.lst
 done < <(find "$BUILD/resources" -type f | sort)
+for f in "${REVIVAL_FILES[@]}"; do
+  rel=resources/cockpit/revival/$(basename "$f"); EXTRA="$EXTRA assets/$rel=$f"; echo "$rel" >> stage/resources.lst
+done
 EXTRA="$EXTRA assets/resources.lst=stage/resources.lst"
 
 python3 "$HERE/manifest_version.py" "$MANIFEST" m1.xml "$CODE" "$VER"

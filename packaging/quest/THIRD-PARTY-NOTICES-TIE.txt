@@ -5,7 +5,8 @@ OpenTIE (https://github.com/elyosh/OpenTIE) and this VR port
 (https://github.com/neitey/OpenTIE-VR, VR layer from
 https://github.com/neitey/OpenXWA-Quest) are free software under the
 GNU General Public License version 3. TIE Fighter and X-Wing Alliance game
-data are not included and remain the property of their owners.
+data are not included and remain the property of their owners. The X-Wing
+Revival 3D cockpits (27) are third-party models included with permission.
 
 This app includes the following third-party software:
 
@@ -38,6 +39,12 @@ This app includes the following third-party software:
 25. Nuked SC-55 (nukeykt, jcmoyer and contributors) - original MAME license (below; no
     commercial use). No Roland ROMs are included: the user supplies their own.
 26. SpeexDSP resampler (Xiph.Org Foundation, Jean-Marc Valin) - BSD 3-clause (below)
+
+It also includes the following third-party 3D models (not open source; used
+with permission):
+
+27. 3D cockpits from X-Wing Revival (Raptor007, Blair Sherman; models originally
+    by the X-Wing Alliance Upgrade team) - included with permission (below).
 
 ------------------------------------------------------------------------------
 1. Basis Universal transcoder v2_50 (Binomial LLC)
@@ -1322,6 +1329,22 @@ PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
 LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+------------------------------------------------------------------------------
+27. 3D cockpits from X-Wing Revival
+https://www.raptor007.com/x-wing-revival/
+
+3D cockpits from X-Wing Revival (https://www.raptor007.com/x-wing-revival/)
+by Raptor007 (Blair Sherman), included with his permission; the models are
+originally by the X-Wing Alliance Upgrade team (https://xwaupgrade.com/).
+
+OpenTIE-VR's 3D cockpits for the TIE Fighter (also used for the TIE Advanced
+and TIE Defender), TIE Interceptor, TIE Bomber and Assault Gunboat (also the
+Missile Boat); X-Wing Alliance's own cockpits are used instead when the PC
+launcher copied them over. Shipped converted for the game as
+assets/resources/cockpit/revival/*.glb. The models are not covered by the
+GNU GPL or by any other licence in this file; they are included by
+permission.
 
 ------------------------------------------------------------------------------
 Apache License 2.0
