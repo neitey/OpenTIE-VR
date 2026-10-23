@@ -30,8 +30,8 @@ typedef struct TieVrOptionRow {
 static const char* const k_off_on[] = { "Off", "On" };
 static const char* const k_0_1[] = { "0", "1" };
 
-static const char* const k_cockpit_labels[] = { "X-Wing Alliance 3D", "TIE Fighter 2D" };
-static const char* const k_cockpit_values[] = { "xwa", "2d" };
+static const char* const k_cockpit_labels[] = { "X-Wing Alliance 3D", "TIE Fighter 2D", "OpenTIE 3D" };
+static const char* const k_cockpit_values[] = { "xwa", "2d", "own" };
 static const char* const k_hud_scale_labels[] = { "Small", "Medium", "Large", "Extra Large" };
 static const char* const k_hud_scale_values[] = { "0.45", "0.55", "0.65", "0.8" };
 static const char* const k_hud_dist_labels[] = { "2 m", "3 m", "4 m" };
@@ -66,8 +66,9 @@ static const char* const k_curve_labels[] = { "Direct", "Medium", "Precise", "Ve
 static const char* const k_curve_values[] = { "1.0", "1.5", "2.0", "2.6" };
 
 static const TieVrOptionRow k_rows[] = {
-	{ "TIE_XR_COCKPIT", "Cockpit", k_cockpit_labels, k_cockpit_values, 2, 0, false,
-	  "X-Wing Alliance's 3D TIE cockpits need their cockpit files copied over by the PC launcher." },
+	{ "TIE_XR_COCKPIT", "Cockpit", k_cockpit_labels, k_cockpit_values, 3, 0, false,
+	  "X-Wing Alliance's 3D TIE cockpits need their cockpit files copied over by the PC launcher; without them "
+	  "OpenTIE-VR's own 3D cockpit is used." },
 	{ "XWA_XR_STEREO", "3D Flight", k_off_on, k_0_1, 2, 1, false,
 	  "Off shows the flight view on the flat screen as well." },
 	{ "XWA_XR_HUD_LAYOUT", "HUD", k_hud_layout_labels, k_hud_layout_values, 2, 0, false,
@@ -131,6 +132,7 @@ static const char* const k_hud_pose_keys[] = {
 	"XWA_XR_HUD_POSE_TIECOCKPIT",
 	"XWA_XR_HUD_POSE_TIEBOMBERCOCKPIT",
 	"XWA_XR_HUD_POSE_COMBATSIMCOCKPIT",
+	"XWA_XR_HUD_POSE_OPENTIEFIGHTER",
 	"XWA_XR_HUD_POSE_2D",
 };
 

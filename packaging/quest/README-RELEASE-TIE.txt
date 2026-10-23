@@ -10,8 +10,8 @@ You need:
 - Optional: X-Wing Alliance (Steam or GOG) on the same PC. OpenTIE-VR then
   uses its three TIE cockpit models (FlightModels\TIECOCKPIT.OPT,
   TIEBOMBERCOCKPIT.OPT and COMBATSIMCOCKPIT.OPT) for the 3D cockpits.
-  Without X-Wing Alliance the game still runs, with TIE Fighter's own 2D
-  cockpits.
+  Without X-Wing Alliance the game still runs, in OpenTIE-VR's own 3D
+  cockpit (or TIE Fighter's own 2D cockpits, VR settings -> Cockpit).
 No game files are included in this download.
 
 
