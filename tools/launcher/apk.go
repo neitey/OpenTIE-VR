@@ -118,7 +118,7 @@ func (a *app) installApp() error {
 			return fail("The headset has a newer OpenTIE-VR that cannot be replaced by this older one.\n" +
 				"Download the newest launcher instead.")
 		}
-		return fail("Installing OpenTIE-VR failed:\n  %s\nCheck the USB cable and try again.", reason)
+		return fail("Installing OpenTIE-VR failed:\n  %s\nCheck the %s and try again.", reason, a.connectionWord())
 	}
 	say("OpenTIE-VR %s is installed.", bundled)
 	return nil

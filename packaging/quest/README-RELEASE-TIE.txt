@@ -22,7 +22,8 @@ Before you start (once)
 1. Turn on Developer Mode for the headset:
    Meta Horizon phone app -> Devices -> your headset -> Headset settings ->
    Developer Mode (needs a free Meta developer account).
-2. Have a USB-C cable that carries data (not a charge-only cable).
+2. Have a USB-C cable that carries data (not a charge-only cable). The
+   Steam Frame can also be reached over Wi-Fi without a cable (see below).
 
 
 Install (and update)
@@ -30,6 +31,8 @@ Install (and update)
 1. Unzip this folder anywhere on the PC.
 2. Connect the headset to the PC with the USB cable.
 3. Double-click OpenTIE-VR-Launcher.exe and follow the steps in the window.
+   It first asks how to reach the headset: "USB cable", "USB, then switch
+   to Wi-Fi" or "Wi-Fi" (it remembers your choice).
    It finds TIE Fighter (and X-Wing Alliance, if installed), installs the
    app on the headset, copies the game files (about 1.1 GB, a few minutes),
    checks every file arrived and asks whether to bring your PC pilots
@@ -41,6 +44,14 @@ Install (and update)
 After you have allowed USB debugging once, the headset can stay on the desk
 (switched on, cable connected) while the launcher copies: the OpenTIE-VR
 app receives and unpacks the files itself, without starting the game.
+
+Unplugging during the copy (Quest, Pico): choose "USB, then switch to
+Wi-Fi". After the USB connection works, the launcher switches the headset
+to Wi-Fi (adb tcpip) and tells you when you can unplug. This lasts until
+the headset sleeps or restarts, so keep it awake while the files are
+copied; the PC and the headset must be on the same network. If the
+connection drops, the launcher reconnects and continues; a new run only
+copies what is missing.
 
 On the headset the files go to Android/data/org.opentie.quest/files:
 TIE98 (1998 edition), TIE95 (Collector's CD, including its CD image
@@ -61,15 +72,25 @@ named "sc55" next to the launcher; Settings -> Audio -> Synthesizer ->
 Roland SC-55 then emulates it (Nuked SC-55; heavier on the CPU, not tested
 on a headset yet). No Roland ROMs are included.
 
-Steam Frame: turn on Developer Mode. Once, before starting "Lepton
-Development": in your Steam Library, open its Properties and set Launch
-Options to
+Steam Frame: turn on Developer Mode (it asks you to set a password). Once,
+before starting "Lepton Development": in your Steam Library, open its
+Properties and set Launch Options to
    LEPTON_NO_CLEANUP=1 %command%
 Without this, closing Lepton Development deletes OpenTIE-VR and the
 copied game files; with it they should stay. Then start "Lepton
-Development" and keep it running; the launcher connects to it over the
-USB cable (or Wi-Fi). OpenTIE-VR appears in the Lepton Development
-window's Android home screen. Not tested on a Steam Frame yet.
+Development" and keep it running. In the launcher choose "Wi-Fi"
+(recommended; the Frame's USB connection may not show up on Windows) and
+enter "frame" or the headset's IP address (Quick Settings, or Steam
+Settings > Internet). The PC and the Frame must be on the same network;
+guest networks with "client isolation" do not work. If the direct
+connection is refused, choose "Connect through SSH": the launcher asks for
+the Developer Mode password (used only for this connection, never saved),
+opens an SSH connection with Windows' own SSH client (user "steamos") and
+reaches Lepton through it. Allow USB debugging in the Lepton window when
+asked. If Windows' SSH client is missing: Settings > System > Optional
+features > Add a feature > "OpenSSH Client". USB also works (the launcher
+forwards Lepton's port over the cable). OpenTIE-VR appears in the Lepton
+Development window's Android home screen. Not tested on a Steam Frame yet.
 
 Windows may say "Windows protected your PC": the launcher is not
 code-signed yet. Click "More info", then "Run anyway".

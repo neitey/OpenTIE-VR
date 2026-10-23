@@ -89,9 +89,9 @@ func usage() string {
 	return `OpenTIE-VR Launcher ` + version + `
 
 Puts OpenTIE-VR and your own TIE Fighter game files on your VR headset
-(Meta Quest, Pico, Steam Frame) over a USB cable. If X-Wing Alliance is
-installed, its three TIE cockpit models are copied too (used instead of the
-included X-Wing Revival 3D cockpits).
+(Meta Quest, Pico, Steam Frame) over a USB cable or Wi-Fi. If X-Wing
+Alliance is installed, its three TIE cockpit models are copied too (used
+instead of the included X-Wing Revival 3D cockpits).
 SoundFonts (*.sf2) in a "soundfonts" folder next to the launcher are
 copied too (the game plays its music with the first one), and so are
 Roland SC-55 ROM dumps in a "sc55" folder (Settings > Audio > Roland SC-55).
@@ -142,6 +142,9 @@ func parseArgs(args []string) (options, error) {
 }
 
 func main() {
+	if runAskpass() { // started by ssh as SSH_ASKPASS (see sshtunnel.go)
+		return
+	}
 	opts, err := parseArgs(os.Args[1:])
 	if err != nil || opts.help || opts.showVersion {
 		setupConsole() // the Windows build has no console of its own
@@ -239,6 +242,11 @@ type app struct {
 	lepton      string // its serial, e.g. "localhost:5555" or "frame:5555"
 	frameUSB    string // the SteamOS USB serial
 	forwardPort int    // port forwarded over USB (0 = none)
+
+	// Wi-Fi (wifi.go, sshtunnel.go).
+	route   string     // usb, usbwifi or wifi (the connection step's choice)
+	netHost string     // the headset's name or IP address over Wi-Fi
+	tunnel  *sshTunnel // Steam Frame through SSH (nil = none)
 }
 
 func newApp() *app {
