@@ -1,0 +1,31 @@
+# OpenTIE-VR's own 3D cockpit shell (no X-Wing Alliance files) with the fake
+# headset, instruments on the dashboard:
+#   run.sh <build> tools/vrtest/scripts/own_cockpit.txt /tmp/out TIE_TEST_XR=1 \
+#     TIE_TEST_XR_EYE=768x768 TIE_XR_COCKPIT=own TIE_XR_HUD_LAYOUT=dashboard
+#   python3 tools/vrtest/compose.py /tmp/out/*_xr.txt
+# (TIE_XWA_COCKPITS=/nonexistent instead of TIE_XR_COCKPIT=own tests the
+# fallback.) Expect "loaded resources/cockpit/opentie_cockpit_fighter.glb" in
+# the log. Looks ahead, down at the dashboard, to both sides and back up.
+0 mission HF1W
+0 wait flying 5 timeout=4000
++1 axis yaw 1
++1 axis pitch -0.6
++20 key t
++2 axis yaw 0
++1 axis pitch 0
++1 key ]
++12 capture ahead
++1 head 0 -32
++4 capture down
++1 head 0 -55
++4 capture down_far
++1 head 70 -10
++4 capture left
++1 head -70 -10
++4 capture right
++1 head 35 -30
++4 capture down_left
++1 head -150 25
++4 capture back_right
++1 head 0 0
++2 quit

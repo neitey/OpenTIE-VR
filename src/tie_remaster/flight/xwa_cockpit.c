@@ -1,11 +1,16 @@
-/* X-Wing Alliance 3D cockpits for the player's TIE craft. See xwa_cockpit.h.
+/* 3D cockpits for the player's TIE craft: X-Wing Alliance's cockpit OPTs when
+ * the player copied them over, else OpenTIE-VR's own generated cockpit shell
+ * (resources/cockpit/opentie_cockpit_fighter.glb, tools/cockpit_shell). See
+ * xwa_cockpit.h.
  *
  * Coordinates: cockpit OPTs are authored in the craft's own OPT frame (X right,
  * -Y forward, Z up; XWA draws them at the craft origin with the eye at the
  * craft's cockpit POV). The meshes keep that frame in metres, so the instance
  * transform is the ordinary ship transform (TieRenderMath_Mat4FromQuaternion-
  * Translation, which applies the -Y = forward reflection) of the player
- * craft, translated so the table's eye point lands on the flight camera. */
+ * craft, translated so the table's eye point lands on the flight camera. The
+ * own shell is a glTF whose axes Aeron's loader converts to the same frame
+ * (aeron x, y, z = -gltf x, -gltf z, gltf y); its eye point is the origin. */
 
 #include "tie_remaster/flight/xwa_cockpit.h"
 
@@ -25,6 +30,8 @@
 #include "aeron/scene/mesh.h"
 #include "aeron/scene/scene3d.h"
 #include "aeron/scene/world.h"
+#include "aeron/vfs.h"
+#include "cgltf.h"
 #include "tie_remaster/flight/cockpit/renderer.h"
 #include "tie_remaster/flight/render_math.h"
 #include "tie_runtime/flight_assets/source.h"
@@ -32,6 +39,13 @@
 #include "tie_runtime/species_id.h"
 
 #define XWA_COCKPIT_NAME_MAX 32
+
+/* OpenTIE-VR's own cockpit shell: its name in the table below (and in the
+ * TIE_XR_COCKPIT_*_<NAME> / XWA_XR_HUD_POSE_<NAME> keys) and its file in the
+ * app resources (packaged into the APK with the rest of resources/). */
+#define TIE_OWN_COCKPIT_NAME "OPENTIE_FIGHTER"
+#define TIE_OWN_COCKPIT_RESOURCE "cockpit/opentie_cockpit_fighter.glb"
+#define TIE_OWN_COCKPIT_MAX_BYTES (16u * 1024u * 1024u)
 
 /* One instrument panel on a cockpit model: centre in model OPT metres, the
  * panel plane's tilt and turn, and its height (width follows the source
@@ -97,6 +111,21 @@ static const TieXwaCockpitSpec k_cockpits[] = {
 			[TIE_COCKPIT_PANEL_GAUGES_R] = { true, { 0.28f, -0.61f, -0.43f }, 25.0f, -15.0f, 0.0f, 0.13f },
 		},
 	},
+	/* OpenTIE-VR's own shell (tools/cockpit_shell/make_cockpit.py --spec):
+	 * the eye at the origin, the sensors either side of the CMD on the sloped
+	 * dashboard face, the gauges on pods angled in from the side consoles. */
+	{
+		TIE_OWN_COCKPIT_NAME,
+		{ 0.0f, 0.0f, 0.0f },
+		1.0f,
+		{
+			[TIE_COCKPIT_PANEL_SENSOR_FWD] = { true, { -0.255f, -0.738f, -0.421f }, 40.9f, 0.0f, 0.0f, 0.16f },
+			[TIE_COCKPIT_PANEL_SENSOR_REAR] = { true, { 0.255f, -0.738f, -0.421f }, 40.9f, 0.0f, 0.0f, 0.16f },
+			[TIE_COCKPIT_PANEL_CMD] = { true, { 0.000f, -0.730f, -0.430f }, 40.9f, 0.0f, 0.0f, 0.17f },
+			[TIE_COCKPIT_PANEL_GAUGES_L] = { true, { -0.445f, -0.600f, -0.470f }, 42.0f, 30.0f, 0.0f, 0.22f },
+			[TIE_COCKPIT_PANEL_GAUGES_R] = { true, { 0.445f, -0.600f, -0.470f }, 42.0f, -30.0f, 0.0f, 0.22f },
+		},
+	},
 };
 
 static const char* const k_panel_ids[TIE_COCKPIT_PANEL_COUNT] = {
@@ -125,12 +154,31 @@ typedef struct TieXwaCockpitState {
 
 static TieXwaCockpitState s_xwa;
 
-static bool TieXwaCockpit_Enabled(void) {
+typedef enum TieXwaCockpitMode {
+	TIE_XWA_COCKPIT_MODE_OFF, /* TIE's 2D cockpit art */
+	TIE_XWA_COCKPIT_MODE_XWA, /* XWA's cockpit OPTs, the own shell without them */
+	TIE_XWA_COCKPIT_MODE_OWN, /* always the own shell */
+} TieXwaCockpitMode;
+
+static TieXwaCockpitMode TieXwaCockpit_Mode(void) {
 	const char* mode = SDL_getenv("TIE_XR_COCKPIT");
 	if (mode && (SDL_strcasecmp(mode, "2d") == 0 || SDL_strcmp(mode, "0") == 0 || SDL_strcasecmp(mode, "off") == 0))
-		return false;
-	const char* dir = SDL_getenv("TIE_XWA_COCKPITS");
-	return dir && dir[0];
+		return TIE_XWA_COCKPIT_MODE_OFF;
+	if (mode && SDL_strcasecmp(mode, "own") == 0)
+		return TIE_XWA_COCKPIT_MODE_OWN;
+	/* Unset: 3D when the app named an XWA cockpit folder (the VR app always
+	 * does, even when it is empty); a desktop run without one keeps TIE's 2D
+	 * cockpit as before. */
+	if (!(mode && mode[0])) {
+		const char* dir = SDL_getenv("TIE_XWA_COCKPITS");
+		if (!(dir && dir[0]))
+			return TIE_XWA_COCKPIT_MODE_OFF;
+	}
+	return TIE_XWA_COCKPIT_MODE_XWA;
+}
+
+static bool TieXwaCockpit_Enabled(void) {
+	return TieXwaCockpit_Mode() != TIE_XWA_COCKPIT_MODE_OFF;
 }
 
 static const char* TieXwaCockpit_NameForSpecies(uint8_t species) {
@@ -268,8 +316,30 @@ void TieXwaCockpit_Release(void) {
 	memset(&s_xwa, 0, sizeof s_xwa);
 }
 
+/* Scene mesh from a built model; frees the model. */
+static bool TieXwaCockpit_Adopt(AeronCommandBuffer* cmd, AeronFlightModel* model, const char* name, const char* path) {
+	AeronSceneMeshCreateStatus status = AERON_SCENE_MESH_CREATE_SUCCESS;
+	char label[64];
+	snprintf(label, sizeof label, "xwa.cockpit.%s", name);
+	AeronSceneMesh* mesh = AeronScene_MeshCreate(cmd, model, label, &status);
+	Aeron_FlightModelFree(model);
+	if (!mesh) {
+		Aeron_LogWarn("tie.xwa_cockpit", "%s: scene mesh creation failed (%d)", path, (int)status);
+		return false;
+	}
+	s_xwa.mesh = mesh;
+	snprintf(s_xwa.name, sizeof s_xwa.name, "%s", name);
+	s_xwa.spec = TieXwaCockpit_Spec(name);
+	Aeron_LogInfo("tie.xwa_cockpit", "loaded %s: %u vertices, %u primitives, bounds (%.2f %.2f %.2f)..(%.2f %.2f %.2f) m",
+				  path, mesh->vertex_count, mesh->total_prim_count, mesh->bound_min[0], mesh->bound_min[1],
+				  mesh->bound_min[2], mesh->bound_max[0], mesh->bound_max[1], mesh->bound_max[2]);
+	return true;
+}
+
 static bool TieXwaCockpit_Load(AeronCommandBuffer* cmd, const TieFlightAssetSource* assets, const char* name) {
 	const char* dir = SDL_getenv("TIE_XWA_COCKPITS");
+	if (!dir || !dir[0])
+		return false;
 	char path[1024];
 	size_t size = 0;
 	void* bytes = TieXwaCockpit_ReadFile(dir, name, &size, path, sizeof path);
@@ -292,22 +362,56 @@ static bool TieXwaCockpit_Load(AeronCommandBuffer* cmd, const TieFlightAssetSour
 		Aeron_LogWarn("tie.xwa_cockpit", "%s: OPT conversion failed: %s", path, err.message);
 		return false;
 	}
-	AeronSceneMeshCreateStatus status = AERON_SCENE_MESH_CREATE_SUCCESS;
-	char label[64];
-	snprintf(label, sizeof label, "xwa.cockpit.%s", name);
-	AeronSceneMesh* mesh = AeronScene_MeshCreate(cmd, &model, label, &status);
-	Aeron_FlightModelFree(&model);
-	if (!mesh) {
-		Aeron_LogWarn("tie.xwa_cockpit", "%s: scene mesh creation failed (%d)", path, (int)status);
+	return TieXwaCockpit_Adopt(cmd, &model, name, path);
+}
+
+/* The own cockpit shell: TIE_OWN_COCKPIT_GLB=<path> (testing), else the app
+ * resource (next to the executable on desktop, extracted from the APK on the
+ * Quest). The .glb is cooked (KTX2 channel atlases), see tools/cockpit_shell. */
+static bool TieXwaCockpit_LoadOwn(AeronCommandBuffer* cmd, const TieFlightAssetSource* assets) {
+	const char* override = SDL_getenv("TIE_OWN_COCKPIT_GLB");
+	char path[1024];
+	void* bytes = NULL;
+	size_t size = 0;
+	bool sdl_owned = false;
+	if (override && override[0]) {
+		snprintf(path, sizeof path, "%s", override);
+		bytes = SDL_LoadFile(path, &size);
+		sdl_owned = true;
+	} else {
+		snprintf(path, sizeof path, "resources/%s", TIE_OWN_COCKPIT_RESOURCE);
+		uint8_t* data = NULL;
+		if (assets && assets->vfs &&
+			AeronVfs_ReadAll(assets->vfs, AERON_VFS_ROOT_RESOURCE, TIE_OWN_COCKPIT_RESOURCE, TIE_OWN_COCKPIT_MAX_BYTES,
+							 &data, &size))
+			bytes = data;
+	}
+	if (!bytes) {
+		Aeron_LogWarn("tie.xwa_cockpit", "own cockpit %s not found", path);
 		return false;
 	}
-	s_xwa.mesh = mesh;
-	snprintf(s_xwa.name, sizeof s_xwa.name, "%s", name);
-	s_xwa.spec = TieXwaCockpit_Spec(name);
-	Aeron_LogInfo("tie.xwa_cockpit", "loaded %s: %u vertices, %u primitives, bounds (%.2f %.2f %.2f)..(%.2f %.2f %.2f) m",
-				  path, mesh->vertex_count, mesh->total_prim_count, mesh->bound_min[0], mesh->bound_min[1],
-				  mesh->bound_min[2], mesh->bound_max[0], mesh->bound_max[1], mesh->bound_max[2]);
-	return true;
+	/* A binary glTF's buffer is its BIN chunk, which cgltf attaches in
+	 * cgltf_load_buffers (Aeron_FlightModelBuildMemory expects it attached). */
+	AeronFlightModel model;
+	memset(&model, 0, sizeof model);
+	cgltf_options options;
+	memset(&options, 0, sizeof options);
+	cgltf_data* data = NULL;
+	bool built = false;
+	if (cgltf_parse(&options, bytes, size, &data) == cgltf_result_success &&
+		cgltf_load_buffers(&options, data, NULL) == cgltf_result_success)
+		built = Aeron_FlightModelBuildData(data, path, &model);
+	if (data)
+		cgltf_free(data);
+	if (sdl_owned)
+		SDL_free(bytes);
+	else
+		free(bytes);
+	if (!built) {
+		Aeron_LogWarn("tie.xwa_cockpit", "%s: not a usable cockpit glTF", path);
+		return false;
+	}
+	return TieXwaCockpit_Adopt(cmd, &model, TIE_OWN_COCKPIT_NAME, path);
 }
 
 void TieXwaCockpit_Prepare(AeronCommandBuffer* cmd, const TieFlightAssetSource* assets, const TieSnapshot* snap) {
@@ -333,7 +437,10 @@ void TieXwaCockpit_Prepare(AeronCommandBuffer* cmd, const TieFlightAssetSource* 
 
 	/* TIE_XR_COCKPIT_FILE=<NAME> forces one cockpit for every craft. */
 	const char* forced = SDL_getenv("TIE_XR_COCKPIT_FILE");
-	const char* want = forced && forced[0] ? forced : TieXwaCockpit_NameForSpecies(species);
+	const bool own_only = TieXwaCockpit_Mode() == TIE_XWA_COCKPIT_MODE_OWN;
+	const char* want = own_only					? TIE_OWN_COCKPIT_NAME
+					   : forced && forced[0] ? forced
+											 : TieXwaCockpit_NameForSpecies(species);
 	if (s_xwa.mesh && strcmp(s_xwa.name, want) == 0) {
 		/* Same model for the new mission or craft: keep it. */
 		s_xwa.species = species;
@@ -341,15 +448,20 @@ void TieXwaCockpit_Prepare(AeronCommandBuffer* cmd, const TieFlightAssetSource* 
 		return;
 	}
 	TieXwaCockpit_Release();
-	bool ok = TieXwaCockpit_Load(cmd, assets, want);
-	if (!ok && strcmp(want, "TIECOCKPIT") != 0)
-		ok = TieXwaCockpit_Load(cmd, assets, "TIECOCKPIT");
+	bool ok = false;
+	if (strcmp(want, TIE_OWN_COCKPIT_NAME) != 0) {
+		ok = TieXwaCockpit_Load(cmd, assets, want);
+		if (!ok && strcmp(want, "TIECOCKPIT") != 0)
+			ok = TieXwaCockpit_Load(cmd, assets, "TIECOCKPIT");
+	}
+	/* No X-Wing Alliance cockpit (not copied over): the own shell. */
+	if (!ok)
+		ok = TieXwaCockpit_LoadOwn(cmd, assets);
 	if (!ok) {
 		s_xwa.failed = true;
 		s_xwa.failed_species = species;
 		s_xwa.failed_gen = gen;
-		Aeron_LogWarn("tie.xwa_cockpit", "no X-Wing Alliance cockpit for species %u; keeping the 2D cockpit",
-					  (unsigned)species);
+		Aeron_LogWarn("tie.xwa_cockpit", "no 3D cockpit for species %u; keeping the 2D cockpit", (unsigned)species);
 		return;
 	}
 	s_xwa.species = species;
