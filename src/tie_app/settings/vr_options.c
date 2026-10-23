@@ -15,6 +15,7 @@
 #include "aeron/aeron.h"
 #include "aeron/scene/ui.h"
 #include "tie_app/quest/quest_app.h"
+#include "tie_remaster/flight/xwa_cockpit.h"
 
 typedef struct TieVrOptionRow {
 	const char* key;
@@ -30,8 +31,11 @@ typedef struct TieVrOptionRow {
 static const char* const k_off_on[] = { "Off", "On" };
 static const char* const k_0_1[] = { "0", "1" };
 
-static const char* const k_cockpit_labels[] = { "X-Wing Alliance 3D", "TIE Fighter 2D", "OpenTIE 3D" };
-static const char* const k_cockpit_values[] = { "xwa", "2d", "own" };
+/* Unset = the default rule (xwa_cockpit.h): X-Wing Alliance's cockpits when
+ * the launcher copied them over, else X-Wing Revival's. */
+static const char* const k_cockpit_labels[] = { "X-Wing Alliance", "X-Wing Revival", "OpenTIE 3D", "TIE Fighter 2D" };
+static const char* const k_cockpit_values[] = { "xwa", "revival", "own", "2d" };
+enum { TIE_VR_COCKPIT_XWA = 0, TIE_VR_COCKPIT_REVIVAL = 1 };
 static const char* const k_hud_scale_labels[] = { "Small", "Medium", "Large", "Extra Large" };
 static const char* const k_hud_scale_values[] = { "0.45", "0.55", "0.65", "0.8" };
 static const char* const k_hud_dist_labels[] = { "2 m", "3 m", "4 m" };
@@ -66,9 +70,11 @@ static const char* const k_curve_labels[] = { "Direct", "Medium", "Precise", "Ve
 static const char* const k_curve_values[] = { "1.0", "1.5", "2.0", "2.6" };
 
 static const TieVrOptionRow k_rows[] = {
-	{ "TIE_XR_COCKPIT", "Cockpit", k_cockpit_labels, k_cockpit_values, 3, 0, false,
-	  "X-Wing Alliance's 3D TIE cockpits need their cockpit files copied over by the PC launcher; without them "
-	  "OpenTIE-VR's own 3D cockpit is used." },
+	{ "TIE_XR_COCKPIT", "Cockpit", k_cockpit_labels, k_cockpit_values, 4, TIE_VR_COCKPIT_REVIVAL, false,
+	  "3D cockpits for every TIE craft from X-Wing Revival (by Raptor007, models by the X-Wing Alliance Upgrade "
+	  "team) are included. X-Wing Alliance's own are used instead when the PC launcher copied them over (the "
+	  "default then); a cockpit that is not there falls back to X-Wing Revival's. OpenTIE 3D is OpenTIE-VR's "
+	  "own simple pod." },
 	{ "XWA_XR_STEREO", "3D Flight", k_off_on, k_0_1, 2, 1, false,
 	  "Off shows the flight view on the flat screen as well." },
 	{ "XWA_XR_HUD_LAYOUT", "HUD", k_hud_layout_labels, k_hud_layout_values, 2, 0, false,
@@ -132,6 +138,10 @@ static const char* const k_hud_pose_keys[] = {
 	"XWA_XR_HUD_POSE_TIECOCKPIT",
 	"XWA_XR_HUD_POSE_TIEBOMBERCOCKPIT",
 	"XWA_XR_HUD_POSE_COMBATSIMCOCKPIT",
+	"XWA_XR_HUD_POSE_REVIVALTIEFIGHTER",
+	"XWA_XR_HUD_POSE_REVIVALTIEINTERCEPTOR",
+	"XWA_XR_HUD_POSE_REVIVALTIEBOMBER",
+	"XWA_XR_HUD_POSE_REVIVALGUNBOAT",
 	"XWA_XR_HUD_POSE_OPENTIEFIGHTER",
 	"XWA_XR_HUD_POSE_2D",
 };
@@ -160,10 +170,21 @@ bool TieVrOptions_Available(void) {
 #endif
 }
 
+static bool TieVrOptions_IsCockpit(const TieVrOptionRow* row) {
+	return row->values == k_cockpit_values;
+}
+
+/* The cockpit's default follows the files on the headset. */
+static int TieVrOptions_DefaultIndex(const TieVrOptionRow* row) {
+	if (TieVrOptions_IsCockpit(row))
+		return TieXwaCockpit_XwaFilesPresent() ? TIE_VR_COCKPIT_XWA : TIE_VR_COCKPIT_REVIVAL;
+	return row->default_index;
+}
+
 static int TieVrOptions_Current(const TieVrOptionRow* row) {
 	const char* value = SDL_getenv(row->key);
-	if (!value || !value[0])
-		return row->default_index;
+	if (!value || !value[0] || (TieVrOptions_IsCockpit(row) && SDL_strcasecmp(value, "auto") == 0))
+		return TieVrOptions_DefaultIndex(row);
 	for (int i = 0; i < row->count; ++i)
 		if (SDL_strcasecmp(value, row->values[i]) == 0)
 			return i;
@@ -178,7 +199,7 @@ static int TieVrOptions_Current(const TieVrOptionRow* row) {
 	char* end = NULL;
 	const double number = SDL_strtod(value, &end);
 	if (end && end != value) {
-		int best = row->default_index;
+		int best = TieVrOptions_DefaultIndex(row);
 		double best_diff = 1e30;
 		for (int i = 0; i < row->count; ++i) {
 			char* vend = NULL;
@@ -193,7 +214,7 @@ static int TieVrOptions_Current(const TieVrOptionRow* row) {
 		}
 		return best;
 	}
-	return row->default_index;
+	return TieVrOptions_DefaultIndex(row);
 }
 
 static void TieVrOptions_Set(const TieVrOptionRow* row, int index) {
@@ -232,8 +253,15 @@ void TieVrOptions_Draw(AeronUiContext* ui) {
 	}
 	AeronUi_Spacer(ui, 8.0f);
 	if (AeronUi_Button(ui, "Restore VR Defaults")) {
-		for (int i = 0; i < TIE_VR_ROW_COUNT; ++i)
+		for (int i = 0; i < TIE_VR_ROW_COUNT; ++i) {
+			if (TieVrOptions_IsCockpit(&k_rows[i])) {
+				/* Back to the rule, not to today's outcome of it. */
+				SDL_setenv_unsafe(k_rows[i].key, "", 1);
+				TieQuest_SaveSetting(k_rows[i].key, "");
+				continue;
+			}
 			TieVrOptions_Set(&k_rows[i], k_rows[i].default_index);
+		}
 		SDL_setenv_unsafe("XWA_XR_CONSOLE_POSE", "", 1);
 		TieQuest_SaveSetting("XWA_XR_CONSOLE_POSE", "");
 		TieVrOptions_ResetHudPoses();

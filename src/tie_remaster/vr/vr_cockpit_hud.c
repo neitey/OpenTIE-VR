@@ -289,7 +289,7 @@ static void ck_layout_key(const char* name, char* out, size_t size) {
 }
 
 static const CkSpec* ck_spec_for(const char* key) {
-	if (strcmp(key, "XWA_XR_HUD_POSE_COMBATSIMCOCKPIT") == 0)
+	if (strcmp(key, "XWA_XR_HUD_POSE_COMBATSIMCOCKPIT") == 0 || strcmp(key, "XWA_XR_HUD_POSE_REVIVALGUNBOAT") == 0)
 		return k_spec_sim;
 	if (strcmp(key, "XWA_XR_HUD_POSE_2D") == 0)
 		return k_spec_2d;

@@ -3,27 +3,42 @@
 
 /* 3D cockpits for OpenTIE-VR.
  *
- * The player's TIE craft gets one of X-Wing Alliance's cockpit models
- * (TIECOCKPIT.OPT, TIEBOMBERCOCKPIT.OPT, COMBATSIMCOCKPIT.OPT) read from the
- * folder in env TIE_XWA_COCKPITS when the player copied them over, else
- * OpenTIE-VR's own cockpit shell (OPENTIE_FIGHTER: an original generated
- * model shipped with the app as resources/cockpit/opentie_cockpit_fighter.glb,
- * made by tools/cockpit_shell/make_cockpit.py). The model is an ordinary
- * scene mesh instance anchored to the player craft with its seat eye point at
- * the flight camera, so every per-eye camera sees it in stereo. TIE's
- * instruments are drawn by TieCockpitRenderer into an instrument atlas and
- * shown on the model as depth-tested panels (scene billboards with free
+ * The player's TIE craft gets one of three kinds of cockpit model:
+ * - X-Wing Alliance's (TIECOCKPIT.OPT, TIEBOMBERCOCKPIT.OPT,
+ *   COMBATSIMCOCKPIT.OPT) read from the folder in env TIE_XWA_COCKPITS, when
+ *   the player's PC launcher copied them over;
+ * - X-Wing Revival's TIE cockpits by Raptor007 (most originally by the X-Wing
+ *   Alliance Upgrade team), bundled with his permission: REVIVAL_TIEFIGHTER
+ *   (also TIE Advanced and Defender), REVIVAL_TIEINTERCEPTOR,
+ *   REVIVAL_TIEBOMBER, REVIVAL_GUNBOAT (Assault Gunboat, Missile Boat), app
+ *   resources cockpit/revival/<craft>.glb made at package time by
+ *   tools/revival_cockpits/gen_revival_cockpits.py (not in the repository);
+ * - OpenTIE-VR's own cockpit shell (OPENTIE_FIGHTER: an original generated
+ *   model shipped as resources/cockpit/opentie_cockpit_fighter.glb, made by
+ *   tools/cockpit_shell/make_cockpit.py).
+ * When the chosen kind cannot load for a craft the next one is used, in the
+ * order XWA -> Revival -> own -> TIE's 2D cockpit art. The model is an
+ * ordinary scene mesh instance anchored to the player craft with its seat
+ * eye point at the flight camera, so every per-eye camera sees it in stereo.
+ * TIE's instruments are drawn by TieCockpitRenderer into an instrument atlas
+ * and shown on the model as depth-tested panels (scene billboards with free
  * corners).
  *
  * Switches:
- *   TIE_XR_COCKPIT=2d                 keep TIE's 2D cockpit art
- *   TIE_XR_COCKPIT=xwa                XWA's cockpits, the own shell when
- *                                     they are not there; the default when
- *                                     TIE_XWA_COCKPITS is set (the VR app
- *                                     always sets it), else 2d
+ *   TIE_XR_COCKPIT=xwa                XWA's cockpits
+ *   TIE_XR_COCKPIT=revival            X-Wing Revival's cockpits
  *   TIE_XR_COCKPIT=own                the own shell for every craft
+ *   TIE_XR_COCKPIT=2d                 keep TIE's 2D cockpit art
+ *   TIE_XR_COCKPIT unset (or auto)    the default rule: XWA's cockpits when
+ *                                     they were copied over, else Revival's
+ *                                     (the xwa chain); needs TIE_XWA_COCKPITS
+ *                                     set (the VR app always sets it), else 2d
  *   TIE_XWA_COCKPITS=<dir>            folder holding the cockpit OPTs
- *   TIE_XR_COCKPIT_FILE=<NAME>        one XWA cockpit for every craft (testing)
+ *   TIE_XR_COCKPIT_FILE=<NAME>        one cockpit for every craft (testing):
+ *                                     an XWA name, REVIVAL_<CRAFT> or
+ *                                     OPENTIE_FIGHTER
+ *   TIE_REVIVAL_COCKPITS=<dir>        the Revival .glb files from this folder
+ *                                     instead of the app resources (testing)
  *   TIE_OWN_COCKPIT_GLB=<path>        the own shell from this file instead of
  *                                     the app resources (testing)
  *   TIE_XR_COCKPIT_DEBUG_PITCH/_YAW=deg  turn the cockpit about the eye as if
@@ -37,8 +52,8 @@
  *                                     panel placement override (OPT metres,
  *                                     degrees); ids sensor_fwd, sensor_rear,
  *                                     cmd, gauges_l, gauges_r, off to hide
- * <NAME> is the cockpit file name without extension, e.g. TIECOCKPIT, or
- * OPENTIE_FIGHTER for the own shell. */
+ * <NAME> is the cockpit's table name: the XWA file name without extension,
+ * e.g. TIECOCKPIT, REVIVAL_<CRAFT>, or OPENTIE_FIGHTER for the own shell. */
 
 #include <stdbool.h>
 
@@ -66,14 +81,18 @@ bool TieXwaCockpit_Drawn(const struct TieSnapshot* snap);
  * cockpit HUD's instrument panels are shown then. */
 bool TieXwaCockpit_PanelView(const struct TieSnapshot* snap);
 
-/* The loaded cockpit model's name (e.g. "TIECOCKPIT", "OPENTIE_FIGHTER"),
- * "" when none. */
+/* The loaded cockpit model's name (e.g. "TIECOCKPIT", "REVIVAL_TIEFIGHTER",
+ * "OPENTIE_FIGHTER"), "" when none. */
 const char* TieXwaCockpit_ModelName(void);
 
 /* Add the cockpit instance and the instrument panels to a begun scene. The
  * scene's origin must be snapshot.camera.world_pos. */
 void TieXwaCockpit_Submit(struct AeronScene3D* scene, const struct TieSnapshot* snap,
 						  const struct TieCockpitRenderer* instruments);
+
+/* True when at least one of X-Wing Alliance's cockpit files is in the
+ * TIE_XWA_COCKPITS folder (the settings page's default choice). */
+bool TieXwaCockpit_XwaFilesPresent(void);
 
 /* Free the model (mission end, profile change, shutdown). */
 void TieXwaCockpit_Release(void);
