@@ -7,12 +7,14 @@ Play your own copy of Star Wars: TIE Fighter on Meta Quest 3 / 3S, with
 You need:
 - TIE Fighter Special Edition (Steam or GOG) installed on a Windows PC.
   OpenTIE-VR uses its 1998 edition and/or its Collector's CD (1995).
-- Optional: X-Wing Alliance (Steam or GOG) on the same PC. OpenTIE-VR then
-  uses its three TIE cockpit models (FlightModels\TIECOCKPIT.OPT,
-  TIEBOMBERCOCKPIT.OPT and COMBATSIMCOCKPIT.OPT) for the 3D cockpits.
-  Without X-Wing Alliance the game still runs, in OpenTIE-VR's own 3D
-  cockpit (or TIE Fighter's own 2D cockpits, VR settings -> Cockpit).
-No game files are included in this download.
+- Optional: X-Wing Alliance (Steam or GOG) on the same PC. OpenTIE-VR can
+  then use its three TIE cockpit models (FlightModels\TIECOCKPIT.OPT,
+  TIEBOMBERCOCKPIT.OPT and COMBATSIMCOCKPIT.OPT) instead. VR settings ->
+  Cockpit chooses: X-Wing Alliance (the default when its files were
+  copied), X-Wing Revival (the default otherwise), OpenTIE 3D (a simple
+  pod of our own) or TIE Fighter's own 2D cockpits.
+No game files are included in this download. 3D cockpits for every TIE
+craft are included, from X-Wing Revival (credits under Licence below).
 
 
 Before you start (once)
@@ -158,5 +160,8 @@ Licence
 OpenTIE-VR is free software under the GNU GPL version 3 (LICENSE.txt).
 Source: https://github.com/neitey/OpenTIE-VR
 Third-party components and their licences: THIRD-PARTY-NOTICES.txt.
+3D cockpits from X-Wing Revival (https://www.raptor007.com/x-wing-revival/)
+by Raptor007 (Blair Sherman), included with his permission; the models are
+originally by the X-Wing Alliance Upgrade team (https://xwaupgrade.com/).
 Star Wars, TIE Fighter and X-Wing Alliance are trademarks of their owners;
 this is an unofficial fan project and contains no game data.

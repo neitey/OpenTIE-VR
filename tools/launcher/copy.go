@@ -637,7 +637,7 @@ func (a *app) copyGame() error {
 	logf("%d game files, %d skipped", len(files), skipped)
 	say("%d game files (%s).", len(files), humanSize(totalSize(files)))
 	if len(a.cockpits) == 0 {
-		say("No X-Wing Alliance cockpits: OpenTIE-VR uses TIE Fighter's own 2D cockpits.")
+		say("No X-Wing Alliance cockpits: OpenTIE-VR uses the included X-Wing Revival 3D cockpits.")
 	}
 	for _, f := range files {
 		switch destFolder(f.Rel) {
