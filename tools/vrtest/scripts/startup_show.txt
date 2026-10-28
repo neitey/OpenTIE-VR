@@ -1,0 +1,17 @@
+# VR startup flow: the menu scene's startup show (the TIE Fighter box art's
+# fight with the screen away, then the logo and "Press (A) to Continue")
+# must come only with the first menu after the startup films, never over the
+# title crawl (scene 8) or the intro film (scene 10).
+# Run: tools/vrtest/run.sh <build> tools/vrtest/scripts/startup_show.txt <out> TIE_TEST_XR=1
+0 wait shell 8
++40 capture title
++10 key Space                  # end the crawl -> the intro film
+0 wait shell 10
++60 capture film
++10 key Return                 # skip the intro films -> registration
+0 wait shell 100
++20 capture menu_first
++400 capture menu_show         # the fight, then the title
++10 xrmenu a                   # A: the screen comes in
++120 capture menu_screen
++10 quit

@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <SDL3/SDL_stdinc.h>
+
 #include "aeron/aeron.h"
 #include "aeron/compat/host.h"
 #include "aeron/xr.h"
@@ -1407,8 +1409,13 @@ static bool TieRemaster_FrameBody(const TieSnapshot* snapshot, int32_t delta_us,
 		if (in_mission)
 			TieFlightXrEnv_ReleaseShips();
 		if (!stereo && !(in_mission && flight_is_active)) {
-			const bool dimmed = snapshot && (snapshot->scene_kind == TIE_SCENE_CUTSCENE ||
-											 snapshot->scene_kind == TIE_SCENE_FLIGHT_LOADING);
+			/* The opening title crawl (shell scene 8) counts as one of the
+			 * startup films: the menu scene and its startup show come with
+			 * the first menu after them. */
+			const bool title = snapshot && SDL_strcasecmp(snapshot->current_lfd_basename, "TITLE") == 0 &&
+							   SDL_strcasecmp(snapshot->current_film_name, "title") == 0;
+			const bool dimmed = !snapshot || snapshot->scene_kind == TIE_SCENE_CUTSCENE ||
+								snapshot->scene_kind == TIE_SCENE_FLIGHT_LOADING || title;
 			const uint64_t prof_t = TieXrProf_Now();
 			if (TieFlightXrEnv_Render(flight->renderer, g_remaster.assets, g_remaster.host_elapsed_us, !in_mission,
 									  dimmed))

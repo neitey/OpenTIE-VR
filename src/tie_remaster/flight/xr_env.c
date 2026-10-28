@@ -52,6 +52,7 @@ static const uint16_t k_env_species[TIE_XR_ENV_MODEL_COUNT] = {
 #define TIE_XR_ENV_SKY_DISTANCE 60000.0f /* scene units; sky quads only need a direction */
 #define TIE_XR_ENV_FADE_S 1.2f
 #define TIE_XR_ENV_DIM_S 0.8f
+#define TIE_XR_ENV_MENU_S 0.3f /* a menu up this long ends the startup films */
 
 /* The sun (also the key light), up and to the left. */
 static const float k_sun_yaw_deg = 105.0f, k_sun_pitch_deg = 28.0f;
@@ -113,6 +114,7 @@ static struct {
 	int frame_w, frame_h;
 	bool frame_tried;
 	bool menu_seen; /* no frame round the startup films */
+	float menu_s;	/* seconds of menu since the last film (menu_seen after a while) */
 	AeronDrawList2D* frame_list;
 	bool frame_drawn;
 	float frame_tint;
@@ -1087,7 +1089,11 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 		return false;
 	bool ok = TieXrEnv_EnsureTextures(cmd);
 	TieXrEnv_LoadFrame(cmd);
-	if (!dimmed)
+	/* The first menu after the startup films (the title crawl among them):
+	 * held a moment, so a frame between two films (the shell readying the
+	 * next scene) does not count. */
+	s_env.menu_s = dimmed ? 0.0f : s_env.menu_s + dt;
+	if (!dimmed && s_env.menu_s >= TIE_XR_ENV_MENU_S)
 		s_env.menu_seen = true;
 	s_env.frame_on = s_env.frame && s_env.menu_seen;
 	if (ok && (!s_env.stars || s_env.stars_format != g->rt_format)) {
