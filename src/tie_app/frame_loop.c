@@ -1,6 +1,8 @@
 #include "tie_app/frame_loop.h"
 
 #include "tie_runtime/input/controller_mapping.h"
+#include <stdlib.h>
+#include <SDL3/SDL_timer.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -168,6 +170,23 @@ void TieFrameLoop_Run(void) {
 		/* CPU frame breakdown for the VR log (tie_remaster/xr_prof.h). */
 		uint64_t prof_t = TieXrProf_Now();
 		const int32_t delta_us = Aeron_BeginFrame();
+		{
+			/* TIE_LOG_SLOW_FRAMES=<ms>: log every frame that took longer (hitch
+			 * hunting; off by default). */
+			static int slow_ms = -1;
+			static uint64_t last_ns;
+			if (slow_ms < 0) {
+				const char* env = getenv("TIE_LOG_SLOW_FRAMES");
+				slow_ms = env && env[0] ? atoi(env) : 0;
+			}
+			if (slow_ms > 0) {
+				/* Wall time: delta_us is clamped. */
+				const uint64_t now_ns = SDL_GetTicksNS();
+				if (last_ns && now_ns - last_ns > (uint64_t)slow_ms * 1000000u)
+					Aeron_LogInfo("tie", "slow frame: %.1f ms", (double)(now_ns - last_ns) / 1e6);
+				last_ns = now_ns;
+			}
+		}
 		prof_t = TieXrProf_Add(TIE_XR_PROF_WAIT, prof_t);
 		if (Aeron_FatalErrorRequested())
 			break;

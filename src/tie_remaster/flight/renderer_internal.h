@@ -166,6 +166,9 @@ struct TieFlightRenderer {
 	 * showed and host frames since. */
 	uint64_t pip_key;
 	uint32_t pip_age;
+	/* The mission generation whose PIP scene was warmed with a ship (the
+	 * first target's picture must not build its pipelines mid-flight). */
+	uint32_t pip_warm_gen;
 	AeronSceneMeshTable pip_scene_table;
 	TieFlightSceneFrame frame;
 	/* Per-frame custom mesh tables borrowed by scene instances until Render. */

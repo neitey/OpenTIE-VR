@@ -499,7 +499,22 @@ static bool TieFlightRenderer_PreparePip(TieFlightRenderer* g, AeronCommandBuffe
 	}
 	if (!TieFlightRenderer_PrepareClassicMeshTables(g, cmd, snap, fl))
 		return false;
-	if (!pip_due)
+	/* Warm-up: once per mission, before anything is targeted, one of the
+	 * mission's craft is drawn into the PIP scene and thrown away, so its
+	 * pipelines and targets exist before the first target (that first
+	 * picture stalled the game for a moment on the headset). */
+	bool warm = false;
+	if (!fl && g->scene_model_backend && g->pip_warm_gen != snap->mission_load_generation) {
+		for (uint16_t i = 0; i < snap->flight_count; ++i) {
+			if (snap->flights[i].ship_idx < TIE_FLIGHT_MAX_SPECIES &&
+				g->scene_ships[snap->flights[i].ship_idx].ready) {
+				fl = &snap->flights[i];
+				warm = true;
+				break;
+			}
+		}
+	}
+	if (!pip_due && !warm)
 		return true; /* the last PIP image stays */
 	TieXrProf_Count(TIE_XR_PROF_N_PIP);
 
@@ -515,9 +530,13 @@ static bool TieFlightRenderer_PreparePip(TieFlightRenderer* g, AeronCommandBuffe
 	float view_proj[16];
 	float proj[16];
 	TieRenderMath_Mat4PerspectiveReverseZ(proj, h_half, v_half, 1.0f);
-	if (fl) {
+	if (fl && !warm) {
 		TieRenderMath_BuildPipCamera(cam_pos, view, snap->cockpit.pip_back_step, snap->cockpit.pip_cam_ori);
 		TieRenderMath_Mat4Multiply(view_proj, proj, view);
+	} else if (warm) {
+		/* Any finite view: the picture is thrown away. */
+		memset(view_proj, 0, sizeof view_proj);
+		view_proj[0] = view_proj[5] = view_proj[10] = view_proj[15] = 1.0f;
 	}
 
 	float clear[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -530,10 +549,10 @@ static bool TieFlightRenderer_PreparePip(TieFlightRenderer* g, AeronCommandBuffe
 		AeronSceneCamera camera = {
 				.pos = {cam_pos[0], cam_pos[1], cam_pos[2]},
 				.ori = {
-						fl ? snap->cockpit.pip_cam_ori[0] : snap->camera.ori[0],
-						fl ? snap->cockpit.pip_cam_ori[1] : snap->camera.ori[1],
-						fl ? snap->cockpit.pip_cam_ori[2] : snap->camera.ori[2],
-						fl ? snap->cockpit.pip_cam_ori[3] : snap->camera.ori[3],
+						fl && !warm ? snap->cockpit.pip_cam_ori[0] : snap->camera.ori[0],
+						fl && !warm ? snap->cockpit.pip_cam_ori[1] : snap->camera.ori[1],
+						fl && !warm ? snap->cockpit.pip_cam_ori[2] : snap->camera.ori[2],
+						fl && !warm ? snap->cockpit.pip_cam_ori[3] : snap->camera.ori[3],
 				},
 				.h_half_rad = h_half,
 				.v_half_rad = v_half,
@@ -558,10 +577,21 @@ static bool TieFlightRenderer_PreparePip(TieFlightRenderer* g, AeronCommandBuffe
 		AeronScene_SetFrameUniformData(g->pip_scene, AERON_SHADER_STAGE_FRAGMENT, 1, &pbr, sizeof pbr);
 		AeronScene_SetPbrDebugViews(g->pip_scene,
 									pbr.debug_isolate_term != 0.0f || pbr.spec_geom_adapt == 0.0f);
-		if (fl && !TieFlightRenderer_SceneAddPipInstance(g, g->pip_scene, snap, fl, view_proj, cam_pos))
-			return false;
+		if (fl && !TieFlightRenderer_SceneAddPipInstance(g, g->pip_scene, snap, fl, view_proj, cam_pos)) {
+			if (!warm)
+				return false;
+			g->pip_warm_gen = snap->mission_load_generation; /* not this craft: no warm-up */
+			return true;
+		}
 		if (!AeronScene_Render(g->pip_scene, cmd))
 			return false;
+		if (warm) {
+			g->pip_warm_gen = snap->mission_load_generation;
+			g->pip_texture = NULL; /* the first real picture is drawn fresh */
+			Aeron_LogInfo("tie.flight", "PIP scene warmed with species %u (mission generation %u)",
+						  (unsigned)fl->ship_idx, (unsigned)snap->mission_load_generation);
+			return true;
+		}
 		g->pip_texture = AeronScene_ColorTexture(g->pip_scene);
 		return g->pip_texture != NULL;
 	}

@@ -178,6 +178,7 @@ TieFlightRenderer* TieFlightRenderer_Init(int rt_w, int rt_h, AeronTextureFormat
 	g->scene_model_backend = assets && !TieFlightAssetSource_IsTie95(assets);
 	g->scene_reload_one_idx = 0xFFFFu;        /* sentinel = no per-species reload pending */
 	g->last_warmed_mission_gen = 0xFFFFFFFFu; /* sentinel = warm on first prep */
+	g->pip_warm_gen = 0xFFFFFFFFu;
 
 	/* Scene renderer — owns the HDR color RT, the sampled D32 depth
 	 * RT, the octahedral normal G-buffer (SSAO input), the pbr mesh
