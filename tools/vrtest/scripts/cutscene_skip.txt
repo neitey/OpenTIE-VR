@@ -1,0 +1,16 @@
+# VR cutscene skip (vr_controls.c): during the title crawl B, X, the trigger and the grip do
+# nothing, A skips it; in the intro film the menu button (Escape) skips it. Run with
+# TIE_TEST_XR=1 XWA_XR_INTRO_CRAWL=0 (the 2D crawl).
+0 wait shell 8
++40 xrbutton b
++20 xrbutton x
++20 xrhand right 1
++10 xrhand right 0
++20 xrhand left 0 1
++10 xrhand left 0 0
++30 log still_title
++5 xrbutton a
+0 wait shell 10 timeout=300
++40 key Escape 1
++120 log after_menu
++5 quit

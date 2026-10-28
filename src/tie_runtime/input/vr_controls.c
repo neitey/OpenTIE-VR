@@ -258,6 +258,20 @@ static void TieVrControls_MenuButton(AeronXrButton button, bool flight_scene) {
 
 bool TieVrControls_InFlight(void) { return g_vr.flight; }
 
+/* A cutscene on screen: a film (TIELOGO, the intro and story films) or the
+ * opening title crawl. In VR only A or the menu button skips it: B, X, the
+ * trigger (a pointer click) and the grips do nothing there, so a stray press
+ * never ends a film. A skip is the game's Space (this scene ends, the next
+ * one follows), the same as the 3D crawl's skip. */
+static bool TieVrControls_InCutscene(const TieSnapshot* snapshot) {
+	if (!snapshot)
+		return false;
+	if (snapshot->scene_kind == TIE_SCENE_CUTSCENE)
+		return true;
+	return SDL_strcasecmp(snapshot->current_lfd_basename, "TITLE") == 0 &&
+		   SDL_strcasecmp(snapshot->current_film_name, "title") == 0;
+}
+
 /* Every 5 s in VR flight: the stick chain from the XR pad to TIE's joystick
  * globals (joystickx/y/roll are the last feinput_getrawinput's), so a
  * headset log shows where steering stops. */
@@ -318,7 +332,9 @@ uint32_t TieVrControls_Frame(bool settings_open, bool host_paused) {
 	/* The launch hold (game pause before a mission) waits for the trigger:
 	 * no menu pointer there, the cockpit stays clear to look around. */
 	const bool launch_hold = flight_scene && !settings_open && !host_paused && TieFlightLaunch_HoldActive();
-	TieVrControls_SetPointer(flight || launch_hold ? 0 : 1);
+	const bool cutscene = !settings_open && !flight_scene && TieVrControls_InCutscene(snapshot);
+	/* No pointer in a cutscene: its trigger would click (and skip). */
+	TieVrControls_SetPointer(flight || launch_hold || cutscene ? 0 : 1);
 	TieVrControls_SetButtons(settings_open ? 0 : 1);
 	TieControllerMapping_SetXrFlight(flight);
 	/* Swapped thumbsticks: in flight only (the sticks steer nowhere else;
@@ -346,8 +362,22 @@ uint32_t TieVrControls_Frame(bool settings_open, bool host_paused) {
 			continue;
 		if (flight)
 			TieVrControls_FlightButton(button, shift || engine_shifted, chord_offered);
-		else
+		else if (cutscene) {
+			if (button == AERON_XR_BUTTON_A) {
+				TieInput_EnqueueKey(' ');
+				Aeron_LogInfo("tie.input", "cutscene skipped (A)");
+			}
+		} else
 			TieVrControls_MenuButton(button, flight_scene);
+	}
+	if (cutscene) {
+		/* The menu button arrives as Escape: it skips the cutscene too. */
+		const AeronInputSnapshot* input = Aeron_InputSnapshot();
+		if (input && input->key_pressed[AERON_KEY_ESCAPE]) {
+			TieInput_SuppressKey(AERON_KEY_ESCAPE);
+			TieInput_EnqueueKey(' ');
+			Aeron_LogInfo("tie.input", "cutscene skipped (menu button)");
+		}
 	}
 
 	TieVrControls_SyncThrottleLever(flight);
