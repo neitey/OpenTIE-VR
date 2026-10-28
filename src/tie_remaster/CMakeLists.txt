@@ -19,6 +19,7 @@ add_library(tie_remaster STATIC
     flight/xr_stereo.c
     flight/xr_env.c
     flight/xr_env_tieart.c
+    flight/xr_intro_crawl.c
     flight/xr_menu_beam.c
     flight/vr_console.c
     flight/pipelines.c

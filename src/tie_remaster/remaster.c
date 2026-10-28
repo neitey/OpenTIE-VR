@@ -14,6 +14,7 @@
 #include "tie_remaster/flight/render_math.h"
 #include "tie_remaster/flight/renderer.h"
 #include "tie_remaster/flight/xr_env.h"
+#include "tie_remaster/flight/xr_intro_crawl.h"
 #include "tie_remaster/flight/xr_menu_beam.h"
 #include "tie_remaster/flight/vr_console.h"
 #include "tie_remaster/flight/xr_stereo.h"
@@ -1416,6 +1417,7 @@ static bool TieRemaster_FrameBody(const TieSnapshot* snapshot, int32_t delta_us,
 							   SDL_strcasecmp(snapshot->current_film_name, "title") == 0;
 			const bool dimmed = !snapshot || snapshot->scene_kind == TIE_SCENE_CUTSCENE ||
 								snapshot->scene_kind == TIE_SCENE_FLIGHT_LOADING || title;
+			TieXrIntroCrawl_SetSnapshot(snapshot, TieProfile_UsesTie98Frontend());
 			const uint64_t prof_t = TieXrProf_Now();
 			if (TieFlightXrEnv_Render(flight->renderer, g_remaster.assets, g_remaster.host_elapsed_us, !in_mission,
 									  dimmed))

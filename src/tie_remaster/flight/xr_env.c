@@ -2,6 +2,7 @@
 
 #include "tie_remaster/flight/xr_env.h"
 #include "tie_remaster/flight/xr_env_tieart.h"
+#include "tie_remaster/flight/xr_intro_crawl.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -126,6 +127,9 @@ static struct {
 	bool art_up;		 /* shown (loaded, past the startup films) */
 	uint64_t art_up_us;	 /* since */
 	bool screen_control; /* the screen's fade / input block are ours */
+	/* The opening title crawl in 3D (xr_intro_crawl.c). */
+	bool crawl_screen; /* it put the screen away */
+	bool stars_off;	   /* no stars yet (before its logo) */
 } s_env;
 
 /* The screen as usual again (after the TIE Fighter scene's startup show). */
@@ -709,7 +713,7 @@ static void TieXrEnv_SubmitSky(AeronScene3D* scene, bool fleet) {
 
 static void TieXrEnv_HookStars(AeronCommandBuffer* cmd, AeronRenderPass* pass, int rt_w, int rt_h, void* user) {
 	TieFlightRenderer* g = (TieFlightRenderer*)user;
-	if (!pass || !g || !g->scene || !s_env.stars)
+	if (!pass || !g || !g->scene || !s_env.stars || s_env.stars_off)
 		return;
 	TieFlightStars_DrawCustom(s_env.stars, cmd, pass, AeronScene_ViewProj(g->scene), rt_w, rt_h,
 							  s_env.star_half_px);
@@ -916,7 +920,8 @@ static void TieXrEnv_CommitFrame(void) {
 }
 
 static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, const AeronXrStereoFrame* xr,
-								float t_s, TieFlightXrEnvMode mode, bool ships, float fade, float gain, float reveal) {
+								float t_s, TieFlightXrEnvMode mode, bool ships, float fade, float gain, float reveal,
+								bool crawl) {
 	const bool fleet = mode == TIE_FLIGHT_XR_ENV_FLEET;
 	const bool art = TieXrEnv_IsArt(mode);
 	AeronScene3D* scene = g->scene;
@@ -956,8 +961,10 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 	TieXrEnv_SubmitSky(scene, fleet);
 	if (fleet && ships)
 		TieXrEnv_SubmitCraft(scene, t_s);
-	if (art && s_env.art_up)
+	if (art && s_env.art_up && !crawl)
 		TieXrArt_Submit(scene, ships, fade);
+	if (crawl)
+		TieXrIntroCrawl_Submit(scene, base.pos, TieFlightXr_UnitsPerMeter());
 	/* The controllers or gloves (VR Options > Hands), in front of the
 	 * virtual screen where they reach over it; none while the screen is
 	 * away (the TIE Fighter scene's startup show). */
@@ -1063,7 +1070,11 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 
 bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* assets, uint64_t time_us, bool ships,
 						   bool dimmed) {
-	const TieFlightXrEnvMode mode = TieFlightXrEnv_Mode();
+	TieFlightXrEnvMode mode = TieFlightXrEnv_Mode();
+	/* The opening title crawl in 3D needs the scene even when it is off
+	 * (the stars only). */
+	if (mode == TIE_FLIGHT_XR_ENV_OFF && TieXrIntroCrawl_TitleUp())
+		mode = TIE_FLIGHT_XR_ENV_STARS;
 	if (mode != s_env.last_mode) {
 		/* Another scene (VR options): the TIE Fighter scene's fight starts
 		 * over when it comes back, and everything fades in again. */
@@ -1110,13 +1121,16 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 		return false;
 	bool ok = TieXrEnv_EnsureTextures(cmd);
 	TieXrEnv_LoadFrame(cmd);
+	TieXrIntroCrawl_Update(cmd, assets);
+	const bool crawl = TieXrIntroCrawl_Active();
+	s_env.stars_off = crawl && !TieXrIntroCrawl_StarsOn();
 	/* The first menu after the startup films (the title crawl among them):
 	 * held a moment, so a frame between two films (the shell readying the
 	 * next scene) does not count. */
 	s_env.menu_s = dimmed ? 0.0f : s_env.menu_s + dt;
 	if (!dimmed && s_env.menu_s >= TIE_XR_ENV_MENU_S)
 		s_env.menu_seen = true;
-	s_env.frame_on = s_env.frame && s_env.menu_seen;
+	s_env.frame_on = s_env.frame && s_env.menu_seen && !crawl;
 	if (ok && (!s_env.stars || s_env.stars_format != g->rt_format)) {
 		if (s_env.stars)
 			TieFlightStars_Destroy(s_env.stars);
@@ -1170,7 +1184,9 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	const float brightness = TieXrEnv_Clamp01(TieXrEnv_EnvFloat("XWA_XR_ENV_BRIGHTNESS", 0.8f));
 	const float film = TieXrEnv_Clamp01(TieXrEnv_EnvFloat("XWA_XR_ENV_FILM_DIM", 0.5f));
 	const float dim = s_env.dim * s_env.dim * (3.0f - 2.0f * s_env.dim);
-	const float gain = powf(brightness * (1.0f - dim * (1.0f - film)) * (art ? 1.0f : fade), 2.2f);
+	/* The title crawl in 3D shows at full brightness (its colours are the
+	 * game's through the tonemap). */
+	const float gain = crawl ? 1.0f : powf(brightness * (1.0f - dim * (1.0f - film)) * (art ? 1.0f : fade), 2.2f);
 
 	/* TIE_XR_ENV_TIME=<s> freezes the craft at that moment (tests). */
 	const char* fixed_time = getenv("TIE_XR_ENV_TIME");
@@ -1211,8 +1227,23 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 		Aeron_XrSetScreenFade(reveal);
 		Aeron_XrSetInputBlocked(reveal <= 0.0f);
 	}
+	/* The title crawl in 3D: the screen away while it plays and the
+	 * controllers blocked but for its skip buttons (A, the menu button),
+	 * back with the intro film. */
+	if (crawl) {
+		reveal = 0.0f;
+		s_env.screen_control = true;
+		s_env.crawl_screen = true;
+		Aeron_XrSetScreenFade(0.0f);
+		Aeron_XrSetInputBlocked(1);
+		TieXrIntroCrawl_PollSkip();
+	} else if (s_env.crawl_screen) {
+		s_env.crawl_screen = false;
+		if (!(art && s_env.art_up))
+			TieXrEnv_ScreenNormal();
+	}
 	if (ok)
-		ok = TieXrEnv_RenderEyes(g, cmd, &xr, t_s, mode, ships, fade, gain, reveal);
+		ok = TieXrEnv_RenderEyes(g, cmd, &xr, t_s, mode, ships, fade, gain, reveal, crawl);
 	/* The pointer beam over the screen; none during films and loading. */
 	AeronXrPanel beam;
 	const bool beam_on = ok && !dimmed && reveal > 0.0f && xr.beam_target &&
@@ -1247,6 +1278,7 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 void TieFlightXrEnv_Shutdown(void) {
 	TieFlightXrEnv_ReleaseShips();
 	TieXrArt_Shutdown();
+	TieXrIntroCrawl_Shutdown();
 	if (s_env.planet)
 		Aeron_DestroyTexture(s_env.planet);
 	if (s_env.nebula)

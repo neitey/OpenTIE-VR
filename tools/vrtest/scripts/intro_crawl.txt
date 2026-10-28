@@ -1,0 +1,28 @@
+# VR: the opening title crawl in 3D (xr_intro_crawl.c), held at moments of
+# the game's title clock (TIE_XR_CRAWL_FRAME, TIE95 frames), then A skips it
+# to the intro film (shell 10) and the screen comes back.
+# Run: tools/vrtest/run.sh <build> tools/vrtest/scripts/intro_crawl.txt <out> TIE_TEST_XR=1
+# (needs vr/starwars_logo.rgba and vr/LiberationSans-BoldItalic.ttf next to the build)
+0 wait shell 8
++1 env TIE_XR_CRAWL_FRAME 20
++6 capture along               # "A long time ago..." where the screen was
++1 env TIE_XR_CRAWL_FRAME 50
++6 capture logo                # the logo receding into the stars
++1 env TIE_XR_CRAWL_FRAME 300
++6 capture crawl_mid           # the text crawling away
++1 head 0 -30
++6 capture crawl_down          # looking down at the lines still to come
++1 head 0 0
++1 env TIE_XR_CRAWL_FRAME 600
++6 capture crawl_late
++1 env TIE_XR_CRAWL_FRAME
++4 xrhand right 0 0 2          # B: must not skip
++4 xrhand right 0 0 0
++4 xrhand right 1 0 0          # the trigger: must not skip
++4 xrhand right 0 0 0
++10 capture still_title        # still the crawl (screen away)
++2 xrhand right 0 0 1          # A: on to the intro film
++4 xrhand right 0 0 0
+0 wait shell 10
++30 capture film               # the film on the screen again
++5 quit

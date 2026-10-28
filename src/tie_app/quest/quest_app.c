@@ -118,6 +118,14 @@ static const char k_settings_template[] =
 	"#XWA_XR_GPU_TIMING=1\n"
 	"#TIE_XR_PROFILE=1\n";
 
+/* (A second literal: one string may not exceed 4095 characters.) */
+static const char k_settings_template_scenes[] =
+	"# Menu scene: tiefighter (default), defender, balance, xwing, xvt, random,\n"
+	"# 1 (Imperial fleet), 0 (stars only) or off:\n"
+	"#XWA_XR_ENVIRONMENT=tiefighter\n"
+	"# 0 = the opening crawl on the screen instead of as a 3D scene around you:\n"
+	"#XWA_XR_INTRO_CRAWL=1\n";
+
 static void quest_load_settings(void) {
 	char path[1100];
 	char line[2048];
@@ -139,6 +147,7 @@ static void quest_load_settings(void) {
 		f = fopen(s_cfg_path, "w");
 		if (f) {
 			fputs(k_settings_template, f);
+			fputs(k_settings_template_scenes, f);
 			fclose(f);
 		}
 		return;

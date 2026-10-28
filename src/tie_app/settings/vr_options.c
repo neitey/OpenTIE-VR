@@ -120,6 +120,9 @@ static const TieVrOptionRow k_rows[] = {
 	  "Advanced downing an A-wing under a TIE pilot's helmet), the Balance of Power box art (B-wings and TIE "
 	  "Advanced round a Super Star Destroyer), the X-Wing and X-Wing vs. TIE Fighter box arts, one of these "
 	  "at random, a Star Destroyer and TIE fighters in space, or just stars." },
+	{ "XWA_XR_INTRO_CRAWL", "Intro: 3D Crawl", k_off_on, k_0_1, 2, 1, false,
+	  "The opening crawl as a 3D scene around you: the STAR WARS logo and the text crawling away into the "
+	  "stars (A or the menu button skips to the intro film). Off: on the screen as in the game." },
 	{ "XWA_XR_ENV_BRIGHTNESS", "Menu Scene Brightness", k_env_bright_labels, k_env_bright_values, 3, 1, false,
 	  NULL },
 	{ "XWA_XR_CONSOLE", "Lap Console", k_off_on, k_0_1, 2, 1, false,

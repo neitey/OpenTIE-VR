@@ -41,8 +41,14 @@ open-source reimplementation of TIE Fighter, with the VR layer of
 
   A cockpit that cannot load falls back in the order X-Wing Alliance ->
   X-Wing Revival -> OpenTIE 3D -> 2D.
-- Stereo 3D flight; menus, briefings and films on a screen in an Imperial
-  space scene (ships from your own TIE Fighter installation)
+- Stereo 3D flight; menus, briefings and films on a screen in a 3D scene
+  built from your own TIE Fighter installation's ships: the TIE Fighter box
+  art come to life (Vader's helmet, the default), Defender of the Empire,
+  Balance of Power, X-Wing, X-Wing vs. TIE Fighter, a random one of these,
+  an Imperial fleet or just stars (VR settings -> Menu Scene)
+- The opening crawl as a 3D scene around you: the STAR WARS logo and the
+  game's own text crawling away into the stars, then the intro film on the
+  screen (VR settings -> Intro: 3D Crawl; A or the menu button skips it)
 - Motion controllers: every TIE function on the buttons, throttle lever on
   the left stick, optional flight stick in the cockpit, controller models or
   gloves, button labels when you look at a controller, haptics
