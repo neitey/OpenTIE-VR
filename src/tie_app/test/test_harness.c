@@ -52,7 +52,9 @@
  *   xrbutton a|b|x|y|lt|ls|rs|rgrip   one press for Aeron_XrPollButton
  *   xrmenu a|b|x|y           latch for Aeron_XrTakeAPressed/TakeMenu?Pressed
  *   xrthrottle <0..1>        Aeron_XrThrottleLever
- *   xrhand left|right <trigger> [grip]   Aeron_XrGetHand trigger/grip
+ *   xrhand left|right <trigger> [grip [buttons]]   Aeron_XrGetHand trigger/grip
+ *                            and buttons held (AERON_XR_HAND_BUTTON_* mask:
+ *                            1 A/X, 2 B/Y, 4 stick, 8 menu)
  *   xrpose left|right <x> <y> <z> [yaw pitch]   hand pose (m LOCAL, deg),
  *                            replaces TIE_TEST_XR_LHAND/RHAND from then on
  *   (the game's flight stick, Aeron_XrSetVirtualStick, moves the xrpad's
@@ -492,11 +494,13 @@ static bool TieTest_ParseLine(char* text, int line_no, TieTestLine* out) {
 			arg = TieTest_NextToken(&cursor);
 			char* trigger = TieTest_NextToken(&cursor);
 			char* grip = TieTest_NextToken(&cursor);
+			char* buttons = grip ? TieTest_NextToken(&cursor) : NULL;
 			if (!arg || !trigger || (SDL_strcasecmp(arg, "left") && SDL_strcasecmp(arg, "right"))) {
-				TieTest_Log("script line %d: xrhand left|right <trigger 0..1> [grip 0..1]", line_no);
+				TieTest_Log("script line %d: xrhand left|right <trigger 0..1> [grip 0..1 [buttons]]", line_no);
 				return false;
 			}
 			out->ivalue[0] = SDL_strcasecmp(arg, "right") == 0;
+			out->ivalue[1] = buttons ? SDL_atoi(buttons) : 0;
 			out->fvalue[0] = (float)SDL_atof(trigger);
 			out->fvalue[1] = grip ? (float)SDL_atof(grip) : 0.0f;
 			return true;
@@ -1062,7 +1066,10 @@ static void TieTest_Execute(AeronInputSnapshot* input, const TieTestLine* line) 
 			else if (line->cmd == TT_CMD_XRPOSE)
 				TieTestXr_SetHandPose(line->ivalue[0], line->fvalue);
 			else
+			{
 				TieTestXr_SetHandInput(line->ivalue[0], line->fvalue[0], line->fvalue[1]);
+				TieTestXr_SetHandButtons(line->ivalue[0], (uint32_t)line->ivalue[1]);
+			}
 			break;
 		case TT_CMD_XRPAD:
 			g_test.pad_used = true;

@@ -80,6 +80,8 @@ void TieTestXr_QueueButton(int button);
 void TieTestXr_MenuPress(int index);
 void TieTestXr_SetThrottle(float value);
 void TieTestXr_SetHandInput(int hand, float trigger, float grip);
+/* A hand's buttons held (AERON_XR_HAND_BUTTON_*, Aeron_XrGetHand). */
+void TieTestXr_SetHandButtons(int hand, uint32_t buttons);
 /* A hand's pose (x, y, z metres LOCAL, yaw, pitch degrees), replacing
  * TIE_TEST_XR_LHAND/RHAND from now on. */
 void TieTestXr_SetHandPose(int hand, const float pose[5]);

@@ -291,6 +291,7 @@ static struct {
 	int menu_latch[4]; /* A, B, X, Y */
 	float throttle;
 	float trigger[2], grip[2];
+	uint32_t hand_buttons[2]; /* xrhand ... <buttons>: AERON_XR_HAND_BUTTON_* held */
 	/* xrpose: scripted hand poses (x, y, z, yaw, pitch), else the env/default */
 	float hand_pose[2][5];
 	int hand_pose_set[2];
@@ -615,6 +616,7 @@ int __wrap_Aeron_XrGetHand(int hand, AeronXrHand* out) {
 	const int h = hand ? 1 : 0;
 	out->trigger = s_xr.trigger[h];
 	out->grip = s_xr.grip[h];
+	out->buttons = s_xr.hand_buttons[h];
 	float p[5] = { hand ? 0.15f : -0.15f, -0.35f, -0.35f, hand ? 10.0f : -10.0f, 30.0f };
 	const char* env = SDL_getenv(hand ? "TIE_TEST_XR_RHAND" : "TIE_TEST_XR_LHAND");
 	if (s_xr.hand_pose_set[h])
@@ -768,6 +770,8 @@ void TieTestXr_SetHandInput(int hand, float trigger, float grip) {
 	s_xr.trigger[h] = trigger;
 	s_xr.grip[h] = grip;
 }
+
+void TieTestXr_SetHandButtons(int hand, uint32_t buttons) { s_xr.hand_buttons[hand ? 1 : 0] = buttons; }
 
 void TieTestXr_SetHandPose(int hand, const float pose[5]) {
 	const int h = hand ? 1 : 0;
@@ -985,6 +989,10 @@ void TieTestXr_SetHandInput(int hand, float trigger, float grip) {
 void TieTestXr_SetHandPose(int hand, const float pose[5]) {
 	(void)hand;
 	(void)pose;
+}
+void TieTestXr_SetHandButtons(int hand, uint32_t buttons) {
+	(void)hand;
+	(void)buttons;
 }
 int TieTestXr_VirtualStick(float out[3]) {
 	(void)out;
