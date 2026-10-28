@@ -160,8 +160,7 @@ Licence
 OpenTIE-VR is free software under the GNU GPL version 3 (LICENSE.txt).
 Source: https://github.com/neitey/OpenTIE-VR
 Third-party components and their licences: THIRD-PARTY-NOTICES.txt.
-3D cockpits from X-Wing Revival (https://www.raptor007.com/x-wing-revival/)
-by Raptor007 (Blair Sherman), included with his permission; the models are
-originally by the X-Wing Alliance Upgrade team (https://xwaupgrade.com/).
+3D cockpits by Raptor007 (X-Wing Revival) and the X-Wing Alliance Upgrade
+team.
 Star Wars, TIE Fighter and X-Wing Alliance are trademarks of their owners;
 this is an unofficial fan project and contains no game data.

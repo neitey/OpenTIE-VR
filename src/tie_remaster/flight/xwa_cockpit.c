@@ -81,13 +81,16 @@ typedef struct TieXwaCockpitSpec {
  * data, not in the cockpit OPT): TIECOCKPIT is a 1.46 m ball centred on the
  * origin whose round front window is centred at eye height; the seat back is
  * at y +0.44. TIEBOMBERCOCKPIT is the same pod 1.845 m to the craft's right.
+ * The TIE seats sit 30 cm forward of where the models put the eye (y 0.15 /
+ * 0.16 there, Revival's origin), closer to the window: from there the
+ * cockpits looked too far back.
  * Panels: the sensors lie on the dashboard shelf (81 degrees back, 0.6 m below
  * the eye) over its painted sensor rings, the gauges on the shelf's triangle
  * plates nearer the pilot, the CMD upright on the front of the centre console. */
 static const TieXwaCockpitSpec k_cockpits[] = {
 	{
 		"TIECOCKPIT",
-		{ 0.0f, 0.15f, 0.0f },
+		{ 0.0f, -0.15f, 0.0f },
 		1.0f,
 		{
 			[TIE_COCKPIT_PANEL_SENSOR_FWD] = { true, { -0.234f, -0.747f, -0.612f }, 81.0f, 0.0f, 0.0f, 0.16f },
@@ -99,7 +102,7 @@ static const TieXwaCockpitSpec k_cockpits[] = {
 	},
 	{
 		"TIEBOMBERCOCKPIT",
-		{ 1.845f, 0.16f, 0.0f },
+		{ 1.845f, -0.14f, 0.0f },
 		1.0f,
 		{
 			[TIE_COCKPIT_PANEL_SENSOR_FWD] = { true, { 1.611f, -0.737f, -0.612f }, 81.0f, 0.0f, 0.0f, 0.16f },
@@ -122,11 +125,11 @@ static const TieXwaCockpitSpec k_cockpits[] = {
 		},
 	},
 	/* X-Wing Revival's cockpits: the eye at the origin (the converter puts
-	 * Revival's VR eye point there). The panels lie on Revival's own live
+	 * Revival's VR eye point there), 30 cm forward of it in the TIEs. The panels lie on Revival's own live
 	 * screens and dashboard faces (tools/revival_cockpits). */
 	{
 		"REVIVAL_TIEFIGHTER",
-		{ 0.0f, 0.0f, 0.0f },
+		{ 0.0f, -0.30f, 0.0f },
 		1.0f,
 		{
 			[TIE_COCKPIT_PANEL_SENSOR_FWD] = { true, { -0.231f, -0.616f, -0.293f }, 6.7f, 0.0f, 0.0f, 0.11f },
@@ -138,7 +141,7 @@ static const TieXwaCockpitSpec k_cockpits[] = {
 	},
 	{
 		"REVIVAL_TIEINTERCEPTOR",
-		{ 0.0f, 0.0f, 0.0f },
+		{ 0.0f, -0.30f, 0.0f },
 		1.0f,
 		{
 			[TIE_COCKPIT_PANEL_SENSOR_FWD] = { true, { -0.231f, -0.616f, -0.293f }, 6.7f, 0.0f, 0.0f, 0.11f },
@@ -150,7 +153,7 @@ static const TieXwaCockpitSpec k_cockpits[] = {
 	},
 	{
 		"REVIVAL_TIEBOMBER",
-		{ 0.0f, 0.0f, 0.0f },
+		{ 0.0f, -0.30f, 0.0f },
 		1.0f,
 		{
 			[TIE_COCKPIT_PANEL_SENSOR_FWD] = { true, { -0.231f, -0.573f, -0.297f }, 6.7f, 0.0f, 0.0f, 0.11f },
@@ -418,6 +421,13 @@ static void TieXwaCockpit_RefreshTuning(void) {
 	s_xwa.scale = TieXwaCockpit_EnvFloat(key, spec->scale);
 	if (!(s_xwa.scale > 0.1f && s_xwa.scale < 10.0f))
 		s_xwa.scale = 1.0f;
+	/* The player's Seat Position (VR settings, XWA_XR_SEAT_POSITION, as in
+	 * OpenXWA-VR): metres further back from the window, -0.2 (closer) .. 0.2
+	 * (further), on top of the cockpit's own eye point. Real metres: through
+	 * the world scale into the model's (y points back). */
+	float back = TieXwaCockpit_EnvFloat("XWA_XR_SEAT_POSITION", 0.0f);
+	back = back < -0.2f ? -0.2f : back > 0.2f ? 0.2f : back;
+	s_xwa.eye[1] += back * TieXwaCockpit_EnvFloat("XWA_XR_WORLD_SCALE", 1.0f) / s_xwa.scale;
 	memcpy(s_xwa.panels, spec->panels, sizeof s_xwa.panels);
 	snprintf(key, sizeof key, "TIE_XR_PANEL_%s", s_xwa.name);
 	TieXwaCockpit_ApplyPanelEnv(SDL_getenv(key));

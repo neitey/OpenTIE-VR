@@ -23,10 +23,9 @@ open-source reimplementation of TIE Fighter, with the VR layer of
 - 3D cockpits instead of the 2D cockpit art, with TIE Fighter's instruments
   live on the cockpit's screens (CMD with the target picture, sensors,
   shields, throttle, clock). VR settings -> Cockpit:
-  - X-Wing Revival (included): the cockpits of
-    [X-Wing Revival](https://www.raptor007.com/x-wing-revival/) by Raptor007
-    (Blair Sherman), bundled with his permission, models originally by the
-    [X-Wing Alliance Upgrade](https://xwaupgrade.com/) team: TIE Fighter
+  - X-Wing Revival (included): cockpits by
+    [Raptor007](https://www.raptor007.com/x-wing-revival/) (X-Wing Revival)
+    and the [X-Wing Alliance Upgrade](https://xwaupgrade.com/) team: TIE Fighter
     (also Advanced and Defender), Interceptor, Bomber and Assault Gunboat
     (also Missile Boat). These models are not part of this repository or of
     its GPL licence: `tools/revival_cockpits/gen_revival_cockpits.py`

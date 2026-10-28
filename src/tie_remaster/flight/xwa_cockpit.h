@@ -7,8 +7,8 @@
  * - X-Wing Alliance's (TIECOCKPIT.OPT, TIEBOMBERCOCKPIT.OPT,
  *   COMBATSIMCOCKPIT.OPT) read from the folder in env TIE_XWA_COCKPITS, when
  *   the player's PC launcher copied them over;
- * - X-Wing Revival's TIE cockpits by Raptor007 (most originally by the X-Wing
- *   Alliance Upgrade team), bundled with his permission: REVIVAL_TIEFIGHTER
+ * - X-Wing Revival's TIE cockpits (Raptor007 and the X-Wing Alliance
+ *   Upgrade team): REVIVAL_TIEFIGHTER
  *   (also TIE Advanced and Defender), REVIVAL_TIEINTERCEPTOR,
  *   REVIVAL_TIEBOMBER, REVIVAL_GUNBOAT (Assault Gunboat, Missile Boat), app
  *   resources cockpit/revival/<craft>.glb made at package time by

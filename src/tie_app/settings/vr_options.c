@@ -66,13 +66,19 @@ static const char* const k_hud_layout_values[] = { "cockpit", "helmet" };
 static const char* const k_hands_labels[] = { "Controllers", "Pilot Gloves", "Off" };
 static const char* const k_hands_values[] = { "controllers", "gloves", "off" };
 
+/* Seat Position: a slider (TieVrOptions_Draw), 40 cm in 5 cm steps,
+ * metres further back from the window (xwa_cockpit.c). */
+static const char* const k_seat_labels[] = { "-20 cm", "-15 cm", "-10 cm", "-5 cm", "0",
+											 "+5 cm",  "+10 cm", "+15 cm", "+20 cm" };
+static const char* const k_seat_values[] = { "-0.20", "-0.15", "-0.10", "-0.05", "0",
+											 "0.05",  "0.10",  "0.15",  "0.20" };
+
 static const char* const k_curve_labels[] = { "Direct", "Medium", "Precise", "Very Precise" };
 static const char* const k_curve_values[] = { "1.0", "1.5", "2.0", "2.6" };
 
 static const TieVrOptionRow k_rows[] = {
 	{ "TIE_XR_COCKPIT", "Cockpit", k_cockpit_labels, k_cockpit_values, 4, TIE_VR_COCKPIT_REVIVAL, false,
-	  "3D cockpits for every TIE craft from X-Wing Revival (by Raptor007, models by the X-Wing Alliance Upgrade "
-	  "team) are included. X-Wing Alliance's own are used instead when the PC launcher copied them over (the "
+	  "3D cockpits by Raptor007 (X-Wing Revival) and the X-Wing Alliance Upgrade team are included. X-Wing Alliance's own are used instead when the PC launcher copied them over (the "
 	  "default then); a cockpit that is not there falls back to X-Wing Revival's. OpenTIE 3D is OpenTIE-VR's "
 	  "own simple pod." },
 	{ "XWA_XR_STEREO", "3D Flight", k_off_on, k_0_1, 2, 1, false,
@@ -85,6 +91,8 @@ static const TieVrOptionRow k_rows[] = {
 	{ "XWA_XR_HUD_DISTANCE", "Helmet HUD Distance", k_hud_dist_labels, k_hud_dist_values, 3, 1, false, NULL },
 	{ "XWA_XR_WORLD_SCALE", "World Scale", k_world_scale_labels, k_world_scale_values, 3, 2, false,
 	  "Lower makes the cockpit and ships feel bigger." },
+	{ "XWA_XR_SEAT_POSITION", "Seat Position", k_seat_labels, k_seat_values, 9, 4, false,
+	  "Where you sit in the 3D cockpits: left closer to the window, right further back (40 cm in all)." },
 	{ "XWA_XR_DEPTH_BOOST", "Depth Boost", k_depth_labels, k_depth_values, 3, 0, false,
 	  "More stereo depth for ships at combat range." },
 	{ "XWA_XR_HANDS", "Hands", k_hands_labels, k_hands_values, 3, 0, false,
@@ -235,8 +243,16 @@ void TieVrOptions_Draw(AeronUiContext* ui) {
 			AeronUi_Header(ui, "Headset (restart to apply)");
 		}
 		int index = TieVrOptions_Current(row);
-		if (AeronUi_Selector(ui, row->label, &index, row->labels, row->count))
+		if (row->values == k_seat_values) {
+			/* A slider, closer (left) to further (right), in centimetres. */
+			int cm = (index - 4) * 5;
+			if (AeronUi_SliderInt(ui, row->label, &cm, -20, 20, 5, "%+d cm")) {
+				index = (cm + 20) / 5;
+				TieVrOptions_Set(row, index < 0 ? 0 : index > 8 ? 8 : index);
+			}
+		} else if (AeronUi_Selector(ui, row->label, &index, row->labels, row->count)) {
 			TieVrOptions_Set(row, index);
+		}
 		if (row->help && !row->restart)
 			AeronUi_Help(ui, row->help);
 		if (strcmp(row->key, "XWA_XR_HUD_LAYOUT") == 0) {
