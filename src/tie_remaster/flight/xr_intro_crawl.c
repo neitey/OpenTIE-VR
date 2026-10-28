@@ -888,8 +888,9 @@ void TieXrIntroCrawl_Update(AeronCommandBuffer* cmd, const TieFlightAssetSource*
 
 bool TieXrIntroCrawl_Active(void) { return s_crawl.title && s_crawl.active; }
 
-/* A (X when left-handed) or the left menu button, pressed now: the
- * controllers' own buttons (the rest reach nothing while the crawl plays). */
+/* A (X when left-handed), pressed now: the controller's own button (the
+ * rest reach nothing while the crawl plays; the menu button arrives as
+ * Escape, which TieVrControls_Frame turns into the same skip). */
 static int crawl_skip_buttons(void) {
 	AeronXrHand left, right;
 	memset(&left, 0, sizeof left);
@@ -900,8 +901,6 @@ static int crawl_skip_buttons(void) {
 	int held = 0;
 	if (have_a && (a_hand->buttons & AERON_XR_HAND_BUTTON_LOWER))
 		held |= 1;
-	if (have_left && (left.buttons & AERON_XR_HAND_BUTTON_MENU))
-		held |= 2;
 	return held;
 }
 
@@ -919,8 +918,7 @@ void TieXrIntroCrawl_PollSkip(void) {
 		/* What Space does on the title: on to the intro film. */
 		s_crawl.skipped = true;
 		TieInput_EnqueueKey((int16_t)' ');
-		Aeron_LogInfo("tie.vr", "intro crawl: skipped (%s) at frame %.0f", (pressed & 1) ? "A" : "menu button",
-					  (double)s_crawl.frame);
+		Aeron_LogInfo("tie.vr", "intro crawl: skipped (A) at frame %.0f", (double)s_crawl.frame);
 	}
 }
 
