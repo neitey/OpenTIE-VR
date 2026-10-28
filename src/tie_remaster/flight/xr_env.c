@@ -7,9 +7,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_stdinc.h>
+#include <SDL3/SDL_timer.h>
 
 #include "aeron/aeron.h"
 #include "aeron/asset/flight_model.h"
@@ -148,6 +150,23 @@ TieFlightXrEnvMode TieFlightXrEnv_Mode(void) {
 		return TIE_FLIGHT_XR_ENV_DEFENDER;
 	if (v && SDL_strcasecmp(v, "balance") == 0)
 		return TIE_FLIGHT_XR_ENV_BALANCE;
+	if (v && (SDL_strcasecmp(v, "xwing") == 0 || SDL_strcasecmp(v, "boxart") == 0))
+		return TIE_FLIGHT_XR_ENV_XWING;
+	if (v && SDL_strcasecmp(v, "xvt") == 0)
+		return TIE_FLIGHT_XR_ENV_XVT;
+	if (v && SDL_strcasecmp(v, "random") == 0) {
+		/* One of the box arts, picked once per run. */
+		static TieFlightXrEnvMode picked = TIE_FLIGHT_XR_ENV_OFF;
+		if (picked == TIE_FLIGHT_XR_ENV_OFF) {
+			static const TieFlightXrEnvMode scenes[] = { TIE_FLIGHT_XR_ENV_TIEFIGHTER, TIE_FLIGHT_XR_ENV_DEFENDER,
+														 TIE_FLIGHT_XR_ENV_BALANCE, TIE_FLIGHT_XR_ENV_XWING,
+														 TIE_FLIGHT_XR_ENV_XVT };
+			const uint64_t seed = SDL_GetPerformanceCounter() ^ ((uint64_t)time(NULL) * 2654435761u);
+			picked = scenes[(seed ^ (seed >> 17) ^ (seed >> 31)) % (sizeof scenes / sizeof scenes[0])];
+			Aeron_LogInfo("tie.vr", "menu scene: random pick %d", (int)picked);
+		}
+		return picked;
+	}
 	/* Unset, "tiefighter" (or anything else): the TIE Fighter box art. */
 	return TIE_FLIGHT_XR_ENV_TIEFIGHTER;
 }
@@ -155,7 +174,7 @@ TieFlightXrEnvMode TieFlightXrEnv_Mode(void) {
 /* The played box arts (xr_env_tieart.c). */
 static bool TieXrEnv_IsArt(TieFlightXrEnvMode mode) {
 	return mode == TIE_FLIGHT_XR_ENV_TIEFIGHTER || mode == TIE_FLIGHT_XR_ENV_DEFENDER ||
-		   mode == TIE_FLIGHT_XR_ENV_BALANCE;
+		   mode == TIE_FLIGHT_XR_ENV_BALANCE || mode == TIE_FLIGHT_XR_ENV_XWING || mode == TIE_FLIGHT_XR_ENV_XVT;
 }
 
 /* ---- small maths ---- */
@@ -1059,6 +1078,8 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	else
 		TieXrArt_SetScene(mode == TIE_FLIGHT_XR_ENV_DEFENDER  ? TIE_XR_ART_DEFENDER
 						  : mode == TIE_FLIGHT_XR_ENV_BALANCE ? TIE_XR_ART_BALANCE
+						  : mode == TIE_FLIGHT_XR_ENV_XWING	  ? TIE_XR_ART_XWING
+						  : mode == TIE_FLIGHT_XR_ENV_XVT	  ? TIE_XR_ART_XVT
 															  : TIE_XR_ART_TIEFIGHTER);
 	AeronXrStereoFrame xr;
 	if (mode == TIE_FLIGHT_XR_ENV_OFF || !g || !g->scene || !Aeron_XrStereoBegin(&xr) || xr.width <= 0 ||

@@ -261,6 +261,79 @@ static const ArtSalvo k_bop_salvos[] = {
 static const int k_bop_shooters[] = { 1, 2, 3, 4, 5, 7 };
 static const signed char k_bop_leader[] = { -1, -1, -1, -1, 3, 3, -1, -1, -1, -1, -1, -1 };
 
+/* ---- "X-Wing" and "X-Wing vs. TIE Fighter": stills -----------------------
+ * OpenXWA-VR's ENV_BOXART and ENV_XVTART with the same places and cover
+ * attitudes (view-relative), TIE Fighter's own craft. */
+
+/* The cover of the original X-Wing and only what is on it: three X-wings and
+ * three TIE fighters over a purple nebula, a fourth fighter bursting upper
+ * left, red X-wing and green TIE fire. Each keeps its place on the cover,
+ * pushed out from the middle just far enough to clear the menu screen. */
+static const ArtShip k_xw_ships[] = {
+	/* 0: lower right, the big one: from behind, climbing away to the upper
+	 * left, its wings rising to the right. */
+	{ ART_XW, 36.0f, -24.0f, 24.0f, { -0.25f, 0.93f, 0.27f }, { -0.55f, -0.20f, 0.80f }, 1 },
+	/* 1: middle left: flying right and away, near knife edge. */
+	{ ART_XW, -36.0f, -3.0f, 30.0f, { 0.55f, 0.80f, 0.0f }, { 0.68f, -0.47f, 0.40f }, 1 },
+	/* 2: upper left, by the burst: flying right, banked right wing up. */
+	{ ART_XW, -34.0f, 34.0f, 70.0f, { 0.75f, 0.60f, 0.15f }, { -0.35f, -0.25f, 0.90f }, 1 },
+	/* 3: upper middle: coming at us from the front left, firing upper left. */
+	{ ART_TF, -19.0f, 24.0f, 60.0f, { -0.65f, -0.65f, 0.40f }, { -0.09f, 0.59f, 0.80f }, 1 },
+	/* 4: right of the middle: from the front left, firing lower left. */
+	{ ART_TF, 30.0f, 7.0f, 52.0f, { -0.60f, -0.75f, -0.25f }, { 0.53f, -0.62f, 0.57f }, 1 },
+	/* 5: at the cover's right edge: as TIE 4. */
+	{ ART_TF, 52.0f, 4.0f, 80.0f, { -0.60f, -0.75f, -0.25f }, { 0.53f, -0.62f, 0.57f }, 1 },
+};
+/* Where the fourth fighter bursts, upper left by X-wing 2: yaw, pitch,
+ * metres (and an unused diameter). */
+static const float k_xw_burst[4] = { -21.0f, 36.0f, 72.0f, 13.0f };
+static const ArtSalvo k_xw_salvos[] = {
+	/* The big X-wing's fire, away into the scene. */
+	{ 0, 5, ART_GUNS_XWING, { { 0.15f, 0.27f }, { 0.45f, 0.57f } }, 2 },
+	/* X-wing 1's fire to the right. */
+	{ 1, 4, ART_GUNS_XWING, { { 0.15f, 0.28f } }, 1 },
+	/* The two long green streaks to the upper left. */
+	{ 3, 2, ART_GUNS_TIE, { { 0.08f, 0.40f } }, 1 },
+	/* TIE 4's fire to the left. */
+	{ 4, 1, ART_GUNS_TIE, { { 0.10f, 0.32f }, { 0.48f, 0.66f } }, 2 },
+};
+
+/* The cover of X-Wing vs. TIE Fighter, its craft only: an explosion with a
+ * pillar of light through it, an X-wing coming out of the fire, a big X-wing
+ * diving past lower right, a TIE Interceptor lower left facing us, TIE
+ * fighters upper left, X-wings coming at us; the two pilots loom behind. */
+static const ArtShip k_xvt_ships[] = {
+	/* 0: the big X-wing lower right: nose toward us and to the right. */
+	{ ART_XW, 40.0f, -29.0f, 16.0f, { 0.325f, -0.932f, -0.161f }, { -0.471f, -0.308f, 0.827f }, 1 },
+	/* 1: the TIE Interceptor lower left: window toward us. */
+	{ ART_TI, -32.0f, -28.0f, 14.0f, { -0.439f, -0.861f, -0.259f }, { 0.255f, -0.395f, 0.882f }, 1 },
+	/* 2: the X-wing in the explosion, coming out of it toward the lower left. */
+	{ ART_XW, -8.0f, -33.0f, 60.0f, { -0.186f, -0.958f, -0.217f }, { 0.514f, -0.283f, 0.810f }, 1 },
+	/* 3: the small X-wing at the explosion's top. */
+	{ ART_XW, 25.0f, -2.0f, 80.0f, { -0.310f, -0.852f, -0.423f }, { -0.457f, -0.256f, 0.852f }, 1 },
+	/* 4: the far X-wing on the right, head on, rolled into a tall X. */
+	{ ART_XW, 31.0f, 10.0f, 110.0f, { 0.0f, -0.990f, 0.139f }, { -0.777f, 0.088f, 0.623f }, 1 },
+	/* 5, 6: TIE fighters upper left of the middle. */
+	{ ART_TF, -26.0f, 12.0f, 50.0f, { 0.296f, -0.814f, -0.500f }, { -0.384f, -0.581f, 0.718f }, 1 },
+	{ ART_TF, -34.0f, 6.0f, 75.0f, { 0.296f, -0.814f, -0.500f }, { -0.258f, -0.572f, 0.778f }, 1 },
+	/* 7, 8: two tiny TIEs far left. */
+	{ ART_TF, -46.0f, 18.0f, 160.0f, { 0.0f, -0.866f, 0.500f }, { -0.407f, 0.457f, 0.791f }, 1 },
+	{ ART_TF, -40.0f, 19.0f, 160.0f, { 0.075f, -0.863f, -0.500f }, { 0.349f, -0.447f, 0.824f }, 1 },
+};
+static const float k_xvt_blast[4] = { 0.0f, -30.0f, 90.0f, 55.0f };
+/* Laser streaks frozen between two points (yaw, pitch, metres): green across
+ * the big X-wing and in from the right, red from the X-wing in the
+ * explosion. */
+static const struct {
+	float from[3], to[3];
+	int green;
+} k_xvt_streaks[] = {
+	{ { 14.0f, -20.0f, 30.0f }, { 38.0f, -40.0f, 12.0f }, 1 },
+	{ { 62.0f, 2.0f, 60.0f }, { 38.0f, 5.0f, 98.0f }, 1 },
+	{ { -13.7f, -30.0f, 54.8f }, { -25.1f, -34.8f, 35.5f }, 0 },
+	{ { -4.5f, -38.3f, 55.2f }, { -11.0f, -48.5f, 36.1f }, 0 },
+};
+
 /* The engines' glow (model metres, glow diameter, core colour), XWA's
  * OPTs' engine glows (TIE Fighter's models carry none): the B-wing's four
  * red ones, the A-wing's two white-yellow ones. */
@@ -281,7 +354,13 @@ static const struct {
  * passes or flies in formation (OpenXWA-VR's EnvAnim). Ships 0..animated-1
  * fly in (at most 8), passers fly straight past early on, the rest (capital
  * ships) hold their places. */
-enum { ART_BACKDROP_VADER, ART_BACKDROP_PILOT, ART_BACKDROP_PLANET };
+enum {
+	ART_BACKDROP_VADER,
+	ART_BACKDROP_PILOT,
+	ART_BACKDROP_PLANET,
+	ART_BACKDROP_NEBULA, /* X-Wing: the nebula, a fighter bursting */
+	ART_BACKDROP_PILOTS, /* X-Wing vs. TIE Fighter: both pilots, the explosion's pillar of light */
+};
 
 typedef struct ArtScene {
 	const char* name;
@@ -301,12 +380,12 @@ typedef struct ArtScene {
 	const int* shooters;
 	int shooter_count;
 	const signed char* leader; /* per ship: flies in formation on this one (-1) */
-	int animated;
+	int animated; /* 0: a still (no fight; the craft hold their cover places) */
 	int backdrop;
 } ArtScene;
 
 static const int k_tie_shooters[] = { 1, 2, 3, 0, 5 };
-static const ArtScene k_scenes[3] = {
+static const ArtScene k_scenes[] = {
 	{ "TIE Fighter",
 	  k_tie_ships,
 	  (int)(sizeof k_tie_ships / sizeof k_tie_ships[0]),
@@ -367,7 +446,48 @@ static const ArtScene k_scenes[3] = {
 	  k_bop_leader,
 	  8,
 	  ART_BACKDROP_PLANET },
+	{ "X-Wing",
+	  k_xw_ships,
+	  (int)(sizeof k_xw_ships / sizeof k_xw_ships[0]),
+	  k_xw_salvos,
+	  (int)(sizeof k_xw_salvos / sizeof k_xw_salvos[0]),
+	  0,
+	  k_xw_burst,
+	  { 1.5f, 1.4f, 1.3f, 1.0f },
+	  -1,
+	  -1,
+	  NULL,
+	  0,
+	  0,
+	  0,
+	  NULL,
+	  NULL,
+	  0,
+	  NULL,
+	  0,
+	  ART_BACKDROP_NEBULA },
+	{ "X-Wing vs. TIE Fighter",
+	  k_xvt_ships,
+	  (int)(sizeof k_xvt_ships / sizeof k_xvt_ships[0]),
+	  NULL,
+	  0,
+	  2,
+	  k_xvt_blast,
+	  { 1.5f, 1.4f, 1.3f, 1.0f },
+	  -1,
+	  -1,
+	  NULL,
+	  0,
+	  0,
+	  0,
+	  NULL,
+	  NULL,
+	  0,
+	  NULL,
+	  0,
+	  ART_BACKDROP_PILOTS },
 };
+#define ART_SCENE_COUNT ((int)(sizeof k_scenes / sizeof k_scenes[0]))
 static const ArtScene* s_scene = &k_scenes[0];
 #define SC s_scene
 
@@ -384,6 +504,7 @@ enum {
 	ART_TEX_GLOW,   /* generated: a soft round glow (the blast's flash) */
 	ART_TEX_VADER,  /* vr/vader.rgba */
 	ART_TEX_PILOT,  /* vr/xvt_tie_pilot.rgba: the Defender of the Empire helmet */
+	ART_TEX_REBEL,  /* vr/xvt_rebel_pilot.rgba: X-Wing vs. TIE Fighter, right */
 	ART_TEX_PLANET, /* generated: Balance of Power's brown world */
 	ART_TEX_LOGO,   /* vr/logo.rgba: above the screen, and the startup title */
 	ART_TEX_BLAST,  /* the explosion at its height (XPLO05C) */
@@ -459,7 +580,8 @@ static struct {
 	} models[ART_MODEL_COUNT];
 	AeronTexture* tex[ART_TEX_COUNT];
 	int tex_w[ART_TEX_COUNT], tex_h[ART_TEX_COUNT];
-	bool generated_tried, vader_tried, pilot_tried, planet_tried, logo_tried, sprites_tried, sounds_tried;
+	bool generated_tried, vader_tried, pilot_tried, rebel_tried, planet_tried, logo_tried, sprites_tried,
+		sounds_tried;
 	bool logged;
 	float view_pos[3];
 	/* The fight. */
@@ -1285,6 +1407,9 @@ static void art_paths(void) {
 	const int count = SC->count < SC->animated ? SC->count : SC->animated;
 	const int victim = SC->victim;
 	s_art.anim_paths = 1; /* art_pose follows anim_fl from here */
+	s_art.hunter = -1;
+	if (count <= 0)
+		return; /* a still */
 	static float scores[8][ART_CANDIDATES];
 	for (int i = 0; i < count; ++i) {
 		int best = 0;
@@ -2006,7 +2131,10 @@ void TieXrArt_ViewPos(float out[3]) {
 	 * reference point, matching the screen being as much further away than
 	 * its original 2.1 m. */
 	out[0] = 0.0f;
-	out[1] = -art_env("XWA_XR_ENV_BACK", 1.1f) * ART_K;
+	/* X-Wing vs. TIE Fighter: XWA_XR_XVT_BACK (0.4 m) further back still. */
+	out[1] = -(art_env("XWA_XR_ENV_BACK", 1.1f) +
+			   (SC->backdrop == ART_BACKDROP_PILOTS ? art_env("XWA_XR_XVT_BACK", 0.4f) : 0.0f)) *
+			 ART_K;
 	out[2] = 0.0f;
 }
 
@@ -2028,7 +2156,12 @@ void TieXrArt_Advance(float dt, const float head_q[4]) {
 	/* On the startup show, A during the fight jumps to the cover's moment. */
 	const bool skip = s_art.pressed;
 	const char* fixed = getenv("TIE_XR_ENV_TIME");
-	if (fixed && fixed[0]) {
+	if (SC->animated <= 0) {
+		/* A still: at the cover's moment from the start. */
+		if (s_art.anim_t < ART_ANIM_SECONDS)
+			s_art.anim_t = ART_ANIM_SECONDS;
+		art_animate(fminf(fmaxf(dt, 0.0f), 0.1f), false);
+	} else if (fixed && fixed[0]) {
 		/* Played silently up to that moment in small steps (the bolts fly as
 		 * they would), then held. */
 		const float target = fmaxf((float)atof(fixed), 0.0f);
@@ -2156,8 +2289,8 @@ static void art_sky_rect(AeronScene3D* scene, int slot, float yaw, float pitch, 
 
 /* A beam strip from `a` to `b` (world units), `width` wide, facing the
  * viewer. */
-static void art_beam(AeronScene3D* scene, const float a[3], const float b[3], float width,
-					 const float tint[4]) {
+static void art_beam_stage(AeronScene3D* scene, AeronSceneBillboardStage stage, const float a[3], const float b[3],
+						   float width, const float tint[4]) {
 	float along[3], mid[3], side[3];
 	for (int k = 0; k < 3; ++k) {
 		along[k] = b[k] - a[k];
@@ -2173,8 +2306,12 @@ static void art_beam(AeronScene3D* scene, const float a[3], const float b[3], fl
 		c[2][k] = b[k] + side[k];
 		c[3][k] = a[k] + side[k];
 	}
-	art_quad(scene, ART_TEX_BEAM, AERON_SCENE_BILLBOARD_STAGE_OVERLAY, AERON_SCENE_BILLBOARD_BLEND_ADDITIVE,
-			 c, tint);
+	art_quad(scene, ART_TEX_BEAM, stage, AERON_SCENE_BILLBOARD_BLEND_ADDITIVE, c, tint);
+}
+
+static void art_beam(AeronScene3D* scene, const float a[3], const float b[3], float width,
+					 const float tint[4]) {
+	art_beam_stage(scene, AERON_SCENE_BILLBOARD_STAGE_OVERLAY, a, b, width, tint);
 }
 
 static const float k_red[4] = { 2.4f, 0.35f, 0.25f, 1.0f };
@@ -2433,6 +2570,118 @@ static void art_submit_fight(AeronScene3D* scene, float t) {
 	}
 }
 
+/* A fighter bursting at `p` (world units): the explosion over its right
+ * half (OpenXWA-VR's env_submit_burst_at). */
+static void art_submit_burst_at(AeronScene3D* scene, const float p[3], float scale) {
+	float f[3], r[3], q[3], c[4][3];
+	static const float z[3] = { 0.0f, 0.0f, 1.0f };
+	for (int a = 0; a < 3; ++a)
+		f[a] = p[a] - s_art.view_pos[a];
+	art_norm(f);
+	art_cross(f, z, r);
+	art_norm(r);
+	static const float white[4] = { 1.5f, 1.4f, 1.3f, 1.0f };
+	for (int a = 0; a < 3; ++a)
+		q[a] = p[a] + (r[a] * 4.5f - f[a] * 5.0f) * ART_K * scale;
+	art_facing(q, 13.0f * ART_K * scale, 0.0f, c);
+	art_quad(scene, ART_TEX_BLAST, AERON_SCENE_BILLBOARD_STAGE_OVERLAY, AERON_SCENE_BILLBOARD_BLEND_PMA, c, white);
+	for (int a = 0; a < 3; ++a)
+		q[a] = p[a] + (r[a] * 5.5f + z[a] * 1.2f - f[a] * 5.5f) * ART_K * scale;
+	art_facing(q, 7.0f * ART_K * scale, 30.0f, c);
+	art_quad(scene, ART_TEX_FIRE, AERON_SCENE_BILLBOARD_STAGE_OVERLAY, AERON_SCENE_BILLBOARD_BLEND_PMA, c, white);
+}
+
+/* The X-Wing box art: the long magenta nebula from the upper left down
+ * through the view to the lower right (XWA_XR_NEBULA_BRIGHTNESS), the fire,
+ * the burst. */
+static void art_submit_xwing_sprites(AeronScene3D* scene, bool ships) {
+	const float b = art_env("XWA_XR_NEBULA_BRIGHTNESS", 1.0f);
+	static const struct {
+		float yaw, pitch, w, h, roll, gain;
+	} clouds[] = {
+		{ -10.0f, 12.0f, 120.0f, 62.0f, -32.0f, 1.15f }, /* the main band, behind the screen */
+		{ -62.0f, 38.0f, 80.0f, 40.0f, -28.0f, 1.0f },   /* its upper left end */
+		{ 42.0f, -30.0f, 90.0f, 44.0f, -38.0f, 0.9f },   /* lower right, behind the big X-wing */
+	};
+	for (size_t i = 0; i < sizeof clouds / sizeof clouds[0]; ++i) {
+		const float g = clouds[i].gain * b;
+		const float tint[4] = { g, g, g, 1.0f };
+		art_sky_rect(scene, ART_TEX_NEBULA, clouds[i].yaw, clouds[i].pitch, clouds[i].w, clouds[i].h,
+					 clouds[i].roll, tint);
+	}
+	if (!ships)
+		return;
+	art_submit_salvos(scene, 1.0f);
+	float p[3];
+	art_dir(k_xw_burst[0], k_xw_burst[1], p);
+	for (int a = 0; a < 3; ++a)
+		p[a] = s_art.view_pos[a] + p[a] * k_xw_burst[2] * ART_K;
+	art_submit_burst_at(scene, p, 1.6f);
+}
+
+/* The X-Wing vs. TIE Fighter box art: the two pilots looming behind the
+ * fight (the TIE pilot left, the rebel right, dimmed into the cover's dark
+ * blue; XWA_XR_PILOTS_BRIGHTNESS), the explosion and its pillar of light,
+ * the fire round the X-wing coming out of it, the streaks. */
+static void art_submit_xvt_sprites(AeronScene3D* scene, bool ships) {
+	{
+		const float b = art_env("XWA_XR_PILOTS_BRIGHTNESS", 1.0f);
+		const float tint[4] = { 0.40f * b, 0.42f * b, 0.55f * b, 1.0f };
+		static const struct {
+			int slot;
+			float yaw, h;
+		} pilots[] = { { ART_TEX_PILOT, -28.0f, 37.3f * 0.95f }, { ART_TEX_REBEL, 32.0f, 29.6f * 0.9f } };
+		for (size_t i = 0; i < sizeof pilots / sizeof pilots[0]; ++i) {
+			const int slot = pilots[i].slot;
+			if (s_art.tex[slot] && s_art.tex_h[slot] > 0) {
+				const float h = pilots[i].h;
+				const float w = h * (float)s_art.tex_w[slot] / (float)s_art.tex_h[slot];
+				art_sky_rect(scene, slot, pilots[i].yaw, 24.0f, w, h, 0.0f, tint);
+			}
+		}
+	}
+	{
+		/* The pillar of light, straight up and down through the explosion. */
+		float lo[3], hi[3];
+		art_dir(k_xvt_blast[0], -75.0f, lo);
+		art_dir(k_xvt_blast[0], 72.0f, hi);
+		for (int a = 0; a < 3; ++a) {
+			lo[a] = s_art.view_pos[a] + lo[a] * ART_SKY_DIST;
+			hi[a] = s_art.view_pos[a] + hi[a] * ART_SKY_DIST;
+		}
+		const float wide = 2.0f * ART_SKY_DIST * tanf(1.3f * ART_PI / 360.0f);
+		const float thin = 2.0f * ART_SKY_DIST * tanf(0.22f * ART_PI / 360.0f);
+		static const float glow[4] = { 0.55f, 0.22f, 0.05f, 1.0f };
+		static const float core[4] = { 2.2f, 1.6f, 0.8f, 1.0f };
+		art_beam_stage(scene, AERON_SCENE_BILLBOARD_STAGE_SKY, lo, hi, wide, glow);
+		art_beam_stage(scene, AERON_SCENE_BILLBOARD_STAGE_SKY, lo, hi, thin, core);
+	}
+	static const float white[4] = { 1.5f, 1.4f, 1.3f, 1.0f };
+	art_submit_fireball_tint(scene, k_xvt_blast, white, 1.0f, 1.0f);
+	if (!ships)
+		return;
+	{
+		/* Fire round the X-wing coming out of it, just behind it. */
+		float q[3], c[4][3];
+		art_ship_pos(2, q);
+		for (int a = 0; a < 3; ++a)
+			q[a] *= 1.08f;
+		art_facing(q, 30.0f * ART_K, 15.0f, c);
+		art_quad(scene, ART_TEX_FIRE, AERON_SCENE_BILLBOARD_STAGE_OVERLAY, AERON_SCENE_BILLBOARD_BLEND_PMA, c,
+				 white);
+	}
+	for (size_t i = 0; i < sizeof k_xvt_streaks / sizeof k_xvt_streaks[0]; ++i) {
+		float a[3], b[3];
+		art_dir(k_xvt_streaks[i].from[0], k_xvt_streaks[i].from[1], a);
+		art_dir(k_xvt_streaks[i].to[0], k_xvt_streaks[i].to[1], b);
+		for (int c = 0; c < 3; ++c) {
+			a[c] = s_art.view_pos[c] + a[c] * k_xvt_streaks[i].from[2] * ART_K;
+			b[c] = s_art.view_pos[c] + b[c] * k_xvt_streaks[i].to[2] * ART_K;
+		}
+		art_beam(scene, a, b, 0.45f * ART_K, k_xvt_streaks[i].green ? k_green : k_red);
+	}
+}
+
 /* The backdrop and the fight. TIE Fighter: Vader's helmet over the clouds;
  * Defender of the Empire: the TIE pilot's helmet (X-Wing vs. TIE Fighter's
  * picture, vr/xvt_tie_pilot.rgba) in the cover's dark warm tones over the
@@ -2440,6 +2689,14 @@ static void art_submit_fight(AeronScene3D* scene, float t) {
  * Balance of Power: the brown world behind the dreadnought, red-pink flak
  * bursting round the fight over its last seconds, the engines' glow. */
 static void art_submit_sprites(AeronScene3D* scene, bool ships) {
+	if (SC->backdrop == ART_BACKDROP_NEBULA) {
+		art_submit_xwing_sprites(scene, ships);
+		return;
+	}
+	if (SC->backdrop == ART_BACKDROP_PILOTS) {
+		art_submit_xvt_sprites(scene, ships);
+		return;
+	}
 	const float t = ships ? s_art.anim_t : ART_ANIM_SECONDS + 60.0f;
 	const float T = ART_ANIM_SECONDS;
 	const float helmet = art_smooth((t - T) / art_env("XWA_XR_VADER_FADE_SECONDS", 2.5f));
@@ -2713,6 +2970,27 @@ void TieXrArt_Lighting(TieXrArtLighting* out) {
 		memcpy(sides, sd, sizeof sd);
 		memcpy(top, tp, sizeof tp);
 		memcpy(bottom, bt, sizeof bt);
+	} else if (SC->backdrop == ART_BACKDROP_NEBULA || SC->backdrop == ART_BACKDROP_PILOTS) {
+		/* X-Wing: white light from the upper left ahead (the tops and left
+		 * sides of the craft flying away), the nebula's magenta glow from
+		 * ahead. X-Wing vs. TIE Fighter: the explosion's warm light from ahead
+		 * below, a cool blue fill from the upper right (OpenXWA-VR's). */
+		const bool xvt = SC->backdrop == ART_BACKDROP_PILOTS;
+		const float kd[3] = { xvt ? -0.10f : -0.45f, xvt ? 0.85f : 0.55f, xvt ? -0.35f : 0.70f };
+		const float kc[3] = { 1.0f * sun, (xvt ? 0.78f : 0.96f) * sun, (xvt ? 0.55f : 0.92f) * sun };
+		const float fd[3] = { xvt ? 0.50f : 0.2f, xvt ? 0.20f : 0.9f, xvt ? 0.85f : -0.2f };
+		const float fc[3] = { xvt ? 0.45f * 0.6f : 0.75f * 0.45f, xvt ? 0.55f * 0.6f : 0.30f * 0.45f,
+							  xvt ? 0.90f * 0.6f : 0.85f * 0.45f };
+		const float sd[3] = { xvt ? 0.04f : 0.06f, xvt ? 0.045f : 0.035f, 0.07f };
+		const float tp[3] = { xvt ? 0.04f : 0.07f, xvt ? 0.05f : 0.04f, 0.08f };
+		const float bt[3] = { xvt ? 0.05f : 0.04f, xvt ? 0.04f : 0.025f, 0.05f };
+		memcpy(key_dir, kd, sizeof kd);
+		memcpy(key, kc, sizeof kc);
+		memcpy(fill_dir, fd, sizeof fd);
+		memcpy(fill, fc, sizeof fc);
+		memcpy(sides, sd, sizeof sd);
+		memcpy(top, tp, sizeof tp);
+		memcpy(bottom, bt, sizeof bt);
 	} else if (SC->backdrop == ART_BACKDROP_PLANET) {
 		const float kd[3] = { -0.62f, 0.30f, 0.72f }, kc[3] = { 0.95f * sun, 0.92f * sun, 1.0f * sun };
 		const float fd[3] = { 0.70f, -0.20f, -0.30f }, fc[3] = { 0.30f * 0.6f, 0.35f * 0.6f, 0.60f * 0.6f };
@@ -2813,7 +3091,7 @@ static bool art_scene_uses(int m) {
 }
 
 void TieXrArt_SetScene(TieXrArtScene scene) {
-	const ArtScene* next = &k_scenes[scene == TIE_XR_ART_DEFENDER ? 1 : scene == TIE_XR_ART_BALANCE ? 2 : 0];
+	const ArtScene* next = &k_scenes[(int)scene >= 0 && (int)scene < ART_SCENE_COUNT ? (int)scene : 0];
 	if (next == SC)
 		return;
 	TieXrArt_Restart();
@@ -2850,9 +3128,14 @@ bool TieXrArt_Prepare(AeronCommandBuffer* cmd, const TieFlightAssetSource* asset
 		art_load_rgba(cmd, ART_TEX_VADER, "vader", "XWA_XR_VADER");
 		return false;
 	}
-	if (!s_art.pilot_tried && SC->backdrop == ART_BACKDROP_PILOT) {
+	if (!s_art.pilot_tried && (SC->backdrop == ART_BACKDROP_PILOT || SC->backdrop == ART_BACKDROP_PILOTS)) {
 		s_art.pilot_tried = true;
 		art_load_rgba(cmd, ART_TEX_PILOT, "xvt_tie_pilot", "XWA_XR_TIE_PILOT");
+		return false;
+	}
+	if (!s_art.rebel_tried && SC->backdrop == ART_BACKDROP_PILOTS) {
+		s_art.rebel_tried = true;
+		art_load_rgba(cmd, ART_TEX_REBEL, "xvt_rebel_pilot", "XWA_XR_REBEL_PILOT");
 		return false;
 	}
 	if (!s_art.planet_tried && SC->backdrop == ART_BACKDROP_PLANET) {
@@ -2891,9 +3174,11 @@ bool TieXrArt_Prepare(AeronCommandBuffer* cmd, const TieFlightAssetSource* asset
 						  names[m], s_art.models[m].mesh ? "loaded" : "missing", (double)(b[4] - b[1]),
 						  (double)(b[3] - b[0]), (double)(b[5] - b[2]));
 		}
-		const int backdrop = SC->backdrop == ART_BACKDROP_VADER   ? ART_TEX_VADER
-							 : SC->backdrop == ART_BACKDROP_PILOT ? ART_TEX_PILOT
-																  : ART_TEX_PLANET;
+		const int backdrop = SC->backdrop == ART_BACKDROP_VADER    ? ART_TEX_VADER
+							 : SC->backdrop == ART_BACKDROP_PILOT  ? ART_TEX_PILOT
+							 : SC->backdrop == ART_BACKDROP_PILOTS ? ART_TEX_REBEL
+							 : SC->backdrop == ART_BACKDROP_NEBULA ? ART_TEX_NEBULA
+																   : ART_TEX_PLANET;
 		Aeron_LogInfo("tie.vr",
 					  "menu scene (%s): logo %s, backdrop %s, explosion %s, fire %s, sound level %.2f",
 					  SC->name, s_art.tex[ART_TEX_LOGO] ? "yes" : "no", s_art.tex[backdrop] ? "yes" : "no",

@@ -6,7 +6,11 @@
  * here; the other two use the same machinery with their own craft, backdrop
  * (the TIE pilot's helmet, vr/xvt_tie_pilot.rgba; a generated brown world
  * behind the Super Star Destroyer) and light (OpenXWA-VR's ENV_DOEART,
- * ENV_BOPART).
+ * ENV_BOPART). "X-Wing" and "X-Wing vs. TIE Fighter" are OpenXWA-VR's stills
+ * of those box arts (ENV_BOXART, ENV_XVTART) with TIE Fighter's own craft:
+ * the purple nebula and a fighter bursting; the two pilots behind the
+ * explosion and its pillar of light (vr/xvt_tie_pilot.rgba and
+ * vr/xvt_rebel_pilot.rgba, packaged, never in the repository).
  *
  * "TIE Fighter": the TIE Fighter box art around the virtual screen, played
  * (ported from OpenXWA-VR's vr_env.c, ENV_TIEART). Internal to the menu
@@ -51,6 +55,10 @@ typedef enum TieXrArtScene {
 	TIE_XR_ART_TIEFIGHTER = 0,
 	TIE_XR_ART_DEFENDER,
 	TIE_XR_ART_BALANCE,
+	/* Stills (OpenXWA-VR's ENV_BOXART, ENV_XVTART): no fight; the startup
+	 * show's title comes at once. */
+	TIE_XR_ART_XWING, /* the X-Wing box art: X-wings and TIE fighters over a purple nebula */
+	TIE_XR_ART_XVT,   /* the X-Wing vs. TIE Fighter box art: its two pilots behind an explosion */
 } TieXrArtScene;
 
 /* The box art shown (the fight starts over when it changes). */

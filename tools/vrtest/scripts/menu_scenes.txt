@@ -1,0 +1,16 @@
+# VR menu scenes: the X-Wing and X-Wing vs. TIE Fighter box arts (stills) and
+# Random. Start with the X-Wing one (its startup title comes at once):
+# Run: tools/vrtest/run.sh <build> tools/vrtest/scripts/menu_scenes.txt <out> TIE_TEST_XR=1 XWA_XR_ENVIRONMENT=xwing
+0 wait shell 8
++5 key Space                   # past the crawl
+0 wait shell 10
++5 key Return                  # past the intro films
+0 wait shell 100
++60 capture xwing_title        # the still with the logo and "Press (A) to Continue"
++5 xrmenu a
++100 capture xwing
++5 env XWA_XR_ENVIRONMENT xvt
++100 capture xvt
++5 env XWA_XR_ENVIRONMENT random
++100 capture random
++5 quit

@@ -19,8 +19,16 @@
  *                           balance the Balance of Power box art (B-wings, an A-wing
  *                           and TIE Advanced round a Super Star Destroyer before a
  *                           brown world) |
+ *                           xwing the X-Wing box art (X-wings and TIE fighters over a
+ *                           purple nebula, a still) |
+ *                           xvt the X-Wing vs. TIE Fighter box art (the craft before an
+ *                           explosion, its two pilots behind, vr/xvt_tie_pilot.rgba and
+ *                           vr/xvt_rebel_pilot.rgba; a still) |
+ *                           random one of the five box arts, picked once per run |
  *                           fleet (or 1) the Imperial fleet | 0 (or stars) stars only |
  *                           off nothing
+ *   XWA_XR_REBEL_PILOT      the X-Wing vs. TIE Fighter rebel pilot: a path, 0 = none
+ *                           [assets/vr/xvt_rebel_pilot.rgba, packaged; never in the repo]
  *   XWA_XR_TIE_PILOT        the Defender of the Empire helmet: a path, 0 = none
  *                           [assets/vr/xvt_tie_pilot.rgba, packaged; never in the repo]
  *   XWA_XR_PILOT_BRIGHTNESS / _PITCH   that helmet [1.0, 16 deg]
@@ -70,6 +78,8 @@ typedef enum TieFlightXrEnvMode {
 	TIE_FLIGHT_XR_ENV_TIEFIGHTER = 3,
 	TIE_FLIGHT_XR_ENV_DEFENDER = 4,
 	TIE_FLIGHT_XR_ENV_BALANCE = 5,
+	TIE_FLIGHT_XR_ENV_XWING = 6,
+	TIE_FLIGHT_XR_ENV_XVT = 7,
 } TieFlightXrEnvMode;
 
 TieFlightXrEnvMode TieFlightXrEnv_Mode(void);

@@ -52,11 +52,13 @@ static const char* const k_fov_labels[] = { "Off", "Low", "Medium", "High" };
 static const char* const k_fov_values[] = { "0", "low", "medium", "high" };
 static const char* const k_voice_labels[] = { "Off", "Double-Tap Thumb Rest", "Hold Thumb Rest" };
 static const char* const k_voice_values[] = { "0", "doubletap", "hold" };
-static const char* const k_env_labels[] = { "TIE Fighter",      "Defender of the Empire",
-											"Balance of Power", "Imperial Fleet",
-											"Stars Only",       "Off" };
-/* "1" stays the fleet's value (saved settings); "fleet" also works. */
-static const char* const k_env_values[] = { "tiefighter", "defender", "balance", "1", "0", "off" };
+static const char* const k_env_labels[] = { "TIE Fighter",    "Defender of the Empire", "Balance of Power",
+											"X-Wing Box Art", "X-Wing vs. TIE Fighter", "Random",
+											"Imperial Fleet", "Stars Only",             "Off" };
+/* "1" stays the fleet's value (saved settings); "fleet" also works. The box
+ * arts keep OpenXWA-VR's names. */
+static const char* const k_env_values[] = { "tiefighter", "defender", "balance", "xwing", "xvt",
+											"random",     "1",        "0",       "off" };
 static const char* const k_env_bright_labels[] = { "Dim", "Medium", "Bright" };
 static const char* const k_env_bright_values[] = { "0.5", "0.8", "1.0" };
 static const char* const k_screen_labels[] = { "2.5 m", "3.2 m", "4 m" };
@@ -112,11 +114,12 @@ static const TieVrOptionRow k_rows[] = {
 	{ "XWA_XR_VOICE", "Voice Commands", k_voice_labels, k_voice_values, 3, 1, false,
 	  "In flight: double-tap a thumb rest (or hold it), then speak, e.g. \"attack my target\", \"next target\", "
 	  "\"full throttle\", \"lasers to shields\", \"cover me\"." },
-	{ "XWA_XR_ENVIRONMENT", "Menu Scene", k_env_labels, k_env_values, 6, 0, false,
+	{ "XWA_XR_ENVIRONMENT", "Menu Scene", k_env_labels, k_env_values, 9, 0, false,
 	  "What surrounds the menu screen: the TIE Fighter box art come to life (Interceptors, a TIE Bomber and "
 	  "an X-wing blown apart under Vader's helmet), the Defender of the Empire box art (a TIE Bomber and TIE "
 	  "Advanced downing an A-wing under a TIE pilot's helmet), the Balance of Power box art (B-wings and TIE "
-	  "Advanced round a Super Star Destroyer), a Star Destroyer and TIE fighters in space, or just stars." },
+	  "Advanced round a Super Star Destroyer), the X-Wing and X-Wing vs. TIE Fighter box arts, one of these "
+	  "at random, a Star Destroyer and TIE fighters in space, or just stars." },
 	{ "XWA_XR_ENV_BRIGHTNESS", "Menu Scene Brightness", k_env_bright_labels, k_env_bright_values, 3, 1, false,
 	  NULL },
 	{ "XWA_XR_CONSOLE", "Lap Console", k_off_on, k_0_1, 2, 1, false,
@@ -198,7 +201,8 @@ static int TieVrOptions_Current(const TieVrOptionRow* row) {
 			return i;
 	/* The menu scene's other spellings (xr_env.c). */
 	if (row->values == k_env_values) {
-		static const char* const aliases[] = { "tiefighter", "defender", "balance", "fleet", "stars", "none" };
+		static const char* const aliases[] = { "tiefighter", "defender", "balance", "boxart", "xvt",
+											   "random",     "fleet",    "stars",   "none" };
 		for (int i = 0; i < row->count; ++i)
 			if (SDL_strcasecmp(value, aliases[i]) == 0)
 				return i;
