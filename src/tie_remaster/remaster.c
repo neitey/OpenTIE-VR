@@ -1418,6 +1418,7 @@ static bool TieRemaster_FrameBody(const TieSnapshot* snapshot, int32_t delta_us,
 			const bool dimmed = !snapshot || snapshot->scene_kind == TIE_SCENE_CUTSCENE ||
 								snapshot->scene_kind == TIE_SCENE_FLIGHT_LOADING || title;
 			TieXrIntroCrawl_SetSnapshot(snapshot, TieProfile_UsesTie98Frontend());
+			TieFlightXrEnv_SetSettingsOpen(g_remaster.menu_overlay_open);
 			const uint64_t prof_t = TieXrProf_Now();
 			if (TieFlightXrEnv_Render(flight->renderer, g_remaster.assets, g_remaster.host_elapsed_us, !in_mission,
 									  dimmed))

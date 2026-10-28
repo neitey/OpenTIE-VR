@@ -3,6 +3,7 @@
 #include "tie_remaster/flight/xr_env.h"
 #include "tie_remaster/flight/xr_env_tieart.h"
 #include "tie_remaster/flight/xr_intro_crawl.h"
+#include "tie_runtime/input/vr_controls.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -128,9 +129,25 @@ static struct {
 	uint64_t art_up_us;	 /* since */
 	bool screen_control; /* the screen's fade / input block are ours */
 	/* The opening title crawl in 3D (xr_intro_crawl.c). */
-	bool crawl_screen; /* it put the screen away */
-	bool stars_off;	   /* no stars yet (before its logo) */
-} s_env;
+	bool stars_off; /* no stars yet (before its logo) */
+	/* The frame image's lowest visible row (its bezel's lower edge). */
+	float frame_bottom_row;
+	/* X in the menus puts the screen away (OpenXWA-VR's s_dismiss): it fades
+	 * out with its frame, the logo comes in large where it was, and nothing
+	 * reaches the menus until X, A or the trigger brings it back. */
+	bool away;
+	float away_level; /* 1 shown .. 0 gone */
+	float away_logo;  /* the large logo meanwhile, 0 .. 1 */
+	/* Y swaps the scene in place; the button hints and the screen's state
+	 * stay up while the next one loads. Until the next mission. */
+	bool swapped;
+	char swap_saved[16]; /* the new choice, for the settings file (once) */
+	bool settings_open;	 /* the OpenTIE settings window is on the screen */
+	/* This frame's chrome: the button hints' and the large logo's opacity. */
+	float hints, away_logo_alpha;
+} s_env = { .away_level = 1.0f };
+
+#define TIE_XR_ENV_AWAY_S 0.4f
 
 /* The screen as usual again (after the TIE Fighter scene's startup show). */
 static void TieXrEnv_ScreenNormal(void) {
@@ -535,6 +552,11 @@ void TieFlightXrEnv_ReleaseShips(void) {
 	if (TieXrArt_ReleaseShips())
 		s_env.art_up = false; /* fades in again with its craft */
 	TieXrEnv_ScreenNormal();
+	/* A mission: the screen is back after it, the scene's own again. */
+	s_env.away = false;
+	s_env.away_level = 1.0f;
+	s_env.away_logo = 0.0f;
+	s_env.swapped = false;
 	for (int m = 0; m < TIE_XR_ENV_MODEL_COUNT; ++m) {
 		if (s_env.models[m].mesh)
 			AeronScene_MeshDestroy(s_env.models[m].mesh);
@@ -827,6 +849,14 @@ static void TieXrEnv_LoadFrame(AeronCommandBuffer* cmd) {
 														 })) {
 					s_env.frame = t;
 					s_env.frame_w = (int)w;
+					/* Its lowest visible row: the button hints go under it. */
+					s_env.frame_bottom_row = 0.0f;
+					for (uint32_t y = h; y-- > 0 && s_env.frame_bottom_row <= 0.0f;)
+						for (uint32_t x = 0; x < w; ++x)
+							if (rgba[((size_t)y * w + x) * 4 + 3] > 20) {
+								s_env.frame_bottom_row = (float)(y + 1);
+								break;
+							}
 					s_env.frame_h = (int)h;
 				} else if (t) {
 					Aeron_DestroyTexture(t);
@@ -965,6 +995,8 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 		TieXrArt_Submit(scene, ships, fade);
 	if (crawl)
 		TieXrIntroCrawl_Submit(scene, base.pos, TieFlightXr_UnitsPerMeter());
+	else if (s_env.hints > 0.0f || s_env.away_logo_alpha > 0.0f)
+		TieXrArt_SubmitChrome(scene, base.pos, s_env.hints, s_env.away_logo_alpha);
 	/* The controllers or gloves (VR Options > Hands), in front of the
 	 * virtual screen where they reach over it; none while the screen is
 	 * away (the TIE Fighter scene's startup show). */
@@ -1068,6 +1100,42 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 	return ok;
 }
 
+/* Y: the next scene in place, for this run and saved like the VR settings'
+ * Menu Scene (TieFlightXrEnv_TakeSceneSwap). Random and Off are not in the
+ * round. */
+static void TieXrEnv_NextScene(TieFlightXrEnvMode mode) {
+	static const struct {
+		TieFlightXrEnvMode mode;
+		const char* value;
+	} order[] = {
+		{ TIE_FLIGHT_XR_ENV_TIEFIGHTER, "tiefighter" }, { TIE_FLIGHT_XR_ENV_DEFENDER, "defender" },
+		{ TIE_FLIGHT_XR_ENV_BALANCE, "balance" },		{ TIE_FLIGHT_XR_ENV_FLEET, "1" },
+		{ TIE_FLIGHT_XR_ENV_XWING, "xwing" },			{ TIE_FLIGHT_XR_ENV_XVT, "xvt" },
+		{ TIE_FLIGHT_XR_ENV_STARS, "0" },
+	};
+	const int n = (int)(sizeof order / sizeof order[0]);
+	int at = -1;
+	for (int i = 0; i < n; ++i)
+		if (order[i].mode == mode)
+			at = i;
+	const char* next = order[(at + 1) % n].value;
+	SDL_setenv_unsafe("XWA_XR_ENVIRONMENT", next, 1);
+	snprintf(s_env.swap_saved, sizeof s_env.swap_saved, "%s", next);
+	s_env.swapped = true;
+	Aeron_LogInfo("tie.vr", "menu scene: %s (Y)", next);
+}
+
+const char* TieFlightXrEnv_TakeSceneSwap(void) {
+	static char taken[16];
+	if (!s_env.swap_saved[0])
+		return NULL;
+	snprintf(taken, sizeof taken, "%s", s_env.swap_saved);
+	s_env.swap_saved[0] = '\0';
+	return taken;
+}
+
+void TieFlightXrEnv_SetSettingsOpen(bool open) { s_env.settings_open = open; }
+
 bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* assets, uint64_t time_us, bool ships,
 						   bool dimmed) {
 	TieFlightXrEnvMode mode = TieFlightXrEnv_Mode();
@@ -1084,9 +1152,7 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 		s_env.last_mode = mode;
 	}
 	const bool art = TieXrEnv_IsArt(mode);
-	if (!art)
-		TieXrEnv_ScreenNormal();
-	else
+	if (art)
 		TieXrArt_SetScene(mode == TIE_FLIGHT_XR_ENV_DEFENDER  ? TIE_XR_ART_DEFENDER
 						  : mode == TIE_FLIGHT_XR_ENV_BALANCE ? TIE_XR_ART_BALANCE
 						  : mode == TIE_FLIGHT_XR_ENV_XWING	  ? TIE_XR_ART_XWING
@@ -1097,6 +1163,7 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 		xr.height <= 0 || !xr.eye_targets[0] || !xr.eye_targets[1]) {
 		s_env.rendering = false;
 		TieXrEnv_ScreenNormal();
+		TieVrControls_SetMenuSceneButtons(false);
 		return false;
 	}
 	if (!TieFlightRenderer_EnsureOutputSize(g, xr.width, xr.height))
@@ -1162,6 +1229,9 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	}
 	if (!art && mode != TIE_FLIGHT_XR_ENV_OFF && s_env.menu_seen)
 		TieXrArt_SkipStartupShow();
+	/* The logo and the button hints, in every scene (from the first menu). */
+	if (ok && s_env.menu_seen && !crawl)
+		TieXrArt_PrepareChrome(cmd);
 	if (art && s_env.ready && s_env.menu_seen && !s_env.art_up) {
 		s_env.art_up = true;
 		s_env.art_up_us = time_us;
@@ -1195,9 +1265,9 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	 * show keeps the screen away (and the controllers on A only) until the
 	 * fight has come to the cover's moment. */
 	float reveal = 1.0f;
-	if (art) {
-		/* Where the screen and its frame are, for the logo above them and the
-		 * startup title (OpenXWA-VR's env_screen). */
+	{
+		/* Where the screen and its frame are, for the logo above them, the
+		 * startup title and the button hints (OpenXWA-VR's env_screen). */
 		float dist = 2.1f, sw = 2.1f, sh = 1.575f, lift = 0.0f;
 		if (!Aeron_XrVirtualScreenGeometry(&dist, &sw, &sh, &lift)) {
 			dist = TieXrEnv_EnvFloat("AERON_XR_SCREEN_DISTANCE", dist);
@@ -1216,31 +1286,86 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 		screen.frame_scale = dist > 0.01f ? screen.frame_dist / dist : 1.0f;
 		screen.frame_top =
 			s_env.frame ? k_frame_opening[1] * screen.pic_w / (k_frame_opening[2] - k_frame_opening[0]) : 0.0f;
+		screen.frame_bottom =
+			s_env.frame && s_env.frame_bottom_row > k_frame_opening[3]
+				? (s_env.frame_bottom_row - k_frame_opening[3]) * screen.pic_w / (k_frame_opening[2] - k_frame_opening[0])
+				: 0.0f;
 		screen.units = TieFlightXr_UnitsPerMeter();
 		TieXrArt_SetScreen(&screen);
 	}
+	/* X and Y in the menus (OpenXWA-VR's): X puts the screen away and brings
+	 * it back (so do A and the trigger), Y swaps the scene. Only with a scene
+	 * round the menus: not in films, loading, flight or the in-flight rooms,
+	 * not with the settings window up, not before the startup show's title
+	 * has been passed; meanwhile stale presses are dropped. */
+	const bool menus = !dimmed && s_env.menu_seen && !crawl && ships;
+	const bool title = art && TieXrArt_TitleActive();
+	const bool keys = menus && !s_env.settings_open && !title;
+	TieVrControls_SetMenuSceneButtons(keys);
+	if (s_env.settings_open)
+		s_env.away = false; /* the settings window needs the screen */
+	if (keys) {
+		if (Aeron_XrTakeMenuXPressed()) {
+			s_env.away = !s_env.away;
+			Aeron_LogInfo("tie.vr", "menu screen %s (X)", s_env.away ? "put away" : "back");
+		}
+		if (Aeron_XrTakeMenuYPressed())
+			TieXrEnv_NextScene(mode);
+		if (s_env.away && Aeron_XrTakeAPressed()) {
+			s_env.away = false;
+			Aeron_LogInfo("tie.vr", "menu screen back (A)");
+		}
+	} else {
+		(void)Aeron_XrTakeMenuXPressed();
+		(void)Aeron_XrTakeMenuYPressed();
+	}
+	{
+		const float away_step = dt / TIE_XR_ENV_AWAY_S;
+		s_env.away_level = s_env.away ? fmaxf(s_env.away_level - away_step, 0.0f)
+									  : fminf(s_env.away_level + away_step, 1.0f);
+		/* The logo comes in as slowly as at the title, goes with the screen. */
+		s_env.away_logo =
+			s_env.away
+				? fminf(s_env.away_logo + dt / fmaxf(TieXrEnv_EnvFloat("XWA_XR_TITLE_FADE_SECONDS", 1.2f), 0.01f), 1.0f)
+				: fmaxf(s_env.away_logo - away_step, 0.0f);
+	}
+	const float away_x = s_env.away_level * s_env.away_level * (3.0f - 2.0f * s_env.away_level);
+	const float away_reveal = s_env.away ? away_x : fmaxf(away_x, 1e-3f);
+	bool control = false, block = false;
 	if (art && s_env.art_up) {
 		if (ships)
 			TieXrArt_Advance(dt, xr.views[0].orientation);
 		reveal = TieXrArt_ScreenReveal();
-		s_env.screen_control = true;
-		Aeron_XrSetScreenFade(reveal);
-		Aeron_XrSetInputBlocked(reveal <= 0.0f);
+		control = true;
+		block = reveal <= 0.0f;
 	}
+	if (menus) {
+		reveal *= away_reveal;
+		control = true;
+		block = block || s_env.away || reveal <= 0.0f;
+	}
+	TieXrArt_SetDismissReveal(menus ? away_reveal : 1.0f);
+	/* The chrome: the hints with the screen and while it is away (after a
+	 * swap at once, else with the scene's fade in); the large logo while it
+	 * is away. */
+	const float away_logo = s_env.away_logo * s_env.away_logo * (3.0f - 2.0f * s_env.away_logo);
+	s_env.hints = menus && !title ? (s_env.swapped ? 1.0f : fade) : 0.0f;
+	s_env.away_logo_alpha = menus && !title ? away_logo * (1.0f - away_reveal) : 0.0f;
 	/* The title crawl in 3D: the screen away while it plays and the
-	 * controllers blocked but for its skip buttons (A, the menu button),
-	 * back with the intro film. */
+	 * controllers blocked but for its skip button (A; the menu button
+	 * arrives as Escape), back with the intro film. */
 	if (crawl) {
 		reveal = 0.0f;
-		s_env.screen_control = true;
-		s_env.crawl_screen = true;
-		Aeron_XrSetScreenFade(0.0f);
-		Aeron_XrSetInputBlocked(1);
+		control = true;
+		block = true;
 		TieXrIntroCrawl_PollSkip();
-	} else if (s_env.crawl_screen) {
-		s_env.crawl_screen = false;
-		if (!(art && s_env.art_up))
-			TieXrEnv_ScreenNormal();
+	}
+	if (control) {
+		s_env.screen_control = true;
+		Aeron_XrSetScreenFade(reveal);
+		Aeron_XrSetInputBlocked(block);
+	} else {
+		TieXrEnv_ScreenNormal();
 	}
 	if (ok)
 		ok = TieXrEnv_RenderEyes(g, cmd, &xr, t_s, mode, ships, fade, gain, reveal, crawl);

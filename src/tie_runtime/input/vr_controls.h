@@ -35,6 +35,9 @@ uint32_t TieVrControls_Frame(bool settings_open, bool host_paused);
 
 /* Nonzero while the frame's mode is flight (see above). */
 bool TieVrControls_InFlight(void);
+/* The VR menu scene is up round the menus and takes X (screen away and
+ * back) and Y (next scene): they send no keys to the menus meanwhile. */
+void TieVrControls_SetMenuSceneButtons(bool on);
 
 /* The VR lap console / quick wheel (tie_remaster/flight/vr_console.c)
  * share the left grip and the triggers with the flight buttons:

@@ -10,6 +10,9 @@
  * in stereo every host frame through the flight renderer's AeronScene, then
  * Aeron_XrStereoCommitBackdrop lets the engine compose the virtual screen in
  * front of it. The right controller's pointer beam is drawn over the screen.
+ * In the menus (OpenXWA-VR's) X puts the screen away and brings it back (A and
+ * the trigger bring it back too), Y changes the scene in place; a line under
+ * the frame says so (XWA_XR_BUTTON_HINTS=0: none; XWA_XR_BUTTON_HINT_SCALE).
  *
  * Settings (environment, read live; names shared with OpenXWA-VR):
  *   XWA_XR_ENVIRONMENT      tiefighter (default, also unset) the TIE Fighter box art |
@@ -92,6 +95,12 @@ TieFlightXrEnvMode TieFlightXrEnv_Mode(void);
  * (setting off, no XR frame, failure). */
 bool TieFlightXrEnv_Render(struct TieFlightRenderer* renderer, const struct TieFlightAssetSource* assets,
 						   uint64_t time_us, bool ships, bool dimmed);
+
+/* The OpenTIE settings window is up (X and Y leave the screen alone). */
+void TieFlightXrEnv_SetSettingsOpen(bool open);
+/* The scene Y switched to (an XWA_XR_ENVIRONMENT value) once, for the
+ * settings file; NULL when there is none new. */
+const char* TieFlightXrEnv_TakeSceneSwap(void);
 
 /* Frees the craft meshes (entering a mission); textures stay. */
 void TieFlightXrEnv_ReleaseShips(void);

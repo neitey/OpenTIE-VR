@@ -2819,17 +2819,24 @@ static void art_draw_key_ring(AeronDrawList2D* list, AeronTextStyle* style, cons
 	AeronText_Draw(list, style, cx - 0.5f * w, cy - 0.5f * h, AERON_TEXT_LEFT, key, -1, NULL);
 }
 
+/* OpenTIE's menu font, for the title's prompt and the button hints (once). */
+static void art_load_font(AeronCommandBuffer* cmd) {
+	if (s_text.font_state != 0 || !cmd)
+		return;
+	s_text.font_state = -1;
+	if (AeronFontAtlas_LoadVfs(&s_text.font, cmd, Aeron_GetVfs(), AERON_VFS_ROOT_RESOURCE, "assets/fonts/menu",
+							   16u * 1024u * 1024u))
+		s_text.font_state = 1;
+	else
+		Aeron_LogWarn("tie.vr", "menu scene: no font for the title's prompt");
+}
+
 /* "Press (A) to Continue" into a texture of its own (once). */
 static void art_title_text(AeronCommandBuffer* cmd) {
 	if (s_text.rt || s_text.font_state < 0 || !cmd)
 		return;
 	if (s_text.font_state == 0) {
-		s_text.font_state = -1;
-		if (AeronFontAtlas_LoadVfs(&s_text.font, cmd, Aeron_GetVfs(), AERON_VFS_ROOT_RESOURCE, "assets/fonts/menu",
-								   16u * 1024u * 1024u))
-			s_text.font_state = 1;
-		else
-			Aeron_LogWarn("tie.vr", "menu scene: no font for the title's prompt");
+		art_load_font(cmd);
 		return; /* drawn next time */
 	}
 	s_text.w = 1024;
@@ -2897,6 +2904,140 @@ static void art_submit_title(AeronScene3D* scene) {
 				 AERON_SCENE_BILLBOARD_BLEND_PMA, c, tint);
 }
 
+/* ---- the button hints and the screen put away (X / Y in the menus) ---------
+ * OpenXWA-VR's: one line in small type under the frame, each button's letter
+ * in a ring (the menu beam's blue), what it does beside it; while the screen
+ * is put away the logo large where it was, as at the startup title. */
+static struct {
+	AeronRenderTarget* rt;
+	AeronDrawList2D* list;
+	int w, h;
+	bool failed;
+} s_hint;
+
+static const char* const k_hint_lines[2][2] = {
+	{ "X", "Toggle 2D screen" },
+	{ "Y", "Change VR environment" },
+};
+
+/* The screen's own reveal (X), for the logo above the frame. */
+static float s_dismiss_reveal = 1.0f;
+
+static void art_hint_text(AeronCommandBuffer* cmd) {
+	if (s_hint.rt || s_hint.failed || !cmd)
+		return;
+	if (s_text.font_state == 0) {
+		art_load_font(cmd);
+		return; /* drawn next time */
+	}
+	if (s_text.font_state < 0) {
+		s_hint.failed = true;
+		return;
+	}
+	s_hint.w = 2048;
+	s_hint.h = 128;
+	s_hint.rt = Aeron_CreateRenderTarget(&(AeronRenderTargetDesc) {
+		.width = s_hint.w, .height = s_hint.h, .format = AERON_TEXTURE_FORMAT_RGBA8_UNORM });
+	s_hint.list = AeronDrawList_Create(64);
+	if (!s_hint.rt || !s_hint.list) {
+		s_hint.failed = true;
+		return;
+	}
+	AeronTextStyle style;
+	memset(&style, 0, sizeof style);
+	style.font = &s_text.font;
+	style.filter = AERON_BLIT2D_FILTER_LINEAR;
+	style.scale = 1.0f;
+	/* (X) action    (Y) action, centred; the line at most 62 % of the
+	 * texture's height, the whole as wide as it allows. */
+	const float line = AeronText_LineHeight(&style);
+	const float ring = 1.15f * line, gap = 0.35f * line, between = 1.4f * line;
+	float block = between;
+	for (int i = 0; i < 2; ++i)
+		block += ring + gap + AeronText_MeasureWidth(&style, k_hint_lines[i][1], -1);
+	style.scale = fminf(block > 0.0f ? 0.94f * (float)s_hint.w / block : 1.0f,
+						line > 0.0f ? 0.62f * (float)s_hint.h / (1.15f * line) : 1.0f);
+	const float k = style.scale;
+	const float x0 = 0.5f * ((float)s_hint.w - block * k);
+	const float mid = 0.5f * (float)s_hint.h;
+	AeronDrawList_Begin(s_hint.list, s_hint.rt, s_hint.w, s_hint.h, AERON_DRAWLIST2D_CLEAR, NULL);
+	{
+		/* A dark, soft-edged plate: readable over a bright explosion too. */
+		AeronDrawList2DRRect plate;
+		memset(&plate, 0, sizeof plate);
+		const float pad = 0.5f * line * k;
+		plate.dst_x = fmaxf(x0 - pad, 2.0f);
+		plate.dst_w = fminf(block * k + 2.0f * pad, (float)s_hint.w - 4.0f);
+		plate.dst_y = 4.0f;
+		plate.dst_h = (float)s_hint.h - 8.0f;
+		plate.radius_px = 0.5f * plate.dst_h;
+		plate.soft_px = 10.0f;
+		plate.fill_top[3] = plate.fill_bottom[3] = 0.5f;
+		AeronDrawList_AddRRect(s_hint.list, &plate);
+	}
+	float x = x0;
+	for (int i = 0; i < 2; ++i) {
+		/* The letter and its ring in the menu beam's blue, the action in white. */
+		style.tint[0] = 0.55f;
+		style.tint[1] = 0.8f;
+		style.tint[2] = 1.0f;
+		style.tint[3] = 1.0f;
+		art_draw_key_ring(s_hint.list, &style, k_hint_lines[i][0], x + 0.5f * ring * k, mid, ring * k);
+		x += (ring + gap) * k;
+		style.tint[0] = style.tint[1] = style.tint[2] = 0.92f;
+		AeronText_Draw(s_hint.list, &style, x, mid - 0.5f * line * k, AERON_TEXT_LEFT, k_hint_lines[i][1], -1, NULL);
+		x += AeronText_MeasureWidth(&style, k_hint_lines[i][1], -1) + between * k;
+	}
+	AeronDrawList_Render(s_hint.list, cmd);
+}
+
+void TieXrArt_PrepareChrome(AeronCommandBuffer* cmd) {
+	if (!cmd)
+		return;
+	if (!s_art.logo_tried) {
+		s_art.logo_tried = true;
+		art_load_rgba(cmd, ART_TEX_LOGO, "logo", "XWA_XR_LOGO");
+		return;
+	}
+	art_hint_text(cmd);
+}
+
+void TieXrArt_SetDismissReveal(float reveal) { s_dismiss_reveal = fminf(fmaxf(reveal, 0.0f), 1.0f); }
+
+void TieXrArt_SubmitChrome(AeronScene3D* scene, const float view_pos[3], float hints, float logo) {
+	if (!scene || !s_art.have_screen)
+		return;
+	const float saved_fade = s_fade;
+	const float saved_pos[3] = { s_art.view_pos[0], s_art.view_pos[1], s_art.view_pos[2] };
+	memcpy(s_art.view_pos, view_pos, sizeof s_art.view_pos);
+	s_fade = 1.0f;
+	if (logo > 0.0f)
+		art_submit_logo_at(scene, logo, true);
+	if (hints > 0.0f && s_hint.rt && art_env("XWA_XR_BUTTON_HINTS", 1.0f) != 0.0f) {
+		/* Centred under the frame (or the bare screen), in the frame's plane;
+		 * letters about 7.5 cm tall at the screen's 3.2 m (the line is 62 % of
+		 * the texture's height). */
+		const TieXrArtScreen* sc = &s_art.screen;
+		const float f = sc->frame_scale, k = sc->units;
+		const float th = 0.14f * art_env("XWA_XR_BUTTON_HINT_SCALE", 1.0f) * sc->dist / 3.2f;
+		const float tw = th * (float)s_hint.w / (float)s_hint.h;
+		const float up = (sc->lift - 0.5f * sc->pic_h - sc->frame_bottom) * f - 0.03f - 0.5f * th;
+		const float center[3] = { s_art.view_pos[0], s_art.view_pos[1] + (sc->frame_dist + 0.02f) * k,
+								  s_art.view_pos[2] + up * k };
+		const float ax[3] = { 0.5f * tw * k, 0.0f, 0.0f };
+		const float ay[3] = { 0.0f, 0.0f, 0.5f * th * k };
+		float c[4][3];
+		art_rect(center, ax, ay, c);
+		const float tint[4] = { hints, hints, hints, 0.85f * hints };
+		art_quad_tex(scene, Aeron_RenderTargetGetTexture(s_hint.rt), AERON_SCENE_BILLBOARD_STAGE_OVERLAY,
+					 AERON_SCENE_BILLBOARD_BLEND_PMA, c, tint);
+	}
+	s_fade = saved_fade;
+	memcpy(s_art.view_pos, saved_pos, sizeof saved_pos);
+}
+
+bool TieXrArt_TitleActive(void) { return art_title_active(); }
+
 void TieXrArt_Submit(AeronScene3D* scene, bool ships, float fade) {
 	if (!scene)
 		return;
@@ -2939,7 +3080,7 @@ void TieXrArt_Submit(AeronScene3D* scene, bool ships, float fade) {
 	/* The logo above the frame: at the cover's moment (in with the screen),
 	 * and throughout when the screen is up from the start; the title. */
 	if (!ships || s_art.anim_t >= ART_ANIM_SECONDS || TieXrArt_ScreenReveal() >= 1.0f)
-		art_submit_logo_at(scene, TieXrArt_ScreenReveal(), false);
+		art_submit_logo_at(scene, TieXrArt_ScreenReveal() * s_dismiss_reveal, false);
 	art_submit_title(scene);
 }
 
@@ -3223,6 +3364,11 @@ void TieXrArt_Shutdown(void) {
 	for (int i = 0; i < ES_COUNT; ++i)
 		if (s_art.clip[i])
 			Aeron_AudioClipDestroy(s_art.clip[i]);
+	if (s_hint.list)
+		AeronDrawList_Destroy(s_hint.list);
+	if (s_hint.rt)
+		Aeron_DestroyRenderTarget(s_hint.rt);
+	memset(&s_hint, 0, sizeof s_hint);
 	if (s_text.list)
 		AeronDrawList_Destroy(s_text.list);
 	if (s_text.rt)

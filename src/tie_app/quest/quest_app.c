@@ -25,6 +25,7 @@
 #include "tie_app/quest/crash_report.h"
 #include "tie_app/quest/error_screen.h"
 #include "tie_app/quest/xr_tier.h"
+#include "tie_remaster/flight/xr_env.h"
 
 static char s_external[1024];
 static char s_tie95[1100];
@@ -543,6 +544,10 @@ void TieQuest_Frame(void) {
 	static int frames;
 	if (g_shim_frame_mark)
 		g_shim_frame_mark();
+	/* Y in the menus changed the scene: kept like the VR settings' choice. */
+	const char* scene = TieFlightXrEnv_TakeSceneSwap();
+	if (scene)
+		TieQuest_SaveSetting("XWA_XR_ENVIRONMENT", scene);
 	if (g_shim_take_log) {
 		char text[4096];
 		if (g_shim_take_log(text, (int)sizeof text) > 0) {

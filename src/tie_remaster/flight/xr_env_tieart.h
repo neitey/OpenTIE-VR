@@ -42,6 +42,7 @@ struct TieFlightAssetSource;
 typedef struct TieXrArtScreen {
 	float dist, lift, pic_w, pic_h;
 	float frame_dist, frame_scale, frame_top;
+	float frame_bottom; /* the bezel's lower edge below the picture's (its plane) */
 	float units;
 } TieXrArtScreen;
 
@@ -60,6 +61,20 @@ typedef enum TieXrArtScene {
 	TIE_XR_ART_XWING, /* the X-Wing box art: X-wings and TIE fighters over a purple nebula */
 	TIE_XR_ART_XVT,   /* the X-Wing vs. TIE Fighter box art: its two pilots behind an explosion */
 } TieXrArtScene;
+
+/* The menus' chrome in every scene (not only the box arts): the logo and
+ * the button hints' texture, one step per call. */
+void TieXrArt_PrepareChrome(AeronCommandBuffer* cmd);
+/* The button hints under the frame ("X Toggle 2D screen", "Y Change VR
+ * environment") at opacity `hints`, and the logo large where the screen is
+ * while it is put away at `logo` (0 none); `view_pos` the viewer (world
+ * units). Needs TieXrArt_SetScreen. */
+void TieXrArt_SubmitChrome(struct AeronScene3D* scene, const float view_pos[3], float hints, float logo);
+/* The screen's reveal by X (1 shown .. 0 away): the logo above the frame
+ * goes with it. */
+void TieXrArt_SetDismissReveal(float reveal);
+/* The startup show's title is still to come or up (X and Y wait). */
+bool TieXrArt_TitleActive(void);
 
 /* The box art shown (the fight starts over when it changes). */
 void TieXrArt_SetScene(TieXrArtScene scene);

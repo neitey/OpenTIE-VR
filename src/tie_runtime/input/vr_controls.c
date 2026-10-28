@@ -244,7 +244,15 @@ static void TieVrControls_FlightButton(AeronXrButton button, bool shifted, bool 
 	}
 }
 
+/* The VR menu scene takes X and Y (screen away / next scene) while it is up
+ * round the menus (TieVrControls_SetMenuSceneButtons). */
+static bool g_menu_scene_buttons;
+
+void TieVrControls_SetMenuSceneButtons(bool on) { g_menu_scene_buttons = on; }
+
 static void TieVrControls_MenuButton(AeronXrButton button, bool flight_scene) {
+	if (!flight_scene && g_menu_scene_buttons && (button == AERON_XR_BUTTON_X || button == AERON_XR_BUTTON_Y))
+		return; /* the menu scene's (Aeron_XrTakeMenuX/YPressed) */
 	if (flight_scene && TieFlightPause_IsActive()) {
 		/* The game's own pause ('p'): A or B resumes. */
 		if (button == AERON_XR_BUTTON_A || button == AERON_XR_BUTTON_B)

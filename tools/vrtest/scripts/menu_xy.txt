@@ -1,0 +1,28 @@
+# VR menus: X puts the screen away and brings it back (A too), Y changes the
+# scene in place; the button hints under the frame say so.
+# Run: tools/vrtest/run.sh <build> tools/vrtest/scripts/menu_xy.txt <out> TIE_TEST_XR=1
+0 wait shell 8
++5 key Space                   # past the crawl
+0 wait shell 10
++5 key Return                  # past the intro films
+0 wait shell 100
++400 xrmenu x                  # during the startup show: X does nothing
++10 xrmenu a                   # past the startup title
++60 xrmenu y                   # Y at registration: the next scene
++5 log ---- registration
++60 text TEST                  # pilot name
++30 key Return
++120 mouse 1245 612
++10 mouse 1245 612 click
+0 wait shell 110 timeout=900   # concourse
++60 capture hints              # the screen with "X Toggle 2D screen  Y Change VR environment" under it
++5 xrmenu x
++60 capture away               # the screen put away, the logo large in its place
++5 xrmenu a                    # A brings it back
++60 capture back
++5 xrmenu y                    # the next scene
++120 capture swapped
++5 xrmenu x
++30 xrmenu x                   # X away and back again
++60 capture back_x
++5 quit
