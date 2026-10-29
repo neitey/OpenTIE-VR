@@ -30,4 +30,16 @@ void TieShell_PushSuddenSceneFadeTask(void);
 
 void TieShell_Begin(int16_t scene, int16_t script);
 
+/* The scene the shell is running now (0 before the first). */
+int16_t TieShell_CurrentScene(void);
+void TieShell_NoteScene(int16_t scene);
+/* The startup films and the title crawl, before the TIE Fighter logo. */
+bool TieShell_IsIntroScene(int16_t scene);
+/* VR menu button in the intro: when the current scene ends, the shell goes
+ * on to the TIE Fighter logo (SCENE_TIELOGO) instead of the next intro film. */
+void TieShell_RequestIntroSkip(void);
+/* The shell's next scene once `cur_scene` has ended, with a pending intro
+ * skip applied (and cleared). */
+int16_t TieShell_ApplyIntroSkip(int16_t cur_scene, int16_t next_scene);
+
 #endif

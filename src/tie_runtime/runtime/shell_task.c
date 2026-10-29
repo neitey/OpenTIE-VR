@@ -17,6 +17,54 @@
 #include <landru/view.h>
 #include <landru/viewadd.h>
 
+#include "aeron/log.h"
+
+static int16_t s_current_scene;
+static bool s_intro_skip;
+
+int16_t TieShell_CurrentScene(void) { return s_current_scene; }
+
+void TieShell_NoteScene(int16_t scene) { s_current_scene = scene; }
+
+bool TieShell_IsIntroScene(int16_t scene) {
+	/* play1_next_scene from the LucasArts logo (6) to the TIE Fighter logo
+	 * (80): perelogo, the title crawl, the Star Destroyer, city, Emperor,
+	 * swarm, bridge and platform films and their branches. */
+	switch (scene) {
+		case 6:
+		case 7:
+		case SCENE_TITLE:
+		case 10:
+		case 20:
+		case 30:
+		case 31:
+		case 32:
+		case 40:
+		case 50:
+		case 60:
+		case 61:
+		case 70:
+		case 71:
+		case 72:
+			return true;
+		default:
+			return false;
+	}
+}
+
+void TieShell_RequestIntroSkip(void) { s_intro_skip = true; }
+
+int16_t TieShell_ApplyIntroSkip(int16_t cur_scene, int16_t next_scene) {
+	if (!s_intro_skip)
+		return next_scene;
+	s_intro_skip = false;
+	if (!TieShell_IsIntroScene(cur_scene) || next_scene == SCENE_TIELOGO)
+		return next_scene;
+	Aeron_LogInfo("tie.shell", "intro skipped at scene %d: on to the TIE Fighter logo (instead of %d)",
+				  (int)cur_scene, (int)next_scene);
+	return SCENE_TIELOGO;
+}
+
 /* Push the "back stage to VGA" fade task: the caller yields after this
  * call; the fade task's end callback restores the cursor as it pops,
  * matching the pre/post cursor state of the original synchronous

@@ -9,6 +9,7 @@
 #include "tie_runtime/input/vr_buttons.h"
 #include "tie_runtime/runtime/flight_requests.h"
 #include "tie_runtime/runtime/flight_screen.h"
+#include "tie_runtime/runtime/shell_task.h"
 #include "tie_runtime/snapshot/snapshot.h"
 
 #include <SDL3/SDL_stdinc.h>
@@ -280,6 +281,29 @@ static bool TieVrControls_InCutscene(const TieSnapshot* snapshot) {
 		   SDL_strcasecmp(snapshot->current_film_name, "title") == 0;
 }
 
+/* A skip in a cutscene. A ends this scene (Space: the next one follows);
+ * the menu button in the startup intro ends all of it, on to the TIE
+ * Fighter logo. On the logo either one goes on to the game (Enter, the
+ * logo's skip to registration / the main menu) rather than the credits
+ * that follow it when it plays out (Space). */
+static void TieVrControls_SkipCutscene(bool menu_button) {
+	const int16_t scene = TieShell_CurrentScene();
+	const char* by = menu_button ? "menu button" : "A";
+	if (scene == SCENE_TIELOGO) {
+		TieInput_EnqueueKey(13);
+		Aeron_LogInfo("tie.input", "TIE Fighter logo skipped (%s)", by);
+		return;
+	}
+	if (menu_button && TieShell_IsIntroScene(scene)) {
+		TieShell_RequestIntroSkip();
+		TieInput_EnqueueKey(' ');
+		Aeron_LogInfo("tie.input", "intro skipped at scene %d (%s)", (int)scene, by);
+		return;
+	}
+	TieInput_EnqueueKey(' ');
+	Aeron_LogInfo("tie.input", "cutscene skipped (%s)", by);
+}
+
 /* Every 5 s in VR flight: the stick chain from the XR pad to TIE's joystick
  * globals (joystickx/y/roll are the last feinput_getrawinput's), so a
  * headset log shows where steering stops. */
@@ -371,10 +395,8 @@ uint32_t TieVrControls_Frame(bool settings_open, bool host_paused) {
 		if (flight)
 			TieVrControls_FlightButton(button, shift || engine_shifted, chord_offered);
 		else if (cutscene) {
-			if (button == AERON_XR_BUTTON_A) {
-				TieInput_EnqueueKey(' ');
-				Aeron_LogInfo("tie.input", "cutscene skipped (A)");
-			}
+			if (button == AERON_XR_BUTTON_A)
+				TieVrControls_SkipCutscene(false);
 		} else
 			TieVrControls_MenuButton(button, flight_scene);
 	}
@@ -383,8 +405,7 @@ uint32_t TieVrControls_Frame(bool settings_open, bool host_paused) {
 		const AeronInputSnapshot* input = Aeron_InputSnapshot();
 		if (input && input->key_pressed[AERON_KEY_ESCAPE]) {
 			TieInput_SuppressKey(AERON_KEY_ESCAPE);
-			TieInput_EnqueueKey(' ');
-			Aeron_LogInfo("tie.input", "cutscene skipped (menu button)");
+			TieVrControls_SkipCutscene(true);
 		}
 	}
 

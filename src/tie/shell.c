@@ -140,6 +140,7 @@ int32_t shell_Shell(int32_t scene, int32_t script) {
 			const char* music_path;
 			if (exit_flag || xerror_Is_Landru_Error())
 				break;
+			TieShell_NoteScene(cur_scene);
 			if (!TieShell_PrepareScene(cur_scene)) {
 				continuation->finished = true;
 				return exit_flag;
@@ -524,7 +525,7 @@ int32_t shell_Shell(int32_t scene, int32_t script) {
 		}
 #ifdef TIE_MODERN
 		if (continuation->phase == SHELL_PHASE_AWAITING) {
-			next_scene = xerror_Get_Landru_Exit();
+			next_scene = TieShell_ApplyIntroSkip(cur_scene, xerror_Get_Landru_Exit());
 			if (owns_music) {
 				FrontendWaveStream_Shutdown();
 				continuation->owns_tie98_music = false;

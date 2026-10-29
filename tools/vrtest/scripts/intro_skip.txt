@@ -1,0 +1,12 @@
+# VR menu button in the startup intro (vr_controls.c, shell_task.c): it ends
+# the whole intro, on to the TIE Fighter logo (scene 80) instead of the next
+# film; on the logo it goes on to registration (100), not the credits (90).
+# Run: tools/vrtest/run.sh <build> tools/vrtest/scripts/intro_skip.txt <out> TIE_TEST_XR=1
+0 wait shell 8
++40 key Escape 1               # menu button on the title crawl
+0 wait shell 80 timeout=400
++30 capture logo
++10 key Escape 1               # menu button on the logo
+0 wait shell 100 timeout=400
++20 capture menu
++5 quit

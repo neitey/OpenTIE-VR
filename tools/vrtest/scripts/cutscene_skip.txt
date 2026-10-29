@@ -1,5 +1,6 @@
 # VR cutscene skip (vr_controls.c): during the title crawl B, X, the trigger and the grip do
-# nothing, A skips it; in the intro film the menu button (Escape) skips it. Run with
+# nothing, A skips it; in the intro film the menu button (Escape) ends the
+# whole intro, on to the TIE Fighter logo (scene 80; intro_skip.txt). Run with
 # TIE_TEST_XR=1 XWA_XR_INTRO_CRAWL=0 (the 2D crawl).
 0 wait shell 8
 +40 xrbutton b
