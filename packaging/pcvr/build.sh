@@ -385,11 +385,19 @@ mkdir -p "$SRC"
 
 # ---- the game ----------------------------------------------------------------
 STAGE=$BUILD/src-opentie
+archive_tree() { # repo-dir commit stage-dir : the commit's files, nested submodules too
+	local repo=${1:?} sha=${2:?} dest=${3:?} mode type subsha path
+	mkdir -p "$dest"
+	git -C "$repo" archive "$sha" | tar -x -C "$dest"
+	git -C "$repo" ls-tree -r "$sha" | while read -r mode type subsha path; do
+		[ "$type" = commit ] || continue
+		archive_tree "$repo/$path" "$subsha" "$dest/$path"
+	done
+}
 archive_sub() { # superproject-path
 	local sub=${1:?} sha
 	sha=$(git -C "$REPO" ls-tree HEAD "$sub" | awk '{print $3}')
-	mkdir -p "$STAGE/$sub"
-	git -C "$REPO/$sub" archive "$sha" | tar -x -C "$STAGE/$sub"
+	archive_tree "$REPO/$sub" "$sha" "$STAGE/$sub"
 	echo "$sub $(echo "$sha" | cut -c1-7)"
 }
 if [ "$FROM_WORKTREE" = 1 ]; then
