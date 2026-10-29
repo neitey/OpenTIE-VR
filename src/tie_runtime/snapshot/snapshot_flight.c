@@ -24,6 +24,8 @@
 #include "tie_runtime/timing/flight_integration.h"
 
 #include <math.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Capture the world-to-eye basis immediately after camera setup, before
@@ -279,9 +281,8 @@ static uint16_t TieFlightSnapshot_EmitComponents(const FlightObject* obj, uint16
  *      damaged craft on the tick the lightning[N] pattern lands on a
  *      bitmap frame.
  *
- * Position comes from world_*_prev — the snapshot emit runs after
- * move_moveobjects integrates one tick, so world_* is post-move; the
- * classic framebuffer was painted with the pre-move position.
+ * Position: at the presentation time, between world_*_prev (pre-move,
+ * what the classic framebuffer painted) and world_* (post-move).
  */
 static void TieFlightSnapshot_EmitRequiredAssets(void) {
 	for (uint16_t species = 0; species < TIE_SPECIES_COUNT; ++species) {
@@ -304,6 +305,116 @@ static void TieFlightSnapshot_EmitRequiredAssets(void) {
 	}
 }
 
+
+/* ---- presentation interpolation ----------------------------------------
+ * Every object is shown at the presentation clock's time, between the state
+ * one movement frame back (world_*_prev, last frame's orientation) and the
+ * newest (world_*, the current orientation): see
+ * TieFlightIntegration_PresentAlpha. TIE_FLIGHT_INTERPOLATE=0 shows the
+ * previous frame as the classic framebuffer does (no blending). */
+#define TIE_SNAP_TELEPORT_UNITS 32768 /* a larger jump in one frame: no blend */
+
+static bool s_present_on;
+static float s_present_alpha;
+static uint32_t s_present_frame;
+
+typedef struct TieSnapOriCache {
+	uint32_t frame; /* flight frame the orientations belong to */
+	uint16_t id;
+	uint8_t ship_idx;
+	uint8_t valid;
+	float prev[4];
+	float curr[4];
+} TieSnapOriCache;
+
+static TieSnapOriCache s_obj_ori[NUM_OBJECTS];
+static TieSnapOriCache s_cam_ori;
+
+static bool TieFlightSnapshot_InterpolationEnabled(void) {
+	static int enabled = -1;
+	if (enabled < 0) {
+		const char* env = getenv("TIE_FLIGHT_INTERPOLATE");
+		enabled = !(env && env[0] == '0');
+	}
+	return enabled != 0;
+}
+
+static int32_t TieFlightSnapshot_Blend(int32_t from, int32_t to) {
+	const int64_t delta = (int64_t)to - (int64_t)from;
+	return (int32_t)((int64_t)from + (int64_t)lroundf((float)delta * s_present_alpha));
+}
+
+/* prev -> curr at the presentation time; a teleport shows the newest. */
+static void TieFlightSnapshot_BlendPos(int32_t px, int32_t py, int32_t pz, int32_t cx, int32_t cy, int32_t cz,
+									   int32_t out[3]) {
+	if (!s_present_on) {
+		out[0] = px;
+		out[1] = py;
+		out[2] = pz;
+		return;
+	}
+	if (llabs((int64_t)cx - px) > TIE_SNAP_TELEPORT_UNITS || llabs((int64_t)cy - py) > TIE_SNAP_TELEPORT_UNITS ||
+		llabs((int64_t)cz - pz) > TIE_SNAP_TELEPORT_UNITS) {
+		out[0] = cx;
+		out[1] = cy;
+		out[2] = cz;
+		return;
+	}
+	out[0] = TieFlightSnapshot_Blend(px, cx);
+	out[1] = TieFlightSnapshot_Blend(py, cy);
+	out[2] = TieFlightSnapshot_Blend(pz, cz);
+}
+
+static void TieFlightSnapshot_ObjectPos(const FlightObject* obj, int32_t out[3]) {
+	TieFlightSnapshot_BlendPos(obj->world_x_prev, obj->world_y_prev, obj->world_z_prev, obj->world_x, obj->world_y,
+							   obj->world_z, out);
+}
+
+/* q is the orientation now (this flight frame); replaced by the one at the
+ * presentation time. The cache keeps the previous frame's per slot. */
+static void TieFlightSnapshot_BlendOri(TieSnapOriCache* c, uint16_t id, uint8_t ship_idx, float q[4]) {
+	if (!s_present_on)
+		return;
+	const uint32_t frame = s_present_frame;
+	if (!c->valid || c->id != id || c->ship_idx != ship_idx || c->frame != frame) {
+		const bool continues = c->valid && c->id == id && c->ship_idx == ship_idx && c->frame + 1u == frame;
+		memcpy(c->prev, continues ? c->curr : q, sizeof c->prev);
+		memcpy(c->curr, q, sizeof c->curr);
+		c->frame = frame;
+		c->id = id;
+		c->ship_idx = ship_idx;
+		c->valid = 1;
+	}
+	float p[4];
+	memcpy(p, c->prev, sizeof p);
+	float dot = p[0] * q[0] + p[1] * q[1] + p[2] * q[2] + p[3] * q[3];
+	if (dot < 0.0f) {
+		for (int k = 0; k < 4; ++k)
+			p[k] = -p[k];
+		dot = -dot;
+	}
+	if (dot < 0.9f)
+		return; /* a turn this large in one frame: a cut, not motion */
+	const float a = s_present_alpha;
+	float r[4];
+	float len = 0.0f;
+	for (int k = 0; k < 4; ++k) {
+		r[k] = p[k] + (q[k] - p[k]) * a;
+		len += r[k] * r[k];
+	}
+	if (len <= 1e-12f)
+		return;
+	len = 1.0f / sqrtf(len);
+	for (int k = 0; k < 4; ++k)
+		q[k] = r[k] * len;
+}
+
+static void TieFlightSnapshot_BeginPresentation(void) {
+	s_present_frame = TieFlightIntegration_Frame();
+	s_present_on = TieFlightSnapshot_InterpolationEnabled();
+	s_present_alpha = s_present_on ? TieFlightIntegration_PresentAlpha() : 0.0f;
+}
+
 static void TieFlightSnapshot_EmitBillboards(void) {
 	/* Drain the per-flight-slot debris/explosion captures. */
 	for (uint16_t i = 0; i < NUM_OBJECTS; ++i) {
@@ -314,9 +425,7 @@ static void TieFlightSnapshot_EmitBillboards(void) {
 		TieBillboardState* out = TieSnapshotBuilder_AllocBillboard();
 		if (!out)
 			return; /* cap reached; warning already logged */
-		out->world_pos[0] = obj->world_x_prev;
-		out->world_pos[1] = obj->world_y_prev;
-		out->world_pos[2] = obj->world_z_prev;
+		TieFlightSnapshot_ObjectPos(obj, out->world_pos);
 		out->parent_slot = i;
 		out->parent_kind = TIE_BILLBOARD_FLIGHT;
 		out->species_idx = cap->species_idx;
@@ -340,9 +449,7 @@ static void TieFlightSnapshot_EmitBillboards(void) {
 		TieBillboardState* out = TieSnapshotBuilder_AllocBillboard();
 		if (!out)
 			return;
-		out->world_pos[0] = obj->world_x_prev;
-		out->world_pos[1] = obj->world_y_prev;
-		out->world_pos[2] = obj->world_z_prev;
+		TieFlightSnapshot_ObjectPos(obj, out->world_pos);
 		out->parent_slot = i;
 		out->parent_kind = TIE_BILLBOARD_LIGHTNING;
 		out->species_idx = cap->species_idx;
@@ -490,6 +597,16 @@ static void TieFlightSnapshot_CaptureFrameState(void) {
 	cam->world_pos[0] = camera.x;
 	cam->world_pos[1] = camera.y;
 	cam->world_pos[2] = camera.z;
+	/* The camera was placed (tie_updatescreen) from its target's pre-move
+	 * position: carry it along the target's last move like the objects. */
+	if (camera.view_target_obj < NUM_OBJECTS && objects[camera.view_target_obj].ship_idx != 0 &&
+		(hyperspaceflag < 3 || hyperspaceflag > 6)) {
+		const FlightObject* anchor = &objects[camera.view_target_obj];
+		TieFlightSnapshot_BlendPos(camera.x, camera.y, camera.z,
+								   camera.x + (anchor->world_x - anchor->world_x_prev),
+								   camera.y + (anchor->world_y - anchor->world_y_prev),
+								   camera.z + (anchor->world_z - anchor->world_z_prev), cam->world_pos);
+	}
 	if (s_cam_basis_valid) {
 		/* The world→eye basis the rasterizer used this tick. Row 0 =
 		 * (A1, B1, C1), etc. — same layout transfm2_geteye* multiplies
@@ -503,6 +620,7 @@ static void TieFlightSnapshot_CaptureFrameState(void) {
 			TIE_SNAP_Q15_TO_F(s_cam_basis_C3),
 		};
 		TieSnapshotBuilder_Mat3ToQuat(m, cam->ori);
+		TieFlightSnapshot_BlendOri(&s_cam_ori, camera.view_target_obj, 0, cam->ori);
 	} else {
 		cam->ori[0] = 1.0f;
 		cam->ori[1] = 0.0f;
@@ -594,24 +712,11 @@ static void TieFlightSnapshot_CaptureWorld(void) {
 		out->damage_state = obj->damage_state;
 		out->fg_idx = obj->fg_idx;
 		out->flags = TieFlightSnapshot_FlightFlags(obj);
-		/* Position MUST come from world_*_prev, not world_*. The
-		 * snapshot emit runs after tie_doframe finishes, i.e. after
-		 * move_moveobjects has integrated every object one tick
-		 * forward. world_* therefore holds the post-move value, but
-		 * the engine's classic framebuffer was painted in step 6 with
-		 * the PRE-move value — move_moveobjects writes world_*_prev
-		 * = world_* at the top of the integration, so world_*_prev
-		 * now holds exactly what the engine rendered. Camera (set in
-		 * tie_updatescreen before render and untouched by move) is
-		 * already at pre-move time, so reading _prev here keeps the
-		 * snapshot internally coherent. Visible symptom of the
-		 * post-move read: laser bolts appear ~one tick of bolt velocity
-		 * ahead of the muzzle on the spawn frame, and fast-moving
-		 * ships sit one tick ahead of the classic framebuffer when
-		 * paused. */
-		out->world_pos[0] = obj->world_x_prev;
-		out->world_pos[1] = obj->world_y_prev;
-		out->world_pos[2] = obj->world_z_prev;
+		/* Position at the presentation time: between world_*_prev (what
+		 * the classic framebuffer painted, before this frame's move) and
+		 * world_* (after it). The camera is carried the same way, so
+		 * muzzle and fresh laser bolts stay together. */
+		TieFlightSnapshot_ObjectPos(obj, out->world_pos);
 		/* Row-major craft-to-world rotation matrix with COLUMNS =
 		 * (side, fwd, up). Engine's transfm2_geteyecoords
 		 * (transfm2.c:102) consumes vertex (x, y, z) as basis indices
@@ -627,6 +732,7 @@ static void TieFlightSnapshot_CaptureWorld(void) {
 			TIE_SNAP_Q15_TO_F(obj->side_z), TIE_SNAP_Q15_TO_F(obj->fwd_z), TIE_SNAP_Q15_TO_F(obj->up_z),
 		};
 		TieSnapshotBuilder_Mat3ToQuat(m, out->ori);
+		TieFlightSnapshot_BlendOri(&s_obj_ori[i], obj->idnumber, obj->ship_idx, out->ori);
 		out->current_speed = obj->current_speed;
 		out->death_timer = obj->death_timer;
 		out->highlight = TieFlightSnapshot_CraftHighlight(i, obj->ship_idx);
@@ -778,6 +884,7 @@ static void TieFlightSnapshot_CaptureWorld(void) {
 }
 
 void TieFlightSnapshot_Capture(void) {
+	TieFlightSnapshot_BeginPresentation();
 	TieFlightSnapshot_CaptureFrameState();
 	TieFlightSnapshot_CaptureWorld();
 }

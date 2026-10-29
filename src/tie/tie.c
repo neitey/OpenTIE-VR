@@ -1894,7 +1894,8 @@ void tie_doframe(void) {
 		/* PORT: xtimer advances between runtime ticks; return until a
 		 * complete simulation period has accumulated instead of spinning. */
 		tickcounter += (uint16_t)xtimer_Time_Elapsed();
-		if (tickcounter < TieFlightTiming_StepTicks())
+		const uint16_t step_ticks = TieFlightTiming_TakeStep(&tickcounter, acceleratedtimesetting <= 1);
+		if (step_ticks == 0)
 			return false;
 #else
 		do {
@@ -1902,8 +1903,12 @@ void tie_doframe(void) {
 		} while (tickcounter < TIE_FLIGHT_EDITION(4, 7));
 #endif
 
+#ifdef TIE_MODERN
+		lastcounter = (int16_t)step_ticks;
+#else
 		lastcounter = (int16_t)tickcounter;
 		tickcounter = 0;
+#endif
 
 		if (calcframerate) {
 			framerate = (uint16_t)(236 / lastcounter);

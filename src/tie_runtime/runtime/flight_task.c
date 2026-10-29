@@ -76,6 +76,7 @@
 #include "tie_runtime/timing/ai_lead.h"
 #include "tie_runtime/timing/chase_camera.h"
 #include "tie_runtime/timing/flight_clock.h"
+#include "tie_runtime/timing/flight_integration.h"
 #include "tie_runtime/timing/flight_timing.h"
 #include "tie_runtime/timing/flight_timing_state.h"
 #include "tie_runtime/timing/replay_timing.h"
@@ -211,6 +212,7 @@ void TieFlightRuntime_ResetTiming(void) {
 	TieFlightTimingState_Reset();
 	TieAiLead_Reset();
 	TieChaseCamera_Reset();
+	TieFlightIntegration_ResetPresentation();
 }
 
 bool TieFlightRuntime_PrepareSimulator(int replay_mode) {

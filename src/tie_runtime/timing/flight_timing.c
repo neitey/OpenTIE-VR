@@ -16,6 +16,23 @@ typedef struct TieFlightTimingState {
 	bool session_active;
 } TieFlightTimingState;
 
+/* Unlocked-rate step smoothing (host pacing, not simulation state: a replay
+ * records the steps taken, so this is neither checkpointed nor replayed).
+ * XWA's flight loop (XwaFlightTask_SmoothedStepTarget) does the same: each
+ * step is the previous one +-1 tick toward the clock, so a frame that wakes a
+ * millisecond late or early does not turn into a 2- or 5-tick step. */
+enum {
+	TIE_STEP_SMOOTH_SNAP_TICKS = 4, /* further off than this: take what is due */
+	TIE_STEP_SMOOTH_MAX_LEAD_TICKS = 1, /* the simulation may run this far ahead */
+};
+static uint16_t s_smooth_prev_step;
+static uint16_t s_smooth_lead;
+
+static void TieTiming_ResetStepSmoothing(void) {
+	s_smooth_prev_step = 0;
+	s_smooth_lead = 0;
+}
+
 static TieFlightTimingState s_timing = {
 	.requested_rate = TIE_FLIGHT_UPDATE_RATE_NATIVE,
 	.step_ticks = 4,
@@ -63,9 +80,11 @@ void TieFlightTiming_BeginSession(const TieFlightProfile* profile) {
 	s_timing.dropped_animation_periods = 0;
 	s_timing.legacy_due = false;
 	s_timing.session_active = true;
+	TieTiming_ResetStepSmoothing();
 }
 
 void TieFlightTiming_EndSession(void) {
+	TieTiming_ResetStepSmoothing();
 	s_timing = (TieFlightTimingState) {
 		.requested_rate = TIE_FLIGHT_UPDATE_RATE_NATIVE,
 		.step_ticks = 4,
@@ -74,6 +93,45 @@ void TieFlightTiming_EndSession(void) {
 }
 
 uint16_t TieFlightTiming_StepTicks(void) { return s_timing.step_ticks; }
+
+uint16_t TieFlightTiming_TakeStep(uint16_t* pending_ticks, bool smooth) {
+	if (!TieFlightTiming_IsHighRate() || !smooth) {
+		TieTiming_ResetStepSmoothing();
+		if (*pending_ticks < s_timing.step_ticks)
+			return 0;
+		const uint16_t step = *pending_ticks;
+		*pending_ticks = 0;
+		return step;
+	}
+
+	const int32_t available = (int32_t)*pending_ticks - (int32_t)s_smooth_lead;
+	int32_t step;
+	if (s_smooth_prev_step == 0 || available - (int32_t)s_smooth_prev_step > TIE_STEP_SMOOTH_SNAP_TICKS ||
+		(int32_t)s_smooth_prev_step - available > TIE_STEP_SMOOTH_SNAP_TICKS) {
+		step = available;
+	} else {
+		step = s_smooth_prev_step;
+		if (available > step)
+			++step;
+		else if (available < step)
+			--step;
+	}
+	if (step > available + TIE_STEP_SMOOTH_MAX_LEAD_TICKS)
+		step = available + TIE_STEP_SMOOTH_MAX_LEAD_TICKS;
+	if (step <= 0)
+		return 0; /* ahead of the clock: wait for it */
+
+	const int32_t remaining = available - step;
+	if (remaining >= 0) {
+		*pending_ticks = (uint16_t)remaining;
+		s_smooth_lead = 0;
+	} else {
+		*pending_ticks = 0;
+		s_smooth_lead = (uint16_t)-remaining;
+	}
+	s_smooth_prev_step = (uint16_t)step;
+	return (uint16_t)step;
+}
 
 uint16_t TieFlightTiming_CompatibilityTicks(void) { return s_timing.compatibility_ticks; }
 
@@ -176,5 +234,6 @@ bool TieFlightTiming_Restore(const TieFlightTimingCheckpoint* checkpoint) {
 		.dropped_animation_periods = checkpoint->dropped_animation_periods,
 		.session_active = true,
 	};
+	TieTiming_ResetStepSmoothing();
 	return true;
 }
