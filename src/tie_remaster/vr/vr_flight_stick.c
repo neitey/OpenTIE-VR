@@ -7,6 +7,7 @@
 #include "aeron/scene/gltf_mesh.h"
 #include "aeron/scene/mesh.h"
 #include "tie_remaster/vr/vr_hands.h"
+#include "tie_runtime/input/controller_mapping.h"
 
 #include <SDL3/SDL_stdinc.h>
 #include <SDL3/SDL_timer.h>
@@ -532,8 +533,11 @@ void TieVrStick_Update(void) {
 		s_st.twist *= k;
 	}
 	const float dead = ST_DEAD_DEG * ST_PI / 180.0f;
-	Aeron_XrSetVirtualStick(s_st.held, st_axis_value(s_st.side, max_rad, dead), st_axis_value(s_st.fwd, max_rad, dead),
-							roll);
+	const float stick_x = st_axis_value(s_st.side, max_rad, dead);
+	const float stick_y = st_axis_value(s_st.fwd, max_rad, dead);
+	Aeron_XrSetVirtualStick(s_st.held, stick_x, stick_y, roll);
+	/* Its axes skip the thumbstick response (controller_mapping.c). */
+	TieControllerMapping_SetXrVirtualStick(s_st.held, stick_x, stick_y, roll);
 	for (int h = 0; h < 2; ++h) {
 		if (s_st.hover[h] || (h == 1 && s_st.held) || (h == 0 && s_st.moving)) {
 			TieVrHands_CaptureGrip(h); /* the grip takes the stick, not a game action */
@@ -704,6 +708,7 @@ void TieVrStick_EndFrame(void) {
 		s_st.hover[0] = s_st.hover[1] = 0;
 		s_st.fwd = s_st.side = s_st.twist = 0.0f;
 		Aeron_XrSetVirtualStick(0, 0.0f, 0.0f, 0.0f);
+		TieControllerMapping_SetXrVirtualStick(false, 0.0f, 0.0f, 0.0f);
 		s_st.shown = 0;
 	}
 	s_st.updated = 0;
@@ -720,6 +725,7 @@ int TieVrStick_TakePlacement(char* out, int size) {
 
 void TieVrStick_Shutdown(void) {
 	Aeron_XrSetVirtualStick(0, 0.0f, 0.0f, 0.0f);
+	TieControllerMapping_SetXrVirtualStick(false, 0.0f, 0.0f, 0.0f);
 	for (int i = 0; i < ST_MESHES; ++i) {
 		if (s_st.meshes[i].mesh) {
 			AeronScene_MeshDestroy(s_st.meshes[i].mesh);

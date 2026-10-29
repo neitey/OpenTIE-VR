@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <landru/joy.h>
 #include "xr_input_map.h" /* aeron/src: the engine's Touch -> gamepad mapping (xrstick) */
 
 /* ------------------------------------------------------------------------
@@ -1180,12 +1181,16 @@ static void TieTest_MapXrSticks(int16_t* axes) {
 }
 
 /* xrinput: the sticks, the XR pad's axes and what the game makes of them
- * (TIE's flight axes -127..127 after its stick curve and polarity; the
- * throttle 0..65535 the lever asks for). */
+ * (TIE's flight axes -115..115 after the stick response, Landru's dead zone
+ * and polarity; the throttle 0..65535 the lever asks for). */
 static void TieTest_LogXrInput(void) {
 	int16_t raw[3];
 	uint16_t buttons = 0;
 	TieControllerMapping_Read(raw, 3, &buttons);
+	for (int i = 0; i < 3; ++i) /* Landru's read (landru/joy.c) */
+		raw[i] = raw[i] > LANDRU_JOYSTICK_DEADZONE	   ? (int16_t)(raw[i] - LANDRU_JOYSTICK_DEADZONE)
+				 : raw[i] < -LANDRU_JOYSTICK_DEADZONE ? (int16_t)(raw[i] + LANDRU_JOYSTICK_DEADZONE)
+													  : 0;
 	const TieInputMapping* mapping = TieInput_Mapping();
 	const int yaw = TieInput_MapAxis(raw, 3, mapping->axes[TIE_INPUT_AXIS_YAW]);
 	const int pitch = TieInput_MapAxis(raw, 3, mapping->axes[TIE_INPUT_AXIS_PITCH]);

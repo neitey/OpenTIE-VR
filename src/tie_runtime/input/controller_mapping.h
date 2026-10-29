@@ -67,6 +67,17 @@ bool TieControllerMapping_IsXrPad(const AeronControllerSnapshot* device);
 const TieControllerProfile* TieControllerMapping_XrProfile(void);
 /* Whether the XR pad's sticks steer (flight) this frame; set by vr_controls. */
 void TieControllerMapping_SetXrFlight(bool flight);
+/* The game's grabbed flight stick (as given to Aeron_XrSetVirtualStick): an
+ * axis it drives is not given the thumbstick response. */
+void TieControllerMapping_SetXrVirtualStick(bool held, float x, float y, float roll);
+/* The thumbstick response in flight (controller_mapping.c), for tests:
+ * TIE_XR_STICK_CURVE's exponent; the steering stick as one round stick
+ * (-1..1 per axis, square gate); one axis; a -1..1 value in Landru's terms
+ * (its dead zone added back). */
+double TieControllerMapping_XrStickExponent(void);
+void TieControllerMapping_XrStickRadial(int16_t x, int16_t y, double deadzone, double exponent, double out[2]);
+double TieControllerMapping_XrAxisCurve(int16_t value, double deadzone, double exponent);
+int16_t TieControllerMapping_XrLandruAxis(double unit);
 /* Headset mode (VR requested at startup; a presenting session counts too).
  * The Quest's Android also lists its own Touch controllers as gamepads
  * ("Device 0x..."): in headset mode connected gamepads are not given the

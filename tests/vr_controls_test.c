@@ -197,6 +197,109 @@ static AeronControllerSnapshot* XrPad(void) {
 	return pad;
 }
 
+
+/* What the game sees from the XR pad in flight: the mapping's axes through
+ * Landru's read (its dead zone, landru/joy.c) and feinput's MapAxis. */
+static void XrGameAxes(int16_t game[3]) {
+	int16_t axes[3];
+	uint16_t buttons = 0;
+	TieControllerMapping_Update(&g_input);
+	TieControllerMapping_Read(axes, 3, &buttons);
+	for (int i = 0; i < 3; ++i)
+		axes[i] = axes[i] > 12 ? axes[i] - 12 : axes[i] < -12 ? axes[i] + 12 : 0;
+	const TieInputMapping* mapping = TieInput_Mapping();
+	game[0] = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_YAW]);
+	game[1] = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_PITCH]);
+	game[2] = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_ROLL]);
+}
+
+static void XrStick(AeronControllerSnapshot* pad, double x, double y, double roll) {
+	pad->gamepad_axes[AERON_GAMEPAD_AXIS_LEFTX] = (int16_t)lround(x * 32767.0);
+	pad->gamepad_axes[AERON_GAMEPAD_AXIS_LEFTY] = (int16_t)lround(y * 32767.0);
+	pad->gamepad_axes[AERON_GAMEPAD_AXIS_RIGHTX] = (int16_t)lround(roll * 32767.0);
+}
+
+/* The thumbstick response in flight (as OpenXWA's): one round 10 % dead
+ * zone on the steering stick, the game answering from its edge, full on a
+ * full diagonal, monotonic without jumps; roll with a 20 % dead zone. */
+static void TestXrStickResponse(AeronControllerSnapshot* pad) {
+	int16_t g[3];
+	XrStick(pad, 0.09, 0.0, 0.0);
+	XrGameAxes(g);
+	CHECK(g[0] == 0 && g[1] == 0);
+	XrStick(pad, 0.12, 0.0, 0.0);
+	XrGameAxes(g);
+	printf("XR stick 0.12 across: yaw %d\n", g[0]);
+	CHECK(g[0] >= 11 && g[0] <= 14);
+	XrStick(pad, 0.0, 0.2, 0.0);
+	XrGameAxes(g);
+	printf("XR stick 0.2 back: pitch %d\n", g[1]);
+	CHECK(g[1] != 0 && abs(g[1]) <= 16);
+	/* A slight sideways push while pitching is not swallowed. */
+	XrStick(pad, 0.1, 0.5, 0.0);
+	XrGameAxes(g);
+	printf("XR stick (0.1, 0.5): yaw %d pitch %d\n", g[0], g[1]);
+	CHECK(g[0] != 0 && abs(g[0]) < abs(g[1]));
+	/* Full diagonal: full on both. */
+	XrStick(pad, 0.7071, -0.7071, 0.0);
+	XrGameAxes(g);
+	printf("XR stick full diagonal: yaw %d pitch %d\n", g[0], g[1]);
+	CHECK(g[0] == 115 && abs(g[1]) == 115);
+	/* (0.5, 0.5) is 0.71 out: as 0.71 straight on both axes. */
+	XrStick(pad, 0.5, -0.5, 0.0);
+	XrGameAxes(g);
+	printf("XR stick half diagonal: yaw %d pitch %d\n", g[0], g[1]);
+	XrStick(pad, 0.7071, 0.0, 0.0);
+	int16_t straight[3];
+	XrGameAxes(straight);
+	CHECK(g[0] == abs(g[1]) && abs(g[0] - straight[0]) <= 1);
+	XrStick(pad, 0.5, -0.5, 0.0);
+	/* 95 % straight is full already. */
+	XrStick(pad, 0.95, 0.0, 0.0);
+	XrGameAxes(g);
+	CHECK(g[0] == 115);
+	/* A sweep rises with no jump past the edge. */
+	int previous = 0, biggest = 0;
+	for (int i = 0; i <= 100; ++i) {
+		XrStick(pad, i / 100.0, 0.0, 0.0);
+		XrGameAxes(g);
+		CHECK(g[0] >= previous);
+		if (previous && g[0] - previous > biggest)
+			biggest = g[0] - previous;
+		previous = g[0];
+	}
+	printf("XR stick sweep: largest step %d\n", biggest);
+	CHECK(biggest <= 5);
+	/* Roll: 20 % dead zone, then from there. */
+	XrStick(pad, 0.0, 0.0, 0.18);
+	XrGameAxes(g);
+	CHECK(g[2] == 0);
+	XrStick(pad, 0.0, 0.0, 0.25);
+	XrGameAxes(g);
+	printf("XR roll 0.25: %d\n", g[2]);
+	CHECK(g[2] >= 23 && g[2] <= 28);
+	/* Linear (TIE_XR_STICK_CURVE=1): half across is about half. */
+	SDL_setenv_unsafe("TIE_XR_STICK_CURVE", "1", 1);
+	XrStick(pad, 0.5, 0.0, 0.0);
+	XrGameAxes(g);
+	printf("XR stick half across, linear: yaw %d\n", g[0]);
+	CHECK(g[0] >= 55 && g[0] <= 62);
+	SDL_unsetenv_unsafe("TIE_XR_STICK_CURVE");
+	/* Precise (default): half across turns gently. */
+	XrStick(pad, 0.5, 0.0, 0.0);
+	XrGameAxes(g);
+	printf("XR stick half across, precise: yaw %d\n", g[0]);
+	CHECK(g[0] >= 30 && g[0] <= 40);
+	/* The grabbed flight stick: its axes stay linear (as sampled, with the
+	 * binding's gate). */
+	TieControllerMapping_SetXrVirtualStick(true, 0.5f, 0.0f, 0.0f);
+	XrStick(pad, 0.5, 0.0, 0.0);
+	XrGameAxes(g);
+	printf("XR flight stick half right: yaw %d\n", g[0]);
+	CHECK(g[0] >= 48 && g[0] <= 52);
+	TieControllerMapping_SetXrVirtualStick(false, 0.0f, 0.0f, 0.0f);
+}
+
 static void TestXrProfile(void) {
 	char error[128] = "";
 	const TieControllerProfile* profile = TieControllerMapping_XrProfile();
@@ -245,32 +348,22 @@ static void TestXrProfile(void) {
 	pad->gamepad_axes[AERON_GAMEPAD_AXIS_LEFTY] = -32767;
 	pad->gamepad_axes[AERON_GAMEPAD_AXIS_RIGHTX] = -32767;
 	pad->gamepad_axes[AERON_GAMEPAD_AXIS_RIGHT_TRIGGER] = 16384;
-	TieControllerMapping_Update(&g_input);
 	int16_t axes[3];
 	uint16_t buttons = 0;
-	TieControllerMapping_Read(axes, 3, &buttons);
-	const TieInputMapping* mapping = TieInput_Mapping();
-	const int16_t yaw = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_YAW]);
-	const int16_t pitch = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_PITCH]);
-	const int16_t roll = TieInput_MapAxis(axes, 3, mapping->axes[TIE_INPUT_AXIS_ROLL]);
+	int16_t game[3];
+	XrGameAxes(game);
+	const int16_t yaw = game[0], pitch = game[1], roll = game[2];
 	printf("XR pad: yaw %d pitch %d roll %d\n", yaw, pitch, roll);
-	{
-		/* Linear (TIE_XR_STICK_CURVE=1): half deflection is half the axis. */
-		SDL_setenv_unsafe("TIE_XR_STICK_CURVE", "1", 1);
-		TieControllerMapping_Update(&g_input);
-		int16_t lin[3];
-		uint16_t lin_buttons = 0;
-		TieControllerMapping_Read(lin, 3, &lin_buttons);
-		const int16_t lin_yaw = TieInput_MapAxis(lin, 3, TieInput_Mapping()->axes[TIE_INPUT_AXIS_YAW]);
-		printf("XR pad, linear: yaw %d\n", lin_yaw);
-		CHECK(lin_yaw > 50 && lin_yaw < 70);
-		SDL_unsetenv_unsafe("TIE_XR_STICK_CURVE");
-	}
-	/* Default response curve (TIE_XR_STICK_CURVE=2): half deflection turns
-	 * gently, full deflection fully. */
-	CHECK(yaw > 30 && yaw < 45);
-	CHECK(pitch == -127);
-	CHECK(roll == -127);
+	/* Full forward with half right: full pitch, the direction's ratio in yaw
+	 * (square gate: the axis pushed further is full). */
+	CHECK(pitch == -115);
+	CHECK(yaw >= 56 && yaw <= 59);
+	CHECK(roll == -115);
+	TestXrStickResponse(pad);
+	pad->gamepad_axes[AERON_GAMEPAD_AXIS_LEFTX] = 16384;
+	pad->gamepad_axes[AERON_GAMEPAD_AXIS_LEFTY] = -32767;
+	pad->gamepad_axes[AERON_GAMEPAD_AXIS_RIGHTX] = -32767;
+	TieControllerMapping_Update(&g_input);
 	CHECK(TieControllerMapping_Present());
 	uint16_t throttle = 0;
 	uint32_t generation = 0;

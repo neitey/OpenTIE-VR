@@ -2,6 +2,7 @@
 #include "aeron/aeron.h"
 #include "aeron/log.h"
 #include "tie_runtime/input/keyboard_mapping.h"
+#include <landru/joy.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -573,30 +574,118 @@ static void SampleAnalog(size_t index, const AeronControllerSnapshot* d, TieInpu
  * profile, on the logical axes no connected configured model drives. Its
  * sticks steer only in flight (in the menus the right controller is the
  * pointer, and Landru would also move its cursor with them). */
-/* Response curve of the Touch thumbsticks in flight (TIE_XR_STICK_CURVE,
- * default 2.0; 1 = linear): small deflections turn gently for fine aim, full
- * deflection still gives the full turn rate. The thumbsticks' short travel
- * makes a linear response feel twitchy next to a desk stick. */
-static void TieControllerMapping_XrStickCurve(int16_t* axes, const TieInputMapping* mapping) {
+/* Response of the Touch thumbsticks in flight (TIE_XR_STICK_CURVE "Stick
+ * Response", default 2.0 "Precise"; 1 = linear), as OpenXWA's
+ * (XwaControllerMapping_XrStickRadial): small deflections turn gently for
+ * fine aim, full deflection still gives the full turn rate.
+ *
+ * The steering thumbstick (yaw LEFTX / pitch LEFTY) is one stick with one
+ * round 10 % dead zone; the last 5 % of the throw is full, and the round
+ * gate is stretched onto the game's square one, so a diagonal turns as fast
+ * in pitch and yaw as straight up or across. Roll (the other stick's X) is
+ * its own axis with a 20 % dead zone (that stick's Y is the throttle lever).
+ * The curve works on the full-resolution value and is handed to Landru with
+ * its own dead zone (LANDRU_JOYSTICK_DEADZONE) added back and the binding's
+ * gate off, so the game sees it continuously from the edge of the one dead
+ * zone: before, Landru's 12, the binding's 13 and a curve on the truncated
+ * value stacked into a cross-shaped dead zone of 27 % of the throw, a jump to
+ * 12 % turn rate past it and 46 % at most on a full diagonal.
+ *
+ * An axis the grabbed flight stick drives (Aeron_XrSetVirtualStick: the
+ * engine puts it on the same axes, whichever is pushed further) stays as it
+ * was, linear. Desktop pads, joysticks and a configured XR model never come
+ * here. */
+enum { TIE_XR_STEER_DEADZONE_PCT = 10, TIE_XR_ROLL_DEADZONE_PCT = 20 };
+
+static struct {
+	bool held;
+	float stick[3]; /* x, y, roll */
+} g_xr_vstick;
+
+void TieControllerMapping_SetXrVirtualStick(bool held, float x, float y, float roll) {
+	g_xr_vstick.held = held;
+	g_xr_vstick.stick[0] = held ? x : 0.0f;
+	g_xr_vstick.stick[1] = held ? y : 0.0f;
+	g_xr_vstick.stick[2] = held ? roll : 0.0f;
+}
+
+double TieControllerMapping_XrStickExponent(void) {
 	const char* env = getenv("TIE_XR_STICK_CURVE");
 	double exponent = env && env[0] ? atof(env) : 2.0;
 	if (!(exponent >= 1.0))
 		exponent = 1.0;
-	if (exponent > 4.0)
-		exponent = 4.0;
-	if (exponent == 1.0)
+	return exponent > 4.0 ? 4.0 : exponent;
+}
+
+static double XrAxisUnit(int16_t value) { return value < 0 ? value / 32768.0 : value / 32767.0; }
+
+void TieControllerMapping_XrStickRadial(int16_t x, int16_t y, double deadzone, double exponent, double out[2]) {
+	static const double k_outer = 0.95;
+	const double fx = XrAxisUnit(x), fy = XrAxisUnit(y);
+	const double r = sqrt(fx * fx + fy * fy);
+	const double major = fabs(fx) > fabs(fy) ? fabs(fx) : fabs(fy);
+	out[0] = out[1] = 0.0;
+	if (deadzone < 0.0)
+		deadzone = 0.0;
+	if (deadzone >= 0.9 || r <= deadzone || major <= 0.0)
 		return;
+	double t = (r - deadzone) / (k_outer - deadzone);
+	t = t > 1.0 ? 1.0 : t;
+	const double m = deadzone + (1.0 - deadzone) * (exponent > 1.0 ? pow(t, exponent) : t);
+	/* Round gate onto square gate: the axis pushed further gets m, the other
+	 * keeps the direction's ratio. */
+	const double scale = m / major;
+	out[0] = fx * scale;
+	out[1] = fy * scale;
+	for (int k = 0; k < 2; ++k)
+		out[k] = out[k] > 1.0 ? 1.0 : out[k] < -1.0 ? -1.0 : out[k];
+}
+
+double TieControllerMapping_XrAxisCurve(int16_t value, double deadzone, double exponent) {
+	static const double k_outer = 0.95;
+	const double f = XrAxisUnit(value);
+	const double a = fabs(f);
+	if (a <= deadzone)
+		return 0.0;
+	double t = (a - deadzone) / (k_outer - deadzone);
+	t = t > 1.0 ? 1.0 : t;
+	const double m = deadzone + (1.0 - deadzone) * (exponent > 1.0 ? pow(t, exponent) : t);
+	return f < 0.0 ? -m : m;
+}
+
+int16_t TieControllerMapping_XrLandruAxis(double unit) {
+	/* Landru takes LANDRU_JOYSTICK_DEADZONE off what it reads: the game sees
+	 * |unit| of its full 115. */
+	const long game = lround(fabs(unit) * (LANDRU_JOYSTICK_AXIS_LIMIT - LANDRU_JOYSTICK_DEADZONE));
+	if (game <= 0)
+		return 0;
+	long v = LANDRU_JOYSTICK_DEADZONE + game;
+	if (v > LANDRU_JOYSTICK_AXIS_LIMIT)
+		v = LANDRU_JOYSTICK_AXIS_LIMIT;
+	return (int16_t)(unit < 0.0 ? -v : v);
+}
+
+static bool XrVirtualStickDrives(int axis, int16_t value) {
+	const float stick = g_xr_vstick.stick[axis];
+	return g_xr_vstick.held && stick != 0.0f && fabsf(stick) * 32767.0f + 64.0f >= (float)abs(value);
+}
+
+static void TieControllerMapping_XrSteer(const AeronControllerSnapshot* pad, TieInputMapping* mapping) {
+	const double exponent = TieControllerMapping_XrStickExponent();
+	const int16_t lx = pad->gamepad_axes[AERON_GAMEPAD_AXIS_LEFTX];
+	const int16_t ly = pad->gamepad_axes[AERON_GAMEPAD_AXIS_LEFTY];
+	const int16_t rx = pad->gamepad_axes[AERON_GAMEPAD_AXIS_RIGHTX];
+	double steer[2];
+	TieControllerMapping_XrStickRadial(lx, ly, TIE_XR_STEER_DEADZONE_PCT / 100.0, exponent, steer);
+	const bool steer_driven = XrVirtualStickDrives(0, lx) || XrVirtualStickDrives(1, ly);
+	const double unit[3] = { steer[0], steer[1],
+							 TieControllerMapping_XrAxisCurve(rx, TIE_XR_ROLL_DEADZONE_PCT / 100.0, exponent) };
+	const bool driven[3] = { steer_driven, steer_driven, XrVirtualStickDrives(2, rx) };
 	for (int axis = 0; axis < 3; ++axis) {
-		/* Curved beyond the dead zone (the game's own and the binding's), so
-		 * the stick answers as soon as it leaves it, just gently. */
-		const double c = TieInput_AxisDeadzonePercent(mapping->axes[axis].deadzone) * 1.27;
-		const int v = axes[axis];
-		const double a = v < 0 ? -v : v;
-		if (a <= c || c >= 126.0)
-			continue;
-		const double t = (a - c) / (127.0 - c);
-		const int out = (int)(c + (127.0 - c) * pow(t > 1.0 ? 1.0 : t, exponent) + 0.5);
-		axes[axis] = (int16_t)(v < 0 ? -out : out);
+		if (driven[axis])
+			continue; /* the flight stick: linear, as sampled */
+		g_controller.axes[axis] = TieControllerMapping_XrLandruAxis(unit[axis]);
+		mapping->axes[axis].deadzone = 0.0f;
 	}
 }
 
@@ -643,7 +732,7 @@ static void SampleXrPad(const AeronInputSnapshot* input, unsigned owned_axes, Ti
 	}
 	SampleProfileAnalog(profile, AERON_CONTROLLER_KIND_GAMEPAD, pad, mapping, mask);
 	if (g_controller.xr_flight)
-		TieControllerMapping_XrStickCurve(g_controller.axes, mapping);
+		TieControllerMapping_XrSteer(pad, mapping);
 	if (g_controller.xr_flight)
 		for (int axis = 0; axis < 3; ++axis) {
 			if ((owned_axes & (1u << axis)) && abs(owner_axes[axis]) >= abs(g_controller.axes[axis])) {

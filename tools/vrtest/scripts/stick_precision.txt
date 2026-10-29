@@ -1,0 +1,43 @@
+# VR thumbstick response in flight (controller_mapping.c, as OpenXWA's):
+# one round 10 % dead zone on the steering stick, the game answering from
+# its edge; a diagonal as fast as straight; roll with a 20 % dead zone.
+# 'xrinput' logs the yaw / pitch / roll the game reads (-115..115). Then a
+# slow constant push: the craft must turn (tie.input logs its heading).
+#   run.sh <build> tools/vrtest/scripts/stick_precision.txt <out> TIE_TEST_XR=1
+0 mission HF1W
+0 xrpad
+0 wait flying 5 timeout=4000
++1 xrstick right 0.09 0
++3 xrinput
++1 xrstick right 0.15 0
++3 xrinput
++1 xrstick right 0.2 0
++3 xrinput
++1 xrstick right 0.3 0
++3 xrinput
++1 xrstick right 0.5 0
++3 xrinput
++1 xrstick right 0.7 0
++3 xrinput
++1 xrstick right 1 0
++3 xrinput
++1 xrstick right 0.35 0.35
++3 xrinput
++1 xrstick right 0.5 0.5
++3 xrinput
++1 xrstick right 0.71 0.71
++3 xrinput
++1 xrstick right 0.05 0.5
++3 xrinput
++1 xrstick right 0 0
++1 xrstick left 0.15 0
++3 xrinput
++1 xrstick left 0.3 0
++3 xrinput
++1 xrstick left 0 0
++1 log --- slow constant push (0.2 right)
++1 xrstick right 0.2 0
++1 xrinput
++120 xrinput
++1 xrstick right 0 0
++5 quit
