@@ -2151,26 +2151,15 @@ static void vp_draw_tabs(void) {
 
 /* ---- Side panel: tactical map -------------------------------------------- */
 
-/* TIE's IFF colours (the message bar's eventsidecolors[] in the palette:
- * 0x52, 0x4A, 0x46, 0x56), from the snapshot's palette when it has one. */
-static void vp_iff_color(const TieSnapshot* snap, int side, float out[3]) {
-	static const uint8_t k_index[4] = { 0x52, 0x4A, 0x46, 0x56 };
-	static const float k_fallback[4][3] = {
-		{ 0.35f, 1.00f, 0.35f }, { 1.00f, 0.30f, 0.25f }, { 0.40f, 0.60f, 1.00f }, { 1.00f, 0.95f, 0.30f },
-	};
-	const int i = side >= 0 && side < 4 ? side : 2;
-	const uint32_t argb = snap ? snap->palette[k_index[i]] : 0;
-	const float r = (float)((argb >> 16) & 255u) / 255.0f, g = (float)((argb >> 8) & 255u) / 255.0f,
-				b = (float)(argb & 255u) / 255.0f;
-	if (r + g + b > 0.3f) {
-		/* Lift the palette colour to full brightness: readable on the holo. */
-		const float peak = fmaxf(r, fmaxf(g, b));
-		out[0] = r / peak;
-		out[1] = g / peak;
-		out[2] = b / peak;
-	} else {
-		memcpy(out, k_fallback[i], sizeof k_fallback[i]);
-	}
+/* A contact's colour by IFF side: Rebels (side 0) green, Imperials (side 1,
+ * the player's side; create.c playerside) red, every other IFF blue. Fixed
+ * hues rather than the palette's eventsidecolors[], whose Rebel and Imperial
+ * entries look alike once lifted to full brightness on the holo. */
+static void vp_iff_color(int side, float out[3]) {
+	static const float k_rebel[3] = { 0x3C / 255.0f, 0xDC / 255.0f, 0x50 / 255.0f };    /* #3CDC50 */
+	static const float k_imperial[3] = { 0xF0 / 255.0f, 0x40 / 255.0f, 0x40 / 255.0f }; /* #F04040 */
+	static const float k_neutral[3] = { 0x4C / 255.0f, 0x8C / 255.0f, 0xFF / 255.0f };  /* #4C8CFF */
+	memcpy(out, side == 0 ? k_rebel : side == 1 ? k_imperial : k_neutral, sizeof k_rebel);
 }
 
 /* A contact's symbol: 0 craft, 1 freighter / transport, 2 capital ship /
@@ -2402,7 +2391,7 @@ static void vp_map_draw(void) {
 		const float base_y = cy - (float)mz * ry;
 		const float py = base_y - (float)mh * ry * lift;
 		float col[3];
-		vp_iff_color(snap, f->side, col);
+		vp_iff_color(f->side, col);
 		if (kind >= 5) {
 			col[0] = kind == 5 ? 1.0f : 0.35f;
 			col[1] = kind == 5 ? 0.25f : 0.55f;
@@ -2460,7 +2449,7 @@ static void vp_map_legend(void) {
 		"You are the arrow in the middle; up is straight ahead.",
 		"The oval is the plane of your wings; rings at 1/3, 2/3, full range.",
 		"A line up or down: the contact is above or below that plane.",
-		"Colours as the targeting computer. Brackets: your target.",
+		"Green: Rebel. Red: Imperial. Blue: other. Brackets: your target.",
 		"Faded at the edge: further away than the range.",
 		"Touch the map to zoom (1 / 3 / 10 km).",
 	};
@@ -2485,7 +2474,7 @@ static void vp_map_legend(void) {
 		else if (k_syms[i].kind == 6)
 			vc_pma(c, 0.35f, 0.55f, 1.0f, 1.0f);
 		else
-			vc_pma(c, 0.35f, 1.0f, 0.35f, 1.0f);
+			vc_pma(c, 0.88f, 0.97f, 1.0f, 1.0f); /* shapes only; the side is the colour */
 		vp_symbol(k_syms[i].kind, sx, sy, c);
 		vc_text(sx + 34.0f, sy - 11.0f, k_syms[i].text, 19.0f, 0, 0.88f, 0.97f, 1.0f, 1.0f);
 	}
