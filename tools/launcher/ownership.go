@@ -65,6 +65,53 @@ func parseOwners(out string, paths []string) map[string]owner {
 	return m
 }
 
+// sameOwner compares by uid when both are known, else by name.
+func sameOwner(a, b owner) bool {
+	if a.uid >= 0 && b.uid >= 0 {
+		return a.uid == b.uid
+	}
+	return a.name != "" && a.name == b.name
+}
+
+// foreign reports an owner the app cannot use. A folder the app made itself
+// shows the owner its files get on this headset: on the Steam Frame (Lepton)
+// that is root, not the app's uid, so whatever matches it is the app's.
+func (a *app) foreign(o owner) bool {
+	if a.appOwner != nil && sameOwner(o, *a.appOwner) {
+		return false
+	}
+	return foreignOwner(o, a.appUID())
+}
+
+// learnAppOwner lets the app's helper make an empty folder and notes its
+// owner (see foreign). Without the helper it is learnt from the TIE98 folder
+// once the app has made it (waitForAppFolder).
+func (a *app) learnAppOwner() {
+	if a.appOwner != nil || !a.helper {
+		return
+	}
+	probe := a.remoteBase() + "/" + ownerProbe
+	if err := a.helperMkdirs(ownerProbe); err != nil {
+		logf("owner probe: %v", err)
+		return
+	}
+	m := a.remoteOwners(probe)
+	a.adb.shell(30*time.Second, "rmdir "+shQuote(probe))
+	if o, ok := m[probe]; ok {
+		a.noteAppOwner(o, "a folder the app's helper made")
+	}
+}
+
+const ownerProbe = ".opentie-owner"
+
+func (a *app) noteAppOwner(o owner, from string) {
+	a.appOwner = &o
+	logf("%s belongs to %v; files with that owner are the app's", from, o)
+	if !sameOwner(o, owner{uid: a.appUID()}) {
+		logf("note: that is not the app's uid (%d)", a.uid)
+	}
+}
+
 var appUserRe = regexp.MustCompile(`^u\d+_a\d+$`)
 
 // foreignOwner reports an owner the app cannot read as: the shell user, or a
@@ -138,6 +185,7 @@ var gameRoots = []string{tie98Folder, tie95Folder, "XWA", soundfontsFolder, sc55
 func (a *app) prepareAppFolder() error {
 	fixed := false
 	a.tryHelper() // also makes the folders when it has the helper
+	a.learnAppOwner()
 	for {
 		if appCtx.Err() != nil {
 			return errClosed
@@ -159,7 +207,6 @@ func (a *app) prepareAppFolder() error {
 			}
 			continue
 		}
-		uid := a.appUID()
 		paths := []string{base}
 		for _, r := range gameRoots {
 			paths = append(paths, base+"/"+r)
@@ -171,7 +218,7 @@ func (a *app) prepareAppFolder() error {
 		var badOwner owner
 		for _, r := range append(append([]string{}, gameRoots...), cockpitsFolder) {
 			o, ok := owners[base+"/"+r]
-			if !ok || !foreignOwner(o, uid) {
+			if !ok || !a.foreign(o) {
 				continue
 			}
 			if r == cockpitsFolder && contains(bad, "XWA") {
@@ -195,7 +242,7 @@ func (a *app) prepareAppFolder() error {
 		if _, known := owners[base+"/"+tie98Folder]; !known {
 			logf("could not read the owner of %s; continuing", base+"/"+tie98Folder)
 		}
-		if p, ok := owners[a.remotePilots()]; ok && foreignOwner(p, uid) {
+		if p, ok := owners[a.remotePilots()]; ok && a.foreign(p) {
 			logf("pilot-import belongs to %v; removing it", p)
 			a.adb.shell(60*time.Second, "rm -rf "+shQuote(a.remotePilots()))
 		}
@@ -249,7 +296,7 @@ func (a *app) fixForeignFolder(bad []string, o owner, owners map[string]owner) e
 		}
 		return fail("Could not remove the old folders on the headset:\n  %s", strings.TrimSpace(out))
 	}
-	if p, ok := owners[a.remotePilots()]; ok && foreignOwner(p, a.uid) {
+	if p, ok := owners[a.remotePilots()]; ok && a.foreign(p) {
 		a.adb.shell(60*time.Second, "rm -rf "+shQuote(a.remotePilots()))
 	}
 	if a.helper {
@@ -381,7 +428,6 @@ func (a *app) cleanupUnreadableCopies() {
 // made with mkdir, and made by adb push. Copying uses the way that gives the
 // app's ownership; if neither does, copying would be useless, so stop.
 func (a *app) probeCopyOwnership() error {
-	uid := a.appUID()
 	probe := a.remoteBase() + "/" + tie98Folder + "/.opentie-probe"
 	rm := "rm -rf " + shQuote(probe)
 	a.adb.shell(30*time.Second, rm)
@@ -390,7 +436,7 @@ func (a *app) probeCopyOwnership() error {
 	a.adb.shell(30*time.Second, "mkdir "+shQuote(probe))
 	m := a.remoteOwners(probe)
 	o, ok := m[probe]
-	a.mkdirOK = ok && !foreignOwner(o, uid)
+	a.mkdirOK = ok && !a.foreign(o)
 	logf("probe: a folder made with mkdir belongs to %v (usable: %v)", o, a.mkdirOK)
 	a.adb.shell(30*time.Second, rm)
 
@@ -406,7 +452,7 @@ func (a *app) probeCopyOwnership() error {
 	m = a.remoteOwners(dir, dir+"/probe.txt")
 	d, okD := m[dir]
 	f, okF := m[dir+"/probe.txt"]
-	pushOK := okD && okF && !foreignOwner(d, uid) && !foreignOwner(f, uid)
+	pushOK := okD && okF && !a.foreign(d) && !a.foreign(f)
 	logf("probe: adb push made a folder owned by %v and a file owned by %v (usable: %v)", d, f, pushOK)
 	if !okD || !okF {
 		logf("probe: could not read the owners; assuming copying works")
@@ -466,7 +512,6 @@ func (a *app) finalOwnershipCheck(files []gameFile) (bad []string, rootBad bool,
 	for _, r := range rels {
 		paths = append(paths, base+"/"+r)
 	}
-	uid := a.appUID()
 	owners := a.remoteOwners(paths...)
 	var msgs []string
 	badSet := map[string]bool{}
@@ -476,7 +521,7 @@ func (a *app) finalOwnershipCheck(files []gameFile) (bad []string, rootBad bool,
 			logf("final check: no owner for %s", p)
 			continue
 		}
-		if !foreignOwner(o, uid) {
+		if !a.foreign(o) {
 			continue
 		}
 		rel := rels[i]
