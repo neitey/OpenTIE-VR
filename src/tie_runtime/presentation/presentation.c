@@ -1,5 +1,7 @@
 #include "tie_runtime/presentation/presentation.h"
 
+#include "aeron/xr.h"
+
 #include <limits.h>
 #include <string.h>
 
@@ -44,7 +46,19 @@ static int TiePresentation_ComputeFullHeightRect(int bounds_width, int bounds_he
 	return 1;
 }
 
+/* In VR the 2D frame is the virtual screen's, whatever the desktop window (a
+ * mirror on a PC, which may go fullscreen after the XR start) does. */
+static void TiePresentation_FrameSize(int* width, int* height) {
+	int xr_w = 0, xr_h = 0;
+	Aeron_XrScreenSize(&xr_w, &xr_h);
+	if (xr_w > 0 && xr_h > 0) {
+		*width = xr_w;
+		*height = xr_h;
+	}
+}
+
 static int TiePresentation_UpdateLogicalLayout(int window_width, int window_height, int force) {
+	TiePresentation_FrameSize(&window_width, &window_height);
 	TiePresentationLayout* layout = &g_presentation.layout;
 	AeronRectI modern;
 	AeronRectI classic;
