@@ -159,7 +159,7 @@ static void TieXrEnv_ScreenNormal(void) {
 }
 
 TieFlightXrEnvMode TieFlightXrEnv_Mode(void) {
-	const char* v = getenv("XWA_XR_ENVIRONMENT");
+	const char* v = SDL_getenv("XWA_XR_ENVIRONMENT");
 	if (v && (SDL_strcasecmp(v, "off") == 0 || SDL_strcasecmp(v, "none") == 0))
 		return TIE_FLIGHT_XR_ENV_OFF;
 	if (v && (strcmp(v, "0") == 0 || SDL_strcasecmp(v, "stars") == 0))
@@ -231,7 +231,7 @@ static float TieXrEnv_Smooth(float e0, float e1, float x) {
 }
 
 static float TieXrEnv_EnvFloat(const char* name, float fallback) {
-	const char* v = getenv(name);
+	const char* v = SDL_getenv(name);
 	return v && v[0] ? (float)atof(v) : fallback;
 }
 
@@ -802,7 +802,7 @@ static void TieXrEnv_LoadFrame(AeronCommandBuffer* cmd) {
 	if (s_env.frame_tried)
 		return;
 	s_env.frame_tried = true;
-	const char* override = getenv("XWA_XR_FRAME");
+	const char* override = SDL_getenv("XWA_XR_FRAME");
 	if (override && strcmp(override, "0") == 0)
 		return;
 	const char* paths[] = { override && override[0] ? override : NULL, "vr/frame.rgba", "assets/vr/frame.rgba" };
@@ -1259,7 +1259,7 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	const float gain = crawl ? 1.0f : powf(brightness * (1.0f - dim * (1.0f - film)) * (art ? 1.0f : fade), 2.2f);
 
 	/* TIE_XR_ENV_TIME=<s> freezes the craft at that moment (tests). */
-	const char* fixed_time = getenv("TIE_XR_ENV_TIME");
+	const char* fixed_time = SDL_getenv("TIE_XR_ENV_TIME");
 	const float t_s = fixed_time && fixed_time[0] ? (float)atof(fixed_time) : (float)((double)time_us * 1e-6);
 	/* The TIE Fighter scene's fight, from its first frame up; the startup
 	 * show keeps the screen away (and the controllers on A only) until the

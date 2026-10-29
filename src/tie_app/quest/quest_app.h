@@ -3,7 +3,9 @@
 
 /* Standalone headsets (Meta Quest, Pico, Steam Frame; Android):
  * settings file, log, crash report, headset defaults and the game-data
- * folders. Everything here is a no-op on the desktop builds. */
+ * folders. On Windows (PC VR) the settings file is opentie-vr.cfg in the
+ * user folder and the log opentie.log there; elsewhere on the desktop these
+ * are no-ops (AERON_XR=1 asks for VR). */
 
 #include "tie_app/application.h"
 

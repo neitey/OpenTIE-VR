@@ -1,6 +1,7 @@
 /* Per-frame flight rendering and post-processing orchestration. */
 
 #include "tie_remaster/flight/backdrops.h"
+#include <SDL3/SDL_stdinc.h>
 #include "tie_remaster/flight/billboards.h"
 #include "tie_remaster/flight/classic_draw.h"
 #include "tie_remaster/flight/cockpit/renderer.h"
@@ -413,7 +414,7 @@ static bool TieFlightRenderer_PrepareClassicMeshTables(TieFlightRenderer* g, Aer
  * (no HDR intermediate, no tonemap pass, no bloom; needs MSAA); 0 (default)
  * = HDR path. A desktop mirror then shows no flight image. */
 static bool TieFlightRenderer_XrDirectWanted(void) {
-	const char* env = getenv("XWA_XR_DIRECT_OUTPUT");
+	const char* env = SDL_getenv("XWA_XR_DIRECT_OUTPUT");
 	return env && env[0] == '1';
 }
 
@@ -439,7 +440,7 @@ static void TieFlightRenderer_XrDirectHandsHook(AeronCommandBuffer* cmd, AeronRe
 static bool TieFlightRenderer_XrPipDue(TieFlightRenderer* g, const TieSnapshot* snap) {
 	if (!g->xr_active)
 		return true;
-	const char* env = getenv("TIE_XR_PIP_EVERY");
+	const char* env = SDL_getenv("TIE_XR_PIP_EVERY");
 	const int every = env && env[0] ? atoi(env) : 2;
 	if (every <= 0)
 		return true;
@@ -911,7 +912,7 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 	 * unshadowed presentation. Full HD uses the snapshot's normalized
 	 * surface-to-light direction. Scene instances are local to the current
 	 * camera origin while cascade snapping retains its absolute position. */
-	const char* xr_shadows = getenv("XWA_XR_SHADOWS");
+	const char* xr_shadows = SDL_getenv("XWA_XR_SHADOWS");
 	if (hd_full && g->shadows.enabled && !(xr && xr_shadows && xr_shadows[0] == '0')) {
 		const TieFlightShadowSettings* settings = &g->shadows;
 		const AeronSceneDirectionalShadowDesc shadow = {
@@ -1029,7 +1030,7 @@ bool TieFlightRenderer_PrepareFrame(TieFlightRenderer* g, AeronCommandBuffer* cm
 	 * sky cube, the stars (at the far plane, depth-tested) and the SKY
 	 * billboards behind them. Same image. Not with the classic draws. */
 	{
-		const char* order = getenv("XWA_XR_DRAW_ORDER");
+		const char* order = SDL_getenv("XWA_XR_DRAW_ORDER");
 		const bool reorder = xr && hd_full && !(order && order[0] == '0');
 		AeronScene_SetOpaqueOrder(g->scene, reorder, reorder);
 	}
@@ -1150,7 +1151,7 @@ void TieFlightRenderer_SetXrMenuBackdrop(TieFlightRenderer* g, bool menu) {
 /* TIE_XR_PAUSE_DIM: displayed brightness of the frozen cockpit behind a menu
  * (0.1..1, default 0.6); the tint is applied in linear light. */
 static float TieFlightRenderer_XrMenuTint(void) {
-	const char* env = getenv("TIE_XR_PAUSE_DIM");
+	const char* env = SDL_getenv("TIE_XR_PAUSE_DIM");
 	float v = env && env[0] ? (float)atof(env) : 0.6f;
 	v = v < 0.1f ? 0.1f : v > 1.0f ? 1.0f : v;
 	return powf(v, 2.2f);
@@ -1178,7 +1179,7 @@ static AeronScenePresentChain* TieFlightRenderer_XrPresentChain(TieFlightRendere
  * eye and resampled for the right one (a glow is a wide blur; the eyes'
  * parallax does not show in it); "eye" = per eye; 0 = no bloom in VR. */
 static int TieFlightRenderer_XrBloomMode(void) {
-	const char* env = getenv("XWA_XR_BLOOM");
+	const char* env = SDL_getenv("XWA_XR_BLOOM");
 	if (env && env[0] == '0')
 		return 0;
 	if (env && strcmp(env, "eye") == 0)

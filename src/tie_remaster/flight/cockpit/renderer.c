@@ -2,6 +2,7 @@
  * decode the selected installation's cockpit files into the same cache. */
 
 #include "tie_remaster/flight/cockpit/renderer.h"
+#include <SDL3/SDL_stdinc.h>
 
 #include "aeron/aeron.h"
 #include "aeron/log.h"
@@ -3515,7 +3516,7 @@ static void TieCockpitRenderer_AtlasSize(int* w, int* h) {
 		*w = COCKPIT_ATLAS_XR_PANELS_W;
 		*h = COCKPIT_ATLAS_XR_PANELS_H;
 	}
-	const char* env = getenv("TIE_XR_ATLAS_SIZE");
+	const char* env = SDL_getenv("TIE_XR_ATLAS_SIZE");
 	if (env && env[0]) {
 		int ew = 0, eh = 0;
 		const int n = sscanf(env, "%dx%d", &ew, &eh);
@@ -3559,7 +3560,7 @@ bool TieCockpitRenderer_XrAtlasDue(TieCockpitRenderer* cg, const TieSnapshot* sn
 	cg->atlas_due_valid = true;
 	if (cg->atlas_age < UINT32_MAX)
 		cg->atlas_age++;
-	const char* env = getenv("TIE_XR_ATLAS_EVERY");
+	const char* env = SDL_getenv("TIE_XR_ATLAS_EVERY");
 	const int every = env && env[0] ? atoi(env) : 2;
 	int w, h;
 	TieCockpitRenderer_AtlasSize(&w, &h);

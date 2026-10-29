@@ -1,4 +1,5 @@
 #include "tie_remaster/flight/point_lights.h"
+#include <SDL3/SDL_stdinc.h>
 
 #include "aeron/asset/opt_model.h"
 #include "aeron/scene/world.h"
@@ -200,9 +201,9 @@ static bool TieFlightPointLights_PrepareFrame(TieFlightPointLightFrame* frame, c
  * eyes, which is what saturates the headset's GPU in a dogfight. The training
  * course's headlight stays (one light, needed to see the course). */
 static bool TieFlightPointLights_DynamicEnabled(void) {
-	const char* env = getenv("TIE_XR_POINT_LIGHTS");
+	const char* env = SDL_getenv("TIE_XR_POINT_LIGHTS");
 	if (!(env && (env[0] == '0' || env[0] == '1')))
-		env = getenv("XWA_POINT_LIGHTS");
+		env = SDL_getenv("XWA_POINT_LIGHTS");
 	if (env && (env[0] == '0' || env[0] == '1'))
 		return env[0] == '1';
 	return true;

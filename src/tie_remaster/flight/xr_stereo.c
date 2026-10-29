@@ -1,6 +1,7 @@
 /* OpenXR stereo flight helpers. See xr_stereo.h. */
 
 #include "tie_remaster/flight/xr_stereo.h"
+#include <SDL3/SDL_stdinc.h>
 
 #include <math.h>
 #include <stdlib.h>
@@ -9,7 +10,7 @@
 #include "aeron/asset/opt_model.h"
 
 float TieFlightXr_Env(const char* name, float fallback) {
-	const char* value = getenv(name);
+	const char* value = SDL_getenv(name);
 	if (value && value[0]) {
 		const float parsed = (float)atof(value);
 		if (parsed > 0.0f)
@@ -19,14 +20,14 @@ float TieFlightXr_Env(const char* name, float fallback) {
 }
 
 bool TieFlightXr_StereoEnabled(void) {
-	const char* env = getenv("XWA_XR_STEREO");
+	const char* env = SDL_getenv("XWA_XR_STEREO");
 	return !(env && env[0] == '0');
 }
 
 TieFlightXrHudLayout TieFlightXr_HudLayout(void) {
-	const char* layout = getenv("XWA_XR_HUD_LAYOUT");
-	const char* headlock = getenv("XWA_XR_HUD_HEADLOCK");
-	const char* tie_layout = getenv("TIE_XR_HUD_LAYOUT");
+	const char* layout = SDL_getenv("XWA_XR_HUD_LAYOUT");
+	const char* headlock = SDL_getenv("XWA_XR_HUD_HEADLOCK");
+	const char* tie_layout = SDL_getenv("TIE_XR_HUD_LAYOUT");
 	if ((layout && strcmp(layout, "helmet") == 0) || (tie_layout && strcmp(tie_layout, "dashboard") == 0))
 		return TIE_FLIGHT_XR_HUD_HELMET;
 	if ((layout && strcmp(layout, "fixed") == 0) || (headlock && headlock[0] == '0'))
@@ -214,7 +215,7 @@ void TieFlightXr_HudQuad(const TieFlightCamera* hc, int head, int world_far, Aer
 	if (head) {
 		const float d = TieFlightXr_Env("XWA_XR_HUD_DISTANCE", 3.0f);
 		const float scale = TieFlightXr_Env("XWA_XR_HUD_SCALE", 0.65f);
-		const char* smooth = getenv("XWA_XR_HUD_SMOOTH");
+		const char* smooth = SDL_getenv("XWA_XR_HUD_SMOOTH");
 		out->size[0] = 2.0f * d * th * scale;
 		out->size[1] = 2.0f * d * tv * scale;
 		out->position[2] = -d;

@@ -2,6 +2,7 @@
  * draw paths. */
 
 #include "tie_remaster/flight/mesh_common.h"
+#include <SDL3/SDL_stdinc.h>
 
 #include "tie_remaster/flight/pbr.h"
 #include "tie_remaster/flight/render_math.h"
@@ -267,7 +268,7 @@ const TieFlightShipModelLineLod* TieFlightMeshCommon_PickLineLod(const TieFlight
 float TieFlightMesh_LineFloorMultiplier(void) {
 	static float cached = -1.0f;
 	if (cached < 0.0f) {
-		const char* env = getenv("TIE_LINE_FLOOR_MUL");
+		const char* env = SDL_getenv("TIE_LINE_FLOOR_MUL");
 		double parsed;
 		float v = 0.5f;
 		if (env && env[0] && Aeron_ParseAsciiDouble(env, strlen(env), &parsed))

@@ -130,7 +130,7 @@ static struct {
 } s_crawl;
 
 static float crawl_env(const char* name, float fallback) {
-	const char* v = getenv(name);
+	const char* v = SDL_getenv(name);
 	return v && v[0] ? (float)atof(v) : fallback;
 }
 
@@ -823,7 +823,7 @@ void TieXrIntroCrawl_SetSnapshot(const TieSnapshot* snap, bool tie98_frames) {
 	}
 	s_crawl.frame = (float)snap->scene_clock.engine_frame + snap->scene_clock.frame_progress -
 					(tie98_frames ? 4.0f : 0.0f);
-	const char* hold = getenv("TIE_XR_CRAWL_FRAME");
+	const char* hold = SDL_getenv("TIE_XR_CRAWL_FRAME");
 	if (hold && hold[0])
 		s_crawl.frame = (float)atof(hold);
 	int n = snap->title_crawl_lines ? (int)snap->title_crawl_count : 0;

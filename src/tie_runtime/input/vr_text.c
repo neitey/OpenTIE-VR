@@ -1,4 +1,5 @@
 #include "tie_runtime/input/vr_text.h"
+#include <SDL3/SDL_stdinc.h>
 
 #include "aeron/aeron.h"
 #include "tie_runtime/input/vr_buttons.h"
@@ -24,7 +25,7 @@ enum {
 };
 
 bool TieVrText_Active(void) {
-	const char* env = getenv("TIE_VR_TEXT");
+	const char* env = SDL_getenv("TIE_VR_TEXT");
 	if (env && env[0] == '0')
 		return false;
 	if (env && env[0] == '1')

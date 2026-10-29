@@ -1,0 +1,24 @@
+
+------------------------------------------------------------------------------
+Windows (PCVR) package additions
+------------------------------------------------------------------------------
+The Windows package contains the same components as listed above, built for
+Windows x86-64, plus:
+
+ - mingw-w64 runtime (headers, CRT startup and import libraries; linked into
+   OpenTIE.exe and the DLLs) - zlib/libpng-style and public domain terms,
+   see https://www.mingw-w64.org
+ - LLVM libc++, libunwind and compiler-rt (llvm-mingw toolchain, linked in
+   or shipped as DLLs where used) - Apache License 2.0 with LLVM Exceptions
+   (licenses/llvm-mingw.txt)
+ - OpenXR loader (openxr_loader.dll), built from the Khronos OpenXR-SDK -
+   Apache License 2.0 (licenses/OpenXR-SDK.txt)
+ - sherpa-onnx (sherpa-onnx-c-api.dll) and ONNX Runtime (onnxruntime.dll),
+   the official prebuilt Windows x64 release (static CRT) - Apache License
+   2.0 / MIT, see above
+ - FluidSynth (linked into OpenTIE.exe) - GNU LGPL 2.1
+   (licenses/FluidSynth-LGPL-2.1.txt); SpeexDSP resampler - BSD 3-Clause
+   (licenses/SpeexDSP-BSD-3-Clause.txt)
+
+Licence texts of the libraries shipped as DLLs are also in the licenses
+folder.

@@ -5,12 +5,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <SDL3/SDL_stdinc.h>
+
 static int TieMain_Usage(const char* message, const char* argument) {
 	if (message && argument)
 		fprintf(stderr, "[tie-aeron] "), fprintf(stderr, message, argument), fputc('\n', stderr);
 	else if (message)
 		fprintf(stderr, "[tie-aeron] %s\n", message);
-	fprintf(stderr, "Usage: tie [--tie95-data <dir>] [--tie98-data <dir>] [--resource-root <dir>]\n");
+	fprintf(stderr, "Usage: tie [--xr] [--tie95-data <dir>] [--tie98-data <dir>] [--resource-root <dir>]\n");
 	return 2;
 }
 
@@ -20,6 +22,11 @@ static int TieMain_ParseOptions(int argc, char* argv[], TieLaunchOptions* out) {
 	memset(out, 0, sizeof *out);
 	for (int index = 1; index < argc; ++index) {
 		const char* argument = argv[index];
+		if (strcmp(argument, "--xr") == 0) {
+			/* VR (OpenXR), as AERON_XR=1. */
+			SDL_setenv_unsafe("AERON_XR", "1", 1);
+			continue;
+		}
 		int option = -1;
 		const char* value = NULL;
 		for (int candidate = 0; candidate < 3; ++candidate) {

@@ -1,6 +1,7 @@
 /* VR menu pointer beam; see xr_menu_beam.h. */
 
 #include "tie_remaster/flight/xr_menu_beam.h"
+#include <SDL3/SDL_stdinc.h>
 
 #include <math.h>
 #include <stdlib.h>
@@ -80,7 +81,7 @@ static void TieFlightXrBeam_Strip(float x, float w, float radius, float soft, co
 }
 
 static float TieFlightXrBeam_EnvFloat(const char* name, float fallback) {
-	const char* value = getenv(name);
+	const char* value = SDL_getenv(name);
 	return value && value[0] ? (float)atof(value) : fallback;
 }
 

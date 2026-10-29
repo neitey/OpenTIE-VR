@@ -1,4 +1,5 @@
 #include "tie_runtime/input/controller_mapping.h"
+#include <SDL3/SDL_stdinc.h>
 #include "aeron/aeron.h"
 #include "aeron/log.h"
 #include "tie_runtime/input/keyboard_mapping.h"
@@ -610,7 +611,7 @@ void TieControllerMapping_SetXrVirtualStick(bool held, float x, float y, float r
 }
 
 double TieControllerMapping_XrStickExponent(void) {
-	const char* env = getenv("TIE_XR_STICK_CURVE");
+	const char* env = SDL_getenv("TIE_XR_STICK_CURVE");
 	double exponent = env && env[0] ? atof(env) : 2.0;
 	if (!(exponent >= 1.0))
 		exponent = 1.0;

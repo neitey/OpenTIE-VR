@@ -1,0 +1,20 @@
+--- a/src/gpu/xr/SDL_gpu_openxr.c	2026-10-21 23:07:24.019324538 +0000
++++ b/src/gpu/xr/SDL_gpu_openxr.c	2026-10-21 23:07:24.058623266 +0000
+@@ -177,7 +177,7 @@
+     xrInstanceCreateInfo.applicationInfo.engineVersion = engineVersion;
+ 
+     if ((xrResult = xrCreateInstance(&xrInstanceCreateInfo, instance)) != XR_SUCCESS) {
+-        SDL_LogDebug(SDL_LOG_CATEGORY_GPU, "Failed to create OpenXR instance");
++        SDL_LogWarn(SDL_LOG_CATEGORY_GPU, "Failed to create OpenXR instance (XrResult %d)", (int)xrResult);
+         SDL_stack_free(apiLayerNames);
+         SDL_stack_free(extensionNames);
+         return false;
+@@ -200,7 +200,7 @@
+     systemGetInfo.type = XR_TYPE_SYSTEM_GET_INFO;
+     systemGetInfo.formFactor = (XrFormFactor)SDL_GetNumberProperty(props, SDL_PROP_GPU_DEVICE_CREATE_XR_FORM_FACTOR_NUMBER, XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY);
+     if ((xrResult = (*xr)->xrGetSystem(*instance, &systemGetInfo, systemId)) != XR_SUCCESS) {
+-        SDL_LogDebug(SDL_LOG_CATEGORY_GPU, "Failed to get OpenXR system");
++        SDL_LogWarn(SDL_LOG_CATEGORY_GPU, "Failed to get OpenXR system (XrResult %d; -50 = no headset available right now)", (int)xrResult);
+         (*xr)->xrDestroyInstance(*instance);
+         SDL_free(*xr);
+         return false;

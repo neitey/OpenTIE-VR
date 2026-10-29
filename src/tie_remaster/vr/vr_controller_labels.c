@@ -1,6 +1,7 @@
 /* VR controller labels; see vr_controller_labels.h. */
 
 #include "tie_remaster/vr/vr_controller_labels.h"
+#include <SDL3/SDL_stdinc.h>
 
 #include "aeron/aeron.h"
 #include "aeron/log.h"
@@ -197,7 +198,7 @@ static float lb_text_width(const char* text, float size) {
 /* ---- What the controls do ---------------------------------------------- */
 
 static int lb_enabled(void) {
-	const char* env = getenv("XWA_XR_CONTROLLER_LABELS");
+	const char* env = SDL_getenv("XWA_XR_CONTROLLER_LABELS");
 	return TieVrHands_Mode() == TIE_VR_HANDS_CONTROLLERS && !(env && env[0] == '0');
 }
 
@@ -288,7 +289,7 @@ static int lb_entries(int hand, const AeronXrHand* xh, LbEntry* out) {
 				break;
 			default: {
 				/* The thumb rest starts voice commands (where it has one). */
-				const char* voice = getenv("XWA_XR_VOICE");
+				const char* voice = SDL_getenv("XWA_XR_VOICE");
 				e->control = "THUMB REST";
 				ok = Aeron_XrThumbrestTouch(hand) >= 0 &&
 					 !(voice && (voice[0] == '0' || voice[0] == 'o' || voice[0] == 'O'));

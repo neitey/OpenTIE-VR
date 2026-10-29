@@ -11,6 +11,57 @@
 
 #include "aeron/aeron.h"
 #include "aeron/log.h"
+#include "tie_remaster/flight/xr_env.h"
+
+/* KEY=VALUE lines into the environment ('#' comments and blank lines skipped). */
+static void quest_apply_settings(FILE* f) {
+	char line[2048];
+	while (fgets(line, sizeof line, f)) {
+		char* key = line;
+		while (*key == ' ' || *key == '\t')
+			key++;
+		if (*key == '#' || *key == '\0' || *key == '\n' || *key == '\r')
+			continue;
+		char* eq = strchr(key, '=');
+		if (!eq)
+			continue;
+		*eq = '\0';
+		char* end = eq + 1 + strcspn(eq + 1, "\r\n");
+		*end = '\0';
+		SDL_setenv_unsafe(key, eq + 1, 1);
+	}
+}
+
+/* Writes KEY=VALUE into the settings file at `path`, replacing the key's line. */
+static void quest_write_setting(const char* path, const char* key, const char* value) {
+	if (!path || !path[0] || !key || !key[0])
+		return;
+	size_t size = 0;
+	char* old = (char*)SDL_LoadFile(path, &size);
+	FILE* f = fopen(path, "w");
+	if (!f) {
+		SDL_free(old);
+		return;
+	}
+	const size_t klen = strlen(key);
+	int written = 0;
+	for (char* p = old; p && *p;) {
+		char* nl = strchr(p, '\n');
+		size_t n = nl ? (size_t)(nl - p + 1) : strlen(p);
+		if (strncmp(p, key, klen) == 0 && p[klen] == '=') {
+			if (!written)
+				fprintf(f, "%s=%s\n", key, value ? value : "");
+			written = 1;
+		} else {
+			fwrite(p, 1, n, f);
+		}
+		p += n;
+	}
+	if (!written)
+		fprintf(f, "%s=%s\n", key, value ? value : "");
+	fclose(f);
+	SDL_free(old);
+}
 
 #if defined(SDL_PLATFORM_ANDROID)
 #include <SDL3/SDL_system.h>
@@ -25,7 +76,6 @@
 #include "tie_app/quest/crash_report.h"
 #include "tie_app/quest/error_screen.h"
 #include "tie_app/quest/xr_tier.h"
-#include "tie_remaster/flight/xr_env.h"
 
 static char s_external[1024];
 static char s_tie95[1100];
@@ -131,7 +181,6 @@ static const char k_settings_template_scenes[] =
 
 static void quest_load_settings(void) {
 	char path[1100];
-	char line[2048];
 	if (!s_external[0])
 		return;
 	if (!SDL_getenv("AERON_LOG_FILE")) {
@@ -155,20 +204,7 @@ static void quest_load_settings(void) {
 		}
 		return;
 	}
-	while (fgets(line, sizeof line, f)) {
-		char* key = line;
-		while (*key == ' ' || *key == '\t')
-			key++;
-		if (*key == '#' || *key == '\0' || *key == '\n' || *key == '\r')
-			continue;
-		char* eq = strchr(key, '=');
-		if (!eq)
-			continue;
-		*eq = '\0';
-		char* end = eq + 1 + strcspn(eq + 1, "\r\n");
-		*end = '\0';
-		SDL_setenv_unsafe(key, eq + 1, 1);
-	}
+	quest_apply_settings(f);
 	fclose(f);
 }
 
@@ -567,35 +603,7 @@ void TieQuest_Frame(void) {
 	}
 }
 
-void TieQuest_SaveSetting(const char* key, const char* value) {
-	if (!s_cfg_path[0] || !key || !key[0])
-		return;
-	size_t size = 0;
-	char* old = (char*)SDL_LoadFile(s_cfg_path, &size);
-	FILE* f = fopen(s_cfg_path, "w");
-	if (!f) {
-		SDL_free(old);
-		return;
-	}
-	const size_t klen = strlen(key);
-	int written = 0;
-	for (char* p = old; p && *p;) {
-		char* nl = strchr(p, '\n');
-		size_t n = nl ? (size_t)(nl - p + 1) : strlen(p);
-		if (strncmp(p, key, klen) == 0 && p[klen] == '=') {
-			if (!written)
-				fprintf(f, "%s=%s\n", key, value ? value : "");
-			written = 1;
-		} else {
-			fwrite(p, 1, n, f);
-		}
-		p += n;
-	}
-	if (!written)
-		fprintf(f, "%s=%s\n", key, value ? value : "");
-	fclose(f);
-	SDL_free(old);
-}
+void TieQuest_SaveSetting(const char* key, const char* value) { quest_write_setting(s_cfg_path, key, value); }
 
 const char* TieQuest_ExternalDir(void) {
 	return s_external;
@@ -605,10 +613,115 @@ const char* TieQuest_ExternalDir(void) {
 
 #include "tie_app/quest/error_screen.h"
 
+#if defined(_WIN32)
+#include <direct.h>
+#include <stdlib.h>
+#endif
+
+static char s_pc_cfg_path[1100];
+
+#if defined(_WIN32)
+static const char k_pc_settings_template[] =
+	"# OpenTIE-VR (PCVR) settings: KEY=VALUE lines, read at every start. The VR\n"
+	"# options in the game write their values here; remove a line to go back to\n"
+	"# the default. (The VR settings keep their OpenXWA-VR names: the two share\n"
+	"# the VR code.) A few that have no menu entry:\n"
+	"# 1 = always start in VR (as with --xr), 0 = only with --xr:\n"
+	"#AERON_XR=1\n"
+	"# X-Wing Alliance's 3D TIE cockpits: its FlightModels folder (the default\n"
+	"# cockpit is then X-Wing Alliance's; without it, X-Wing Revival's):\n"
+	"#TIE_XWA_COCKPITS=C:\\GOG Games\\Star Wars - X-Wing Alliance\\FlightModels\n"
+	"# Virtual screen for menus, briefings and films: distance and width in\n"
+	"# metres, and its pixel size:\n"
+	"#AERON_XR_SCREEN_DISTANCE=3.2\n"
+	"#AERON_XR_SCREEN_WIDTH=2.1\n"
+	"#AERON_XR_SCREEN_PIXELS=1920x1440\n"
+	"# Per-eye render resolution (lower = faster) and pixel budget (unset = no cap):\n"
+	"#AERON_XR_RESOLUTION_SCALE=1.0\n"
+	"#AERON_XR_EYE_PIXELS=6000000\n"
+	"# Thumbstick response in flight (VR settings: Stick Response): 1.0 = direct\n"
+	"# (linear), 1.5 medium, 2.0 = precise (default), 2.6 very precise:\n"
+	"#TIE_XR_STICK_CURVE=2.0\n"
+	"# Voice commands: doubletap (thumb rest), hold or off; the speech model is\n"
+	"# the voice folder next to OpenTIE.exe:\n"
+	"#XWA_XR_VOICE=doubletap\n"
+	"# 0 = keep the game running while the headset is off / the dashboard is open:\n"
+	"#XWA_XR_AUTO_PAUSE=1\n"
+	"# 1 = laser and explosion lights in VR:\n"
+	"#TIE_XR_POINT_LIGHTS=1\n"
+	"# GPU API: direct3d12 (the default) or vulkan, e.g. if a runtime has trouble\n"
+	"# with one of them:\n"
+	"#SDL_GPU_DRIVER=vulkan\n";
+
+/* A path given relative to where OpenTIE was started, made absolute before
+ * the working folder changes. */
+static const char* pc_absolute(const char* path, char* out, size_t size) {
+	if (!path || !path[0])
+		return path;
+	return _fullpath(out, path, size) ? out : path;
+}
+#endif
+
+/* PC VR (Windows): the VR settings in opentie-vr.cfg in the user folder
+ * (%APPDATA%\\TotallyOpen\\OpenTIE), written by the VR settings like the
+ * headsets' opentie-quest.cfg (AERON_XR=1 there always starts in VR; so does
+ * --xr); the log in opentie.log there (a GUI program has no console). The
+ * working folder becomes OpenTIE.exe's, where the VR art (vr), the speech
+ * model (voice) and the DLLs are. Linux and macOS keep the plain desktop
+ * start (AERON_XR=1 asks for VR). */
 int TieQuest_PreInit(TieLaunchOptions* launch) {
+#if defined(_WIN32)
+	static char tie95[1024], tie98[1024], resources[1024];
+	if (launch) {
+		launch->tie95_data = pc_absolute(launch->tie95_data, tie95, sizeof tie95);
+		launch->tie98_data = pc_absolute(launch->tie98_data, tie98, sizeof tie98);
+		launch->resource_root = pc_absolute(launch->resource_root, resources, sizeof resources);
+	}
+	const char* base = SDL_GetBasePath();
+	if (base && base[0])
+		_chdir(base);
+	char* pref = SDL_GetPrefPath("TotallyOpen", "OpenTIE");
+	if (pref) {
+		if (!SDL_getenv("AERON_LOG_FILE")) {
+			char path[1100], prev[1100];
+			snprintf(path, sizeof path, "%sopentie.log", pref);
+			snprintf(prev, sizeof prev, "%sopentie-prev.log", pref);
+			remove(prev);
+			rename(path, prev);
+			SDL_setenv_unsafe("AERON_LOG_FILE", path, 1);
+		}
+		snprintf(s_pc_cfg_path, sizeof s_pc_cfg_path, "%sopentie-vr.cfg", pref);
+		SDL_free(pref);
+	}
+	const char* asked = SDL_getenv("AERON_XR");
+	const int xr_asked = asked && asked[0] == '1';
+	if (s_pc_cfg_path[0]) {
+		FILE* f = fopen(s_pc_cfg_path, "r");
+		if (f) {
+			quest_apply_settings(f);
+			fclose(f);
+		} else if (xr_asked && (f = fopen(s_pc_cfg_path, "w")) != NULL) {
+			fputs(k_pc_settings_template, f);
+			fclose(f);
+		}
+	}
+	if (xr_asked)
+		SDL_setenv_unsafe("AERON_XR", "1", 1); /* --xr wins over AERON_XR=0 in the file */
+	if (!SDL_getenv("XWA_VOICE_LIB"))
+		SDL_setenv_unsafe("XWA_VOICE_LIB", "sherpa-onnx-c-api.dll", 1);
+#else
 	(void)launch;
+#endif
 	const char* xr = SDL_getenv("AERON_XR");
-	return xr && xr[0] == '1';
+	const int requested = xr && xr[0] == '1';
+	if (requested) {
+		/* The menus on the Quest's 4:3 virtual screen. */
+		if (!SDL_getenv("AERON_XR_SCREEN_DISTANCE"))
+			SDL_setenv_unsafe("AERON_XR_SCREEN_DISTANCE", "3.2", 1);
+		if (!SDL_getenv("AERON_XR_SCREEN_PIXELS"))
+			SDL_setenv_unsafe("AERON_XR_SCREEN_PIXELS", "1920x1440", 1);
+	}
+	return requested;
 }
 
 int TieQuest_PostInit(TieLaunchOptions* launch) {
@@ -621,12 +734,16 @@ int TieQuest_PostInit(TieLaunchOptions* launch) {
 	return 1;
 }
 
-void TieQuest_Frame(void) {}
-
-void TieQuest_SaveSetting(const char* key, const char* value) {
-	(void)key;
-	(void)value;
+void TieQuest_Frame(void) {
+	/* Y in the menus changed the scene: kept like the VR settings' choice. */
+	if (s_pc_cfg_path[0]) {
+		const char* scene = TieFlightXrEnv_TakeSceneSwap();
+		if (scene)
+			TieQuest_SaveSetting("XWA_XR_ENVIRONMENT", scene);
+	}
 }
+
+void TieQuest_SaveSetting(const char* key, const char* value) { quest_write_setting(s_pc_cfg_path, key, value); }
 
 const char* TieQuest_ExternalDir(void) {
 	return "";

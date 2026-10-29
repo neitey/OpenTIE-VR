@@ -630,7 +630,7 @@ static struct {
 static float s_weave_acc_max; /* the weave's hardest pull, 1/s^2 */
 
 static float art_env(const char* name, float fallback) {
-	const char* v = getenv(name);
+	const char* v = SDL_getenv(name);
 	return v && v[0] ? (float)atof(v) : fallback;
 }
 
@@ -974,7 +974,7 @@ static void art_make_planet(AeronCommandBuffer* cmd) {
  * never part of the source tree. `override_env` names a variable that
  * overrides the path (0 = none). */
 static bool art_load_rgba(AeronCommandBuffer* cmd, int slot, const char* name, const char* override_env) {
-	const char* override = getenv(override_env);
+	const char* override = SDL_getenv(override_env);
 	if (override && strcmp(override, "0") == 0)
 		return false;
 	char asset[2][64];
@@ -2155,7 +2155,7 @@ void TieXrArt_Advance(float dt, const float head_q[4]) {
 	art_title_update(fminf(fmaxf(dt, 0.0f), 0.1f));
 	/* On the startup show, A during the fight jumps to the cover's moment. */
 	const bool skip = s_art.pressed;
-	const char* fixed = getenv("TIE_XR_ENV_TIME");
+	const char* fixed = SDL_getenv("TIE_XR_ENV_TIME");
 	if (SC->animated <= 0) {
 		/* A still: at the cover's moment from the start. */
 		if (s_art.anim_t < ART_ANIM_SECONDS)

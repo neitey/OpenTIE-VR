@@ -1,4 +1,5 @@
 #include "tie_runtime/input/vr_buttons.h"
+#include <SDL3/SDL_stdinc.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,7 +45,7 @@ TieInputAction TieVrButtons_Action(AeronXrButton button, bool shifted) {
 }
 
 bool TieVrButtons_SticksSwapped(void) {
-	const char* value = getenv("XWA_XR_SWAP_STICKS");
+	const char* value = SDL_getenv("XWA_XR_SWAP_STICKS");
 	return value && value[0] == '1';
 }
 

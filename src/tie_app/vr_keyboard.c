@@ -32,7 +32,7 @@ typedef struct TieVrKeyboard {
 static TieVrKeyboard g_vrk;
 
 static bool TieVrKeyboard_Enabled(void) {
-	const char* env = getenv("TIE_VR_KEYBOARD");
+	const char* env = SDL_getenv("TIE_VR_KEYBOARD");
 	if (env && env[0] == '0')
 		return false;
 	if (env && env[0] == '1')

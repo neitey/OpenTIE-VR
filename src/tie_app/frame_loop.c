@@ -176,7 +176,7 @@ void TieFrameLoop_Run(void) {
 			static int slow_ms = -1;
 			static uint64_t last_ns;
 			if (slow_ms < 0) {
-				const char* env = getenv("TIE_LOG_SLOW_FRAMES");
+				const char* env = SDL_getenv("TIE_LOG_SLOW_FRAMES");
 				slow_ms = env && env[0] ? atoi(env) : 0;
 			}
 			if (slow_ms > 0) {

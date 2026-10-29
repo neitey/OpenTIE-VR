@@ -747,7 +747,7 @@ static bool TieRemaster_XrStereoWanted(void) {
  * flat onto the virtual screen in black space, as before; default: it stays
  * in stereo, frozen, the menu screen in front of the cockpit. */
 static bool TieRemaster_XrPauseBackdropWanted(void) {
-	const char* env = getenv("TIE_XR_PAUSE_BACKDROP");
+	const char* env = SDL_getenv("TIE_XR_PAUSE_BACKDROP");
 	return !(env && env[0] == '0');
 }
 
