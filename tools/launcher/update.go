@@ -250,7 +250,8 @@ func findReleaseAssets(rel *ghRelease) (zipAsset, sums *ghAsset) {
 	for i := range rel.Assets {
 		as := &rel.Assets[i]
 		l := strings.ToLower(as.Name)
-		if ok, _ := path.Match("opentie-vr-*.zip", l); ok && zipAsset == nil {
+		// The PC VR package (OpenTIE-VR-PCVR-*.zip) is in the same release.
+		if ok, _ := path.Match("opentie-vr-*.zip", l); ok && !strings.Contains(l, "pcvr") && zipAsset == nil {
 			zipAsset = as
 		}
 		if l == "sha256sums.txt" {

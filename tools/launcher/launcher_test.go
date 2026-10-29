@@ -578,7 +578,7 @@ func TestImportBatches(t *testing.T) {
 }
 
 func TestReleaseAssets(t *testing.T) {
-	rel := &ghRelease{Assets: []ghAsset{{Name: "OpenTIE-VR-1.0.0.apk"}, {Name: "OpenXWA-Quest-1.0.0.zip"}, {Name: "OpenTIE-VR-1.0.0.zip"}, {Name: "SHA256SUMS.txt"}}}
+	rel := &ghRelease{Assets: []ghAsset{{Name: "OpenTIE-VR-PCVR-1.0.0-win64.zip"}, {Name: "OpenTIE-VR-1.0.0.apk"}, {Name: "OpenXWA-Quest-1.0.0.zip"}, {Name: "OpenTIE-VR-1.0.0.zip"}, {Name: "SHA256SUMS.txt"}}}
 	z, s := findReleaseAssets(rel)
 	if z == nil || z.Name != "OpenTIE-VR-1.0.0.zip" || s == nil {
 		t.Errorf("findReleaseAssets = %v %v", z, s)
