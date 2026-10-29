@@ -2393,9 +2393,9 @@ static void vp_map_draw(void) {
 		float col[3];
 		vp_iff_color(f->side, col);
 		if (kind >= 5) {
-			col[0] = kind == 5 ? 1.0f : 0.35f;
-			col[1] = kind == 5 ? 0.25f : 0.55f;
-			col[2] = kind == 5 ? 0.2f : 1.0f;
+			col[0] = 1.0f; /* missile orange, torpedo / bomb yellow */
+			col[1] = kind == 5 ? 0.55f : 0.92f;
+			col[2] = kind == 5 ? 0.1f : 0.2f;
 		}
 		float cc[4];
 		vc_pma(cc, col[0], col[1], col[2], outside ? 0.45f : 1.0f);
@@ -2470,9 +2470,9 @@ static void vp_map_legend(void) {
 		const float sx = x + 50.0f + (float)(i % 2) * (w * 0.5f);
 		const float sy = ty + (float)(i / 2) * 40.0f + 10.0f;
 		if (k_syms[i].kind == 5)
-			vc_pma(c, 1.0f, 0.25f, 0.2f, 1.0f);
+			vc_pma(c, 1.0f, 0.55f, 0.1f, 1.0f);
 		else if (k_syms[i].kind == 6)
-			vc_pma(c, 0.35f, 0.55f, 1.0f, 1.0f);
+			vc_pma(c, 1.0f, 0.92f, 0.2f, 1.0f);
 		else
 			vc_pma(c, 0.88f, 0.97f, 1.0f, 1.0f); /* shapes only; the side is the colour */
 		vp_symbol(k_syms[i].kind, sx, sy, c);
