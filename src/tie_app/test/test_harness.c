@@ -1231,6 +1231,9 @@ static void TieTest_ApplyGamepad(AeronInputSnapshot* input) {
 	 * as Aeron's virtual Touch pad does. */
 	float vstick[3];
 	if (g_test.pad_is_xr && TieTestXr_VirtualStick(vstick)) {
+		const char* invert_vstick = SDL_getenv("AERON_XR_INVERT_VSTICK_PITCH");
+		if (invert_vstick && invert_vstick[0] == '1')
+			vstick[1] = -vstick[1];
 		const int16_t v[3] = { (int16_t)(vstick[0] * 32767.0f), (int16_t)(-vstick[1] * 32767.0f),
 							   (int16_t)(vstick[2] * 32767.0f) };
 		const int slot[3] = { AERON_GAMEPAD_AXIS_LEFTX, AERON_GAMEPAD_AXIS_LEFTY, AERON_GAMEPAD_AXIS_RIGHTX };
