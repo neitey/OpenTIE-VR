@@ -5,7 +5,7 @@ and Steam Frame (no PC needed while you play), flown from 3D TIE cockpits.
 Pico is supported but not tested yet. A first PC VR build (Windows, OpenXR)
 is available too.
 
-OpenTIE-VR is a fork of [OpenTIE](https://github.com/elyosh/OpenTIE), the
+Neitey's OpenTIE-VR is a fork of [OpenTIE](https://github.com/elyosh/OpenTIE), the
 open-source reimplementation of TIE Fighter, with the VR layer of
 [Neitey's XW: Alliance VR](https://github.com/neitey/OpenXWA-Quest) (same
 engine).
