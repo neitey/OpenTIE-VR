@@ -219,9 +219,10 @@ static void XrStick(AeronControllerSnapshot* pad, double x, double y, double rol
 	pad->gamepad_axes[AERON_GAMEPAD_AXIS_RIGHTX] = (int16_t)lround(roll * 32767.0);
 }
 
-/* The thumbstick response in flight (as OpenXWA's): one round 10 % dead
- * zone on the steering stick, the game answering from its edge, full on a
- * full diagonal, monotonic without jumps; roll with a 20 % dead zone. */
+/* The thumbstick response in flight: one round 10 % dead zone on the
+ * steering stick, the game answering gently from its edge (no step to a
+ * minimum turn rate), full on a full diagonal, monotonic without jumps; roll
+ * with a 20 % dead zone. */
 static void TestXrStickResponse(AeronControllerSnapshot* pad) {
 	int16_t g[3];
 	XrStick(pad, 0.09, 0.0, 0.0);
@@ -230,7 +231,7 @@ static void TestXrStickResponse(AeronControllerSnapshot* pad) {
 	XrStick(pad, 0.12, 0.0, 0.0);
 	XrGameAxes(g);
 	printf("XR stick 0.12 across: yaw %d\n", g[0]);
-	CHECK(g[0] >= 11 && g[0] <= 14);
+	CHECK(g[0] >= 1 && g[0] <= 3);
 	XrStick(pad, 0.0, 0.2, 0.0);
 	XrGameAxes(g);
 	printf("XR stick 0.2 back: pitch %d\n", g[1]);
@@ -270,26 +271,26 @@ static void TestXrStickResponse(AeronControllerSnapshot* pad) {
 	}
 	printf("XR stick sweep: largest step %d\n", biggest);
 	CHECK(biggest <= 5);
-	/* Roll: 20 % dead zone, then from there. */
+	/* Roll: 20 % dead zone, then gently from there. */
 	XrStick(pad, 0.0, 0.0, 0.18);
 	XrGameAxes(g);
 	CHECK(g[2] == 0);
 	XrStick(pad, 0.0, 0.0, 0.25);
 	XrGameAxes(g);
 	printf("XR roll 0.25: %d\n", g[2]);
-	CHECK(g[2] >= 23 && g[2] <= 28);
+	CHECK(g[2] >= 1 && g[2] <= 4);
 	/* Linear (TIE_XR_STICK_CURVE=1): half across is about half. */
 	SDL_setenv_unsafe("TIE_XR_STICK_CURVE", "1", 1);
 	XrStick(pad, 0.5, 0.0, 0.0);
 	XrGameAxes(g);
 	printf("XR stick half across, linear: yaw %d\n", g[0]);
-	CHECK(g[0] >= 55 && g[0] <= 62);
+	CHECK(g[0] >= 50 && g[0] <= 58);
 	SDL_unsetenv_unsafe("TIE_XR_STICK_CURVE");
 	/* Precise (default): half across turns gently. */
 	XrStick(pad, 0.5, 0.0, 0.0);
 	XrGameAxes(g);
 	printf("XR stick half across, precise: yaw %d\n", g[0]);
-	CHECK(g[0] >= 30 && g[0] <= 40);
+	CHECK(g[0] >= 22 && g[0] <= 32);
 	/* The grabbed flight stick: its axes stay linear (as sampled, with the
 	 * binding's gate). */
 	TieControllerMapping_SetXrVirtualStick(true, 0.5f, 0.0f, 0.0f);
