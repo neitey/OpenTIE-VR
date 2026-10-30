@@ -505,12 +505,13 @@ static void vc_layout(void) {
 			vc_key_row(x, 62.0f, w, 66.0f, 4, l, a, NULL);
 		}
 		{
-			static const char* const l[4] = { "ATTACKING\nMY TARGET", "NEWEST", "IN SIGHTS", "CLEAR" };
-			static const TieInputAction a[4] = { TIE_INPUT_ACTION_TARGET_ATTACKER_CHAIN,
+			static const char* const l[5] = { "ATTACKING\nMY TARGET", "NEWEST", "IN SIGHTS", "INCOMING", "CLEAR" };
+			static const TieInputAction a[5] = { TIE_INPUT_ACTION_TARGET_ATTACKER_CHAIN,
 												 TIE_INPUT_ACTION_TARGET_NEWEST_CRAFT, TIE_INPUT_ACTION_AUTO_TARGET,
-												 TIE_INPUT_ACTION_TARGET_CLEAR };
-			vc_key_row(x, 136.0f, w, 48.0f, 4, l, a, row);
-			row[0]->enabled = row[3]->enabled = st->has_target;
+												 TIE_INPUT_ACTION_TARGET_INCOMING_WARHEAD, TIE_INPUT_ACTION_TARGET_CLEAR };
+			vc_key_row(x, 136.0f, w, 48.0f, 5, l, a, row);
+			row[0]->enabled = row[4]->enabled = st->has_target;
+			row[3]->lit = st->incoming;
 		}
 		{
 			VcButton* prev = vc_key(x, 192.0f, 70.0f, 48.0f, "<", TIE_INPUT_ACTION_TARGET_COMPONENT_PREV);
@@ -1625,6 +1626,8 @@ static void vw_layout(void) {
 			b->enabled = st->has_target;
 			vw_key("IN SIGHTS", TIE_INPUT_ACTION_AUTO_TARGET);
 			vw_key("PREVIOUS\nTARGET", TIE_INPUT_ACTION_TARGET_PREV);
+			b = vw_key("INCOMING\nMISSILE", TIE_INPUT_ACTION_TARGET_INCOMING_WARHEAD);
+			b->lit = st->incoming;
 			break;
 		case 1 + VW_CAT_WINGMEN:
 			b = vw_key("ATTACK\nMY TARGET", TIE_INPUT_ACTION_COMM_ASSIGN_TARGET);

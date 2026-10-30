@@ -23,6 +23,7 @@ typedef enum TieInputAction {
 	TIE_INPUT_ACTION_TARGET_NEWEST_CRAFT,            /* 'u' — newest craft in area */
 	TIE_INPUT_ACTION_TARGET_CLEAR,                   /* 'o' — drop current target */
 	TIE_INPUT_ACTION_AUTO_TARGET,                    /* Alt+1 — picktarget under crosshair */
+	TIE_INPUT_ACTION_TARGET_INCOMING_WARHEAD,        /* Alt+I — nearest warhead homing on me (OpenTIE) */
 	TIE_INPUT_ACTION_CYCLE_WARHEAD_VIEW,             /* F2 — select / cycle launched-warhead view */
 
 	/* Throttle / engine */

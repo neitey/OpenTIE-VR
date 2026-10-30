@@ -127,6 +127,7 @@ typedef enum {
 	KEY_ALT_V = 175,
 	KEY_ALT_B = 176,
 	KEY_ALT_M = 178,
+	KEY_ALT_I = 151, /* OpenTIE: target the nearest warhead homing on the player */
 	KEY_F1 = 187, /* scan 0x3B | 0x80 */
 	KEY_F2 = 188,
 	KEY_F3 = 189,
@@ -288,6 +289,13 @@ int16_t user_validcomponent_tie98(uint16_t model_type, uint16_t mesh_index);
 /* 69-byte AI-order -> display-message-index table. Loaded from .DAT
  * by fediskio_loadtext. */
 extern uint8_t convertmessage[69];
+
+#ifdef TIE_MODERN
+/* OpenTIE: the nearest warhead (torpedo, missile, rocket, bomb, mag pulse;
+ * not lasers) homing on the player's craft, as an objects[] index, or 0xFFFF.
+ * Alt+I targets it (the VR console's INCOMING). */
+uint16_t user_findincomingwarhead(void);
+#endif
 
 /* Numpad view-key -> pilotview / up_angle translation tables, both
  * indexed by key - '0' and driven by the view keys inside user_inputforplane. */

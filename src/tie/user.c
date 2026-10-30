@@ -1,4 +1,7 @@
 #include "tie/user.h"
+#ifdef TIE_MODERN
+#include "tie/laser.h"
+#endif
 #include "tie/edition.h"
 #include "tie/help.h"
 #include "tie_runtime/audio/imuse_api.h"
@@ -1687,6 +1690,22 @@ void user_inputforplane(void) {
 				}
 				break;
 			}
+#ifdef TIE_MODERN
+			/* Alt+I (OpenTIE): target the nearest warhead homing on me. */
+			case KEY_ALT_I: {
+				const uint16_t warhead = user_findincomingwarhead();
+				if (warhead == 0xFFFF)
+					break;
+				pstate.target_obj_idx = warhead;
+				if (!replayviewmode && camera.view_target_tracking)
+					camera.view_target_obj = pstate.target_obj_idx;
+				pstate.radar_subtarget_state = 0;
+				if (pstate.space_confirm_action == 1)
+					pstate.space_confirm_action = 0;
+				msg_messageprintf(MSG_WARHEAD_TARGETED);
+				break;
+			}
+#endif
 			/* 'i': radar toggle. */
 			case KEY_i: {
 				pstate.radar_enable ^= 1u;
@@ -3968,3 +3987,30 @@ int16_t user_validcomponent(uint16_t comp_idx) {
 	}
 	return 0;
 }
+
+#ifdef TIE_MODERN
+uint16_t user_findincomingwarhead(void) {
+	const FlightObject* player = pstate.player;
+	uint16_t best = 0xFFFF;
+	uint64_t best_d2 = UINT64_MAX;
+
+	if (!player || pstate.object_idx >= NUM_OBJECTS)
+		return 0xFFFF;
+	for (uint16_t wh = 0; wh < NUM_WARHEAD_SLOTS && NUM_CRAFTS + wh < NUM_OBJECTS; ++wh) {
+		const FlightObject* obj = &objects[NUM_CRAFTS + wh];
+		const int type = (int)obj->ship_idx - WEAPON_SPECIES_BASE;
+		if (!obj->ship_idx || type < 0 || type >= WARHEAD_TYPE_COUNT || !projectile_is_warhead_type[type] ||
+			warheads[wh].target_obj != pstate.object_idx)
+			continue;
+		const int64_t dx = (int64_t)obj->world_x - player->world_x;
+		const int64_t dy = (int64_t)obj->world_y - player->world_y;
+		const int64_t dz = (int64_t)obj->world_z - player->world_z;
+		const uint64_t d2 = (uint64_t)(dx * dx) + (uint64_t)(dy * dy) + (uint64_t)(dz * dz);
+		if (d2 < best_d2) {
+			best_d2 = d2;
+			best = (uint16_t)(NUM_CRAFTS + wh);
+		}
+	}
+	return best;
+}
+#endif
