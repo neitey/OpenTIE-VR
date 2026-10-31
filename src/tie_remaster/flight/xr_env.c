@@ -1018,9 +1018,8 @@ static bool TieXrEnv_RenderEyes(TieFlightRenderer* g, AeronCommandBuffer* cmd, c
 	AeronScene_SetPassHook(scene, AERON_SCENE_HOOK_AFTER_OPAQUE, NULL, NULL);
 	AeronScene_SetPassHook(scene, AERON_SCENE_HOOK_AFTER_UPSCALE, NULL, NULL);
 
-	/* The title crawl's black opening stays black: the fleet with its stars. */
-	TieXrEnv_SubmitSky(scene, fleet && !s_env.stars_off);
-	if (fleet && ships && !s_env.stars_off)
+	TieXrEnv_SubmitSky(scene, fleet);
+	if (fleet && ships)
 		TieXrEnv_SubmitCraft(scene, t_s);
 	if (art && s_env.art_up && !crawl)
 		TieXrArt_Submit(scene, ships, fade);
@@ -1226,7 +1225,10 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	TieXrEnv_LoadFrame(cmd);
 	TieXrIntroCrawl_Update(cmd, assets);
 	const bool crawl = TieXrIntroCrawl_Active();
-	s_env.stars_off = crawl && !TieXrIntroCrawl_StarsOn();
+	/* The crawl's opening is black until its logo cuts in with the stars;
+	 * with the fleet round it (the startup default) the fleet is there from
+	 * "A long time ago..." on. */
+	s_env.stars_off = crawl && !TieXrIntroCrawl_StarsOn() && mode != TIE_FLIGHT_XR_ENV_FLEET;
 	/* The first menu after the startup films (the title crawl among them):
 	 * held a moment, so a frame between two films (the shell readying the
 	 * next scene) does not count. */
