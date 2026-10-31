@@ -34,9 +34,9 @@ func (a *app) findAPK() error {
 		}
 	}
 	if best == "" {
-		return fail("%s", "The OpenTIE-VR app (OpenTIE-VR-<version>.apk) was not found next to the\n"+
+		return fail("%s", "Neitey's OpenTie-VR (OpenTIE-VR-<version>.apk) was not found next to the\n"+
 			"launcher in:\n  "+a.exeDir+"\n"+
-			"Please unzip the whole OpenTIE-VR zip file into a folder first, then start\n"+
+			"Please unzip the whole zip file into a folder first, then start\n"+
 			"OpenTIE-VR-Launcher.exe from that folder.")
 	}
 	a.apkPath = filepath.Join(a.exeDir, best)
@@ -73,23 +73,23 @@ func (a *app) installApp() error {
 	downgrade := false
 	switch {
 	case !installed:
-		say("Installing OpenTIE-VR %s...", bundled)
+		say("Installing Neitey's OpenTie-VR %s...", bundled)
 	case a.apkVersion != "" && inst != "" && compareVersions(inst, a.apkVersion) == 0:
-		say("OpenTIE-VR %s is already installed and up to date.", inst)
+		say("Neitey's OpenTie-VR %s is already installed and up to date.", inst)
 		return nil
 	case a.apkVersion != "" && inst != "" && compareVersions(inst, a.apkVersion) > 0:
-		say("The headset has OpenTIE-VR %s, which is newer than the one that came with\nthis launcher (%s).", inst, a.apkVersion)
-		if askYesNo("A newer OpenTIE-VR is installed", "Keep the newer one?", true) {
-			say("Keeping OpenTIE-VR %s.", inst)
+		say("The headset has Neitey's OpenTie-VR %s, which is newer than the one that came with\nthis launcher (%s).", inst, a.apkVersion)
+		if askYesNo("A newer Neitey's OpenTie-VR is installed", "Keep the newer one?", true) {
+			say("Keeping Neitey's OpenTie-VR %s.", inst)
 			return nil
 		}
 		downgrade = true
-		say("Installing OpenTIE-VR %s...", bundled)
+		say("Installing Neitey's OpenTie-VR %s...", bundled)
 	default:
 		if inst == "" {
 			inst = "an older version"
 		}
-		say("Updating OpenTIE-VR from %s to %s...", inst, bundled)
+		say("Updating Neitey's OpenTie-VR from %s to %s...", inst, bundled)
 	}
 
 	args := []string{"install", "-r"}
@@ -99,28 +99,28 @@ func (a *app) installApp() error {
 	args = append(args, a.apkPath)
 	out, err := a.adb.run(10*time.Minute, args...)
 	if strings.Contains(out, "INSTALL_FAILED_UPDATE_INCOMPATIBLE") {
-		return fail("OpenTIE-VR could not be updated: the copy already on the headset was signed\n" +
+		return fail("Neitey's OpenTie-VR could not be updated: the copy already on the headset was signed\n" +
 			"differently (it came from another source or build).\n" +
 			"\n" +
-			"To fix this, OpenTIE-VR would have to be uninstalled on the headset first.\n" +
+			"To fix this, Neitey's OpenTie-VR would have to be uninstalled on the headset first.\n" +
 			"WARNING: uninstalling also deletes the game files and pilots that were\n" +
 			"copied to the headset. The launcher does not do this for you. If you\n" +
-			"want to: on the headset open Settings > Apps, uninstall OpenTIE-VR, then run\n" +
+			"want to: on the headset open Settings > Apps, uninstall Neitey's OpenTie-VR, then run\n" +
 			"this launcher again.")
 	}
 	if err != nil || !strings.Contains(out, "Success") {
 		reason := failureLine(out)
 		switch {
 		case strings.Contains(out, "INSTALL_FAILED_INSUFFICIENT_STORAGE"):
-			return fail("The headset does not have enough free space to install OpenTIE-VR.\n" +
+			return fail("The headset does not have enough free space to install " + productName + ".\n" +
 				"Please free up some space and run the launcher again.")
 		case strings.Contains(out, "INSTALL_FAILED_VERSION_DOWNGRADE"):
-			return fail("The headset has a newer OpenTIE-VR that cannot be replaced by this older one.\n" +
+			return fail("The headset has a newer Neitey's OpenTie-VR that cannot be replaced by this older one.\n" +
 				"Download the newest launcher instead.")
 		}
-		return fail("Installing OpenTIE-VR failed:\n  %s\nCheck the %s and try again.", reason, a.connectionWord())
+		return fail("Installing Neitey's OpenTie-VR failed:\n  %s\nCheck the %s and try again.", reason, a.connectionWord())
 	}
-	say("OpenTIE-VR %s is installed.", bundled)
+	say("Neitey's OpenTie-VR %s is installed.", bundled)
 	return nil
 }
 

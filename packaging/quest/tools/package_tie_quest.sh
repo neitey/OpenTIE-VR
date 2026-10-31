@@ -116,7 +116,7 @@ python3 "$HERE/manifest_add_feature.py" m2.xml m3.xml com.oculus.feature.RENDER_
 python3 "$HERE/manifest_add_metadata.py" m3.xml m4.xml com.oculus.ossplash=true pvr.app.type=vr com.yvr.intent.category.VR=vr_only
 # Launcher helper (SetupProvider): its own authority, so OpenXWA-VR can stay installed.
 python3 "$HERE/manifest_add_provider.py" m4.xml m5.xml org.openxwa.quest.SetupProvider org.opentie.quest.setup
-python3 "$HERE/manifest_rename.py" m5.xml AndroidManifest.xml org.opentie.quest "OpenTIE-VR"
+python3 "$HERE/manifest_rename.py" m5.xml AndroidManifest.xml org.opentie.quest "Neitey's OpenTie-VR"
 python3 "$HERE/dexgen_setup_provider.py" classes2.dex
 EXTRA="$EXTRA classes2.dex=classes2.dex"
 # Steam Frame: SDL's clipboard handler made safe for a missing clipboard

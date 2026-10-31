@@ -1,4 +1,4 @@
-OpenTIE-VR - third-party notices
+Neitey's OpenTie-VR - third-party notices
 ================================
 
 OpenTIE (https://github.com/elyosh/OpenTIE) and this VR port

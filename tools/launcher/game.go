@@ -608,7 +608,7 @@ func (a *app) chooseGame(arg string) error {
 	}
 }
 
-const noXWAText = "Without X-Wing Alliance OpenTIE-VR still has 3D cockpits for every TIE craft:\n" +
+const noXWAText = "Without X-Wing Alliance Neitey's OpenTie-VR still has 3D cockpits for every TIE craft:\n" +
 	"the X-Wing Revival cockpits that come with the app."
 
 func (a *app) setXWA(dir string) error {
@@ -654,7 +654,7 @@ func (a *app) chooseXWA() error {
 	ans := ui.Ask(Question{
 		Kind:  "buttons",
 		Title: "X-Wing Alliance was not found",
-		Text: "If you own X-Wing Alliance (Steam or GOG), OpenTIE-VR can use its three TIE\n" +
+		Text: "If you own X-Wing Alliance (Steam or GOG), Neitey's OpenTie-VR can use its three TIE\n" +
 			"cockpit models for the 3D cockpits (optional). " + noXWAText + "\n\n" +
 			"If X-Wing Alliance is installed, choose its folder.",
 		Options: []Option{

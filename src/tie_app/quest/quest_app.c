@@ -33,7 +33,7 @@ static char s_tie98[1100];
 static char s_cfg_path[1100];
 
 static const char k_settings_template[] =
-	"# OpenTIE-VR headset settings. Remove the leading '#' to change a value.\n"
+	"# Neitey's OpenTie-VR headset settings. Remove the leading '#' to change a value.\n"
 	"# (The VR settings keep their OpenXWA-VR names: the two share the VR code.)\n"
 	"# Headset class, picked from the GPU (low: Quest 2, Pico 4; mid: Quest 3,\n"
 	"# Pico 4 Ultra; high: Steam Frame); it sets the defaults below. Force it with:\n"
@@ -529,12 +529,12 @@ int TieQuest_PostInit(TieLaunchOptions* launch) {
 		char message[1600];
 		snprintf(message, sizeof message,
 				 "TIE Fighter's game files are not on the headset yet.\n\n"
-				 "On your Windows PC, run OpenTIE-VR-Launcher.exe (in the OpenTIE-VR download) with the "
+				 "On your Windows PC, run OpenTIE-VR-Launcher.exe (in the Neitey's OpenTie-VR download) with the "
 				 "headset connected by USB. It copies your TIE Fighter Special Edition (Steam or GOG) and, if "
 				 "installed, X-Wing Alliance's three TIE cockpits to this folder:\n%s\n\n"
 				 "Then choose Check Again.",
 				 s_external);
-		const int choice = TieErrorScreen_Run("OpenTIE-VR: game files needed", message, "Check Again", 0);
+		const int choice = TieErrorScreen_Run("Neitey's OpenTie-VR: game files needed", message, "Check Again", 0);
 		if (choice != TIE_ERROR_SCREEN_RETRY)
 			return 0;
 		quest_game_folders(launch);
@@ -616,7 +616,7 @@ int TieQuest_PostInit(TieLaunchOptions* launch) {
 	/* Desktop test of the headset's message screen (no game files case). */
 	const char* test = SDL_getenv("TIE_TEST_ERROR_SCREEN");
 	if (test && test[0] == '1')
-		return TieErrorScreen_Run("OpenTIE-VR: game files needed", "Test of the in-headset message screen.",
+		return TieErrorScreen_Run("Neitey's OpenTie-VR: game files needed", "Test of the in-headset message screen.",
 								  "Check Again", 0) == TIE_ERROR_SCREEN_RETRY;
 	return 1;
 }

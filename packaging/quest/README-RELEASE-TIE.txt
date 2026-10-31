@@ -1,4 +1,4 @@
-OpenTIE-VR @VERSION@ - TIE Fighter in standalone VR
+Neitey's OpenTie-VR @VERSION@ - TIE Fighter in standalone VR
 ======================================================
 
 Play your own copy of Star Wars: TIE Fighter on Meta Quest 3 / 3S and
@@ -6,8 +6,8 @@ Steam Frame, with 3D cockpits. Pico is supported but not tested yet.
 
 You need:
 - TIE Fighter Special Edition (Steam or GOG) installed on a Windows PC.
-  OpenTIE-VR uses its 1998 edition and/or its Collector's CD (1995).
-- Optional: X-Wing Alliance (Steam or GOG) on the same PC. OpenTIE-VR can
+  Neitey's OpenTie-VR uses its 1998 edition and/or its Collector's CD (1995).
+- Optional: X-Wing Alliance (Steam or GOG) on the same PC. Neitey's OpenTie-VR can
   then use its three TIE cockpit models (FlightModels\TIECOCKPIT.OPT,
   TIEBOMBERCOCKPIT.OPT and COMBATSIMCOCKPIT.OPT) instead. VR settings ->
   Cockpit chooses: X-Wing Alliance (the default when its files were
@@ -40,17 +40,17 @@ Install (and update)
    (*.TFR) along.
    Put on the headset when it asks you to allow USB debugging (tick
    "Always allow from this computer").
-4. Put on the headset: Library -> filter "Unknown sources" -> OpenTIE-VR.
+4. Put on the headset: Library -> filter "Unknown sources" -> Neitey's OpenTie-VR.
 
 After you have allowed USB debugging once, the headset can stay on the desk
-(switched on, cable connected) while the launcher copies: the OpenTIE-VR
+(switched on, cable connected) while the launcher copies: the game
 app receives and unpacks the files itself, without starting the game.
 
 On the headset the files go to Android/data/org.opentie.quest/files:
 TIE98 (1998 edition), TIE95 (Collector's CD, including its CD image
 game.fil) and XWA/FlightModels (the three cockpit models).
 
-OpenTIE-VR is a separate app from OpenXWA-VR; both can be installed.
+Neitey's OpenTie-VR is a separate app from OpenXWA-VR; both can be installed.
 
 Music: TIE Fighter's adaptive iMUSE soundtrack (written for the Roland
 SC-55) plays through FluidSynth with the bundled GeneralUser GS SoundFont.
@@ -78,7 +78,7 @@ choose "Steam Frame (into its Steam Library)" and enter "frame" or the
 headset's IP address (Quick Settings, or Steam Settings > Internet), then
 the Developer Mode password when asked (used only for this connection,
 never saved). The launcher copies the app and your game files to the
-headset over Wi-Fi (SSH, user "steamos") and adds OpenTIE-VR to the
+headset over Wi-Fi (SSH, user "steamos") and adds Neitey's OpenTie-VR to the
 headset's Steam Library. Start it from there like any other game ("Lepton
 Development" is not needed). Nothing is deleted when the game closes; run
 the launcher again to update it.
@@ -93,11 +93,11 @@ Steam Frame, the older way through "Lepton Development" (Android window):
 once, in your Steam Library, open the Properties of "Lepton Development"
 and set its Launch Options to
    LEPTON_NO_CLEANUP=1 %command%
-(without this, closing Lepton Development deletes OpenTIE-VR and the
+(without this, closing Lepton Development deletes Neitey's OpenTie-VR and the
 copied game files). Start "Lepton Development" and keep it running, then
 choose "Wi-Fi" (or USB) in the launcher; if the direct connection is
 refused, choose "Connect through SSH". Allow USB debugging in the Lepton
-window when asked. OpenTIE-VR then appears on the Android home screen in
+window when asked. Neitey's OpenTie-VR then appears on the Android home screen in
 the Lepton Development window.
 
 Windows may say "Windows protected your PC": the launcher is not
@@ -186,7 +186,7 @@ cockpit models with XWA/FlightModels.
 
 Licence
 -------
-OpenTIE-VR is free software under the GNU GPL version 3 (LICENSE.txt).
+Neitey's OpenTie-VR is free software under the GNU GPL version 3 (LICENSE.txt).
 Source: https://github.com/neitey/OpenTIE-VR
 Third-party components and their licences: THIRD-PARTY-NOTICES.txt.
 3D cockpits by Raptor007 (X-Wing Revival) and the X-Wing Alliance Upgrade

@@ -7,7 +7,7 @@ import (
 
 const settingsFileName = "launcher.ini"
 
-const defaultSettings = `# OpenTIE-VR Launcher settings
+const defaultSettings = `# Neitey's OpenTie-VR Launcher settings
 #
 # check_updates: 1 = look for a new launcher version at start, 0 = never
 check_updates=1

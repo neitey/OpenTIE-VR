@@ -150,7 +150,7 @@ func (a *app) appUID() int {
 	if a.uid == 0 {
 		out, _ := a.adb.shell(60*time.Second, "dumpsys package "+appPackage)
 		a.uid = parseAppUID(out)
-		logf("OpenTIE-VR app uid: %d", a.uid)
+		logf("Neitey's OpenTie-VR app uid: %d", a.uid)
 	}
 	return a.uid
 }
@@ -194,10 +194,10 @@ func (a *app) prepareAppFolder() error {
 		if !a.remoteHasEntry(base, tie98Folder) {
 			if a.helper {
 				if err := a.helperMkdirs(appFolders...); err != nil {
-					return fail("OpenTIE-VR could not create its game folders on the headset:\n  %v", err)
+					return fail("Neitey's OpenTie-VR could not create its game folders on the headset:\n  %v", err)
 				}
 				if !a.remoteHasEntry(base, tie98Folder) {
-					return fail("OpenTIE-VR created its game folders, but the launcher cannot see them.\n" +
+					return fail("Neitey's OpenTie-VR created its game folders, but the launcher cannot see them.\n" +
 						"Please collect the logs and report this, naming your headset model.")
 				}
 				continue
@@ -229,8 +229,8 @@ func (a *app) prepareAppFolder() error {
 		}
 		if len(bad) > 0 {
 			if fixed {
-				return fail("The OpenTIE-VR folders on the headset were made again, but %s still\n"+
-					"belongs to %s instead of the OpenTIE-VR app. Please collect the logs and\n"+
+				return fail("The game's folders on the headset were made again, but %s still\n"+
+					"belongs to %s instead of Neitey's OpenTie-VR. Please collect the logs and\n"+
 					"report this, naming your headset model.", strings.Join(bad, ", "), badOwner)
 			}
 			if err := a.fixForeignFolder(bad, badOwner, owners); err != nil {
@@ -256,7 +256,7 @@ func (a *app) prepareAppFolder() error {
 	} else if err := a.probeCopyOwnership(); err != nil {
 		return err
 	}
-	say("The OpenTIE-VR folders on the headset are ready.")
+	say("The game's folders on the headset are ready.")
 	return nil
 }
 
@@ -269,8 +269,8 @@ func (a *app) fixForeignFolder(bad []string, o owner, owners map[string]owner) e
 		Title: "The game folders on the headset cannot be used",
 		Text: "These folders on the headset were created over USB, so the game cannot\n" +
 			"read them (they belong to " + o.name + "): " + strings.Join(bad, ", ") + "\n\n" +
-			"They will be removed and made again by OpenTIE-VR, then the game files are\n" +
-			"copied again. Your pilots and settings in OpenTIE-VR are not touched.",
+			"They will be removed and made again by Neitey's OpenTie-VR, then the game files are\n" +
+			"copied again. Your pilots and settings in Neitey's OpenTie-VR are not touched.",
 		Options: []Option{
 			{ID: "yes", Label: "Remove and make them again", Key: "y", Style: "primary"},
 			{ID: "no", Label: "Cancel", Key: "n"},
@@ -282,7 +282,7 @@ func (a *app) fixForeignFolder(bad []string, o owner, owners map[string]owner) e
 		return errClosed
 	}
 	if ans.ID != "yes" {
-		return fail("The game folders on the headset cannot be read by OpenTIE-VR, so the game\n" +
+		return fail("The game folders on the headset cannot be read by Neitey's OpenTie-VR, so the game\n" +
 			"files cannot be used. Try again and choose \"Remove and make them again\".")
 	}
 	say("Removing the unusable game folders from the headset...")
@@ -312,13 +312,13 @@ func (a *app) fixForeignFolder(bad []string, o owner, owners map[string]owner) e
 // it has made its TIE98 folder. Horizon OS only really starts the app while
 // the headset is worn, so the user is asked to put it on.
 func (a *app) waitForAppFolder() error {
-	say("OpenTIE-VR has to start once on the headset to create its own folders.\n" +
-		"Put the headset on now; OpenTIE-VR starts by itself.")
+	say("Neitey's OpenTie-VR has to start once on the headset to create its own folders.\n" +
+		"Put the headset on now; Neitey's OpenTie-VR starts by itself.")
 	q := Question{
 		Kind:  "buttons",
 		Title: "Put the headset on",
-		Text: "OpenTIE-VR has to start once on the headset to create its own folders.\n" +
-			"Put the headset on; OpenTIE-VR starts by itself. If it does not, open it from\n" +
+		Text: "Neitey's OpenTie-VR has to start once on the headset to create its own folders.\n" +
+			"Put the headset on; Neitey's OpenTie-VR starts by itself. If it does not, open it from\n" +
 			"Library -> Unknown sources. The launcher continues as soon as it has started.",
 		Options: []Option{
 			{ID: "again", Label: "Try again", Style: "primary"},
@@ -327,7 +327,7 @@ func (a *app) waitForAppFolder() error {
 	}
 	if a.lepton != "" {
 		q.Title = "Keep Lepton Development running"
-		q.Text = "OpenTIE-VR has to start once to create its own folders. It starts in the\n" +
+		q.Text = "Neitey's OpenTie-VR has to start once to create its own folders. It starts in the\n" +
 			"\"Lepton Development\" window on the headset; keep that window open (put the\n" +
 			"headset on if needed). The launcher continues as soon as it has started."
 	}
@@ -339,7 +339,7 @@ func (a *app) waitForAppFolder() error {
 		if time.Since(lastStart) >= 15*time.Second {
 			if !lastStart.IsZero() {
 				if _, console := ui.(*consoleUI); console {
-					say("Still waiting for OpenTIE-VR to start on the headset (put it on; Ctrl+C to stop)...")
+					say("Still waiting for Neitey's OpenTie-VR to start on the headset (put it on; Ctrl+C to stop)...")
 				}
 			}
 			a.adb.shell(30*time.Second, "am start -n "+appActivity)
@@ -348,7 +348,7 @@ func (a *app) waitForAppFolder() error {
 		select {
 		case ans := <-offer:
 			if ans.ID == "cancel" {
-				return fail("OpenTIE-VR has not started on the headset yet, so its folders do not exist.\n" +
+				return fail("Neitey's OpenTie-VR has not started on the headset yet, so its folders do not exist.\n" +
 					"Put the headset on, then choose Try again.")
 			}
 			lastStart = time.Time{} // start it again right now
@@ -364,7 +364,7 @@ func (a *app) waitForAppFolder() error {
 	logf("the app created its folders after %.0f s", time.Since(started).Seconds())
 	sleepCtx(2 * time.Second) // let it finish starting before it is stopped
 	a.adb.shell(30*time.Second, "am force-stop "+appPackage)
-	say("OpenTIE-VR created its folders. It was closed again so the files can be copied;\n" +
+	say("Neitey's OpenTie-VR created its folders. It was closed again so the files can be copied;\n" +
 		"you can take the headset off.")
 	return nil
 }
@@ -415,7 +415,7 @@ func (a *app) cleanupUnreadableCopies() {
 		copies = fmt.Sprintf("%d old copies", len(dirs))
 	}
 	if !askYesNo("Old unreadable copies found",
-		fmt.Sprintf("The headset has %s of a game folder that OpenTIE-VR could not read%s.\nDelete to free the space?",
+		fmt.Sprintf("The headset has %s of a game folder that Neitey's OpenTie-VR could not read%s.\nDelete to free the space?",
 			copies, size), true) {
 		return
 	}
@@ -460,7 +460,7 @@ func (a *app) probeCopyOwnership() error {
 	}
 	if !pushOK {
 		return fail("This headset gives files copied over USB to the wrong owner (%s), so\n"+
-			"OpenTIE-VR could not read them. Nothing was copied. Please collect the logs and\n"+
+			"Neitey's OpenTie-VR could not read them. Nothing was copied. Please collect the logs and\n"+
 			"report this, naming your headset model.", f)
 	}
 	return nil
@@ -543,11 +543,11 @@ func (a *app) finalOwnershipCheck(files []gameFile) (bad []string, rootBad bool,
 		if len(msgs) > 10 {
 			msgs = append(msgs[:10], "...")
 		}
-		e := &userError{retryStep: prepareStep, msg: fmt.Sprintf("The game files were copied, but OpenTIE-VR cannot read them because they\n"+
+		e := &userError{retryStep: prepareStep, msg: fmt.Sprintf("The game files were copied, but Neitey's OpenTie-VR cannot read them because they\n"+
 			"do not belong to the app:\n  %s\n\nTry again: the launcher removes the unusable folders and copies the files\n"+
 			"again. If this keeps happening, please collect the logs and report it.", strings.Join(msgs, "\n  "))}
 		return bad, rootBad, e
 	}
-	say("Checked: the game files belong to OpenTIE-VR, so the game can read them.")
+	say("Checked: the game files belong to Neitey's OpenTie-VR, so the game can read them.")
 	return nil, false, nil
 }
