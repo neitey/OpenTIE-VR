@@ -215,7 +215,21 @@ void TieFlightRuntime_ResetTiming(void) {
 	TieFlightIntegration_ResetPresentation();
 }
 
+static bool s_mission_completed;
+static uint32_t s_mission_completed_serial;
+
+void TieFlightRuntime_NoteMissionEnd(bool primary_complete) {
+	s_mission_completed = primary_complete;
+	if (primary_complete && ++s_mission_completed_serial == 0)
+		s_mission_completed_serial = 1;
+}
+
+uint32_t TieFlightRuntime_CompletedMissionSerial(void) {
+	return s_mission_completed ? s_mission_completed_serial : 0u;
+}
+
 bool TieFlightRuntime_PrepareSimulator(int replay_mode) {
+	s_mission_completed = false;
 	TieFlightRuntime_ResetTiming();
 	TieFlightLaunch_Arm(replay_mode == 0);
 

@@ -1559,6 +1559,7 @@ void tie_simulator(int replay_mode) {
 #ifdef TIE_MODERN
 		if (continuation->phase == TIE_SIM_PHASE_AFTER_MISSION) {
 			TIE_FLIGHT_TRACE_END_MISSION();
+			TieFlightRuntime_NoteMissionEnd(mission.primary_complete == 1);
 			if (TieMusicPolicy_UsesTie98())
 				cdaudio_Close_Device();
 #else
