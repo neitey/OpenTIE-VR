@@ -259,7 +259,7 @@ video:
 render:
   anisotropy: 1
   msaa_samples: 2
-  starfield_style: auto
+  starfield_style: tie95
   motion_blur:
     quality: 2
     shutter: 0.5

@@ -61,6 +61,9 @@ REVIVAL_COOK=${REVIVAL_COOK:-$SP/vrassets/revival_tie/tools/aeron_gltf_cook}
 
 cmake -DTIE_VERSION=$VER "$BUILD" > /dev/null
 ninja -C "$BUILD" -j2 tie > "$WORK.build.log" 2>&1 || { mkdir -p "$(dirname "$WORK")"; tail -30 "$WORK.build.log"; exit 1; }
+# The build stages resources/ only when the game relinks: copy it anyway, so
+# a resource-only change (config.yaml defaults, ...) reaches the APK.
+cmake -E copy_directory "$HERE/../../../resources" "$BUILD/resources"
 
 rm -rf "$WORK"; mkdir -p "$WORK/stage" /root/out/symbols
 cp "$BUILD/libmain.so" /root/out/symbols/libmain-tie$CODE.so
