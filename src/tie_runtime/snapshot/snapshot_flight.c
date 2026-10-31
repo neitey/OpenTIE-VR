@@ -5,6 +5,7 @@
 #include "tie/draw.h"
 #include "tie/drawpol.h"
 #include "tie/fediskio.h"
+#include "tie/fview.h"
 #include "tie/gate.h"
 #include "tie/logbuf2.h"
 #include "tie/modelmesh.h"
@@ -679,6 +680,39 @@ static void TieFlightSnapshot_CaptureFrameState(void) {
 	}
 }
 
+/* A flight object's side / forward / up (Q15). The engine refreshes the
+ * cached basis only when it draws the object: what its fixed forward view
+ * culls keeps the basis of the last time it was in front of the cockpit, and
+ * a fired bolt copies its shooter's cached basis (stale too if the shooter
+ * was out of view). In VR the player looks round at all of them, so a stale
+ * basis (orient_dirty set) and every projectile take theirs from the
+ * object's angles, as the engine's draw would (fview_newcalcrotate with
+ * yaw 0). The engine's state and its scratch globals are left as they were. */
+static void TieFlightSnapshot_ObjectBasis(const FlightObject* obj, int32_t side[3], int32_t fwd[3], int32_t up[3]) {
+	const bool projectile = obj->genus == GENUS_PROJECTILE_PLAYER || obj->genus == GENUS_PROJECTILE_NPC;
+	if (!obj->orient_dirty && !projectile) {
+		side[0] = obj->side_x, side[1] = obj->side_y, side[2] = obj->side_z;
+		fwd[0] = obj->fwd_x, fwd[1] = obj->fwd_y, fwd[2] = obj->fwd_z;
+		up[0] = obj->up_x, up[1] = obj->up_y, up[2] = obj->up_z;
+		return;
+	}
+	const int32_t saved[21] = { calcS1,	 calcS2,  calcS3,  calcf1,	calcf2,	 calcf3,  calcU1,
+								calcU2,	 calcU3,  craftS1, craftS2, craftS3, craftf1, craftf2,
+								craftf3, craftU1, craftU2, craftU3, craftmoveX, craftmoveY, craftmoveZ };
+	fview_calcrotatemove((uint16_t)obj->pitch, (uint16_t)obj->heading, NULL);
+	fview_calcrotateorient((uint16_t)obj->roll, 0, NULL);
+	side[0] = craftS1, side[1] = craftS2, side[2] = craftS3;
+	fwd[0] = craftf1, fwd[1] = craftf2, fwd[2] = craftf3;
+	up[0] = craftU1, up[1] = craftU2, up[2] = craftU3;
+	calcS1 = saved[0], calcS2 = saved[1], calcS3 = saved[2];
+	calcf1 = saved[3], calcf2 = saved[4], calcf3 = saved[5];
+	calcU1 = saved[6], calcU2 = saved[7], calcU3 = saved[8];
+	craftS1 = saved[9], craftS2 = saved[10], craftS3 = saved[11];
+	craftf1 = saved[12], craftf2 = saved[13], craftf3 = saved[14];
+	craftU1 = saved[15], craftU2 = saved[16], craftU3 = saved[17];
+	craftmoveX = saved[18], craftmoveY = saved[19], craftmoveZ = saved[20];
+}
+
 static void TieFlightSnapshot_CaptureWorld(void) {
 	/* --- FlightObject pool ------------------------------------------ */
 	for (uint16_t i = 0; i < NUM_OBJECTS; ++i) {
@@ -726,10 +760,12 @@ static void TieFlightSnapshot_CaptureWorld(void) {
 		 * a valid rotation. We keep this snapshot a valid rotation
 		 * (side, fwd, up) and apply the y-axis sign flip in the
 		 * renderer (TieRenderMath_Mat4FromQuaternionTranslation). */
+		int32_t bs[3], bf[3], bu[3];
+		TieFlightSnapshot_ObjectBasis(obj, bs, bf, bu);
 		const float m[9] = {
-			TIE_SNAP_Q15_TO_F(obj->side_x), TIE_SNAP_Q15_TO_F(obj->fwd_x), TIE_SNAP_Q15_TO_F(obj->up_x),
-			TIE_SNAP_Q15_TO_F(obj->side_y), TIE_SNAP_Q15_TO_F(obj->fwd_y), TIE_SNAP_Q15_TO_F(obj->up_y),
-			TIE_SNAP_Q15_TO_F(obj->side_z), TIE_SNAP_Q15_TO_F(obj->fwd_z), TIE_SNAP_Q15_TO_F(obj->up_z),
+			TIE_SNAP_Q15_TO_F(bs[0]), TIE_SNAP_Q15_TO_F(bf[0]), TIE_SNAP_Q15_TO_F(bu[0]),
+			TIE_SNAP_Q15_TO_F(bs[1]), TIE_SNAP_Q15_TO_F(bf[1]), TIE_SNAP_Q15_TO_F(bu[1]),
+			TIE_SNAP_Q15_TO_F(bs[2]), TIE_SNAP_Q15_TO_F(bf[2]), TIE_SNAP_Q15_TO_F(bu[2]),
 		};
 		TieSnapshotBuilder_Mat3ToQuat(m, out->ori);
 		TieFlightSnapshot_BlendOri(&s_obj_ori[i], obj->idnumber, obj->ship_idx, out->ori);
