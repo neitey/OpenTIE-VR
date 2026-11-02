@@ -24,8 +24,10 @@
 # Not in the repository, taken from the build machine: the VR art (--vr-assets,
 # default $SP/tieassets/vr), the speech model (--voice-model), X-Wing
 # Revival's TIE cockpits as GLBs (--revival-cockpits DIR/glb/*.glb) and the
-# GeneralUser GS SoundFont (--soundfont). Missing ones are reported; the game
-# runs without them.
+# GeneralUser GS SoundFont (--soundfont) and the Windows icons (--icons DIR
+# with tie.ico and window_icon.h from packaging/icons/icon_tools.py, default
+# $SP/tieassets/windows; without them the committed icons are used). Missing
+# ones are reported; the game runs without them.
 #
 # Output: <out>/OpenTIE-VR-PCVR-<version>-win64.zip
 set -euo pipefail
@@ -38,6 +40,7 @@ VR_ASSETS=${PCVR_VR_ASSETS:-$SP_DEFAULT/tieassets/vr}
 VOICE_MODEL=${PCVR_VOICE_MODEL:-$SP_DEFAULT/vrassets/voice}
 REVIVAL=${PCVR_REVIVAL_COCKPITS:-$SP_DEFAULT/vrassets/revival_tie}
 SOUNDFONT=${PCVR_SOUNDFONT:-/root/android/soundfonts/GeneralUser-GS.sf2}
+ICONS=${PCVR_ICONS:-$SP_DEFAULT/tieassets/windows}
 WITH_VOICE=1
 WITH_REVIVAL=1
 FROM_WORKTREE=0
@@ -55,9 +58,10 @@ while [ $# -gt 0 ]; do
 		--revival-cockpits) REVIVAL=$2; shift 2 ;;
 		--no-revival-cockpits) WITH_REVIVAL=0; shift ;;
 		--soundfont) SOUNDFONT=$2; shift 2 ;;
+		--icons) ICONS=$2; shift 2 ;;
 		--worktree) FROM_WORKTREE=1; shift ;;
 		--deps-only) DEPS_ONLY=1; shift ;;
-		-h|--help) sed -n '2,31p' "$0"; exit 0 ;;
+		-h|--help) sed -n '2,33p' "$0"; exit 0 ;;
 		*) echo "build.sh: unknown argument $1" >&2; exit 2 ;;
 	esac
 done
@@ -429,7 +433,16 @@ GAME_BUILD=$BUILD/opentie-win
 if [ -f "$GAME_BUILD/CMakeCache.txt" ] && ! grep -qx "CMAKE_HOME_DIRECTORY:INTERNAL=$SOURCE" "$GAME_BUILD/CMakeCache.txt"; then
 	rm -rf "${GAME_BUILD:?}"
 fi
+ICON_ARGS=(-DTIE_WINDOWS_ICON= -DTIE_ICON_OVERRIDE_DIR=)
+if [ -f "$ICONS/tie.ico" ] && [ -f "$ICONS/window_icon.h" ]; then
+	mkdir -p "$BUILD/icon-override/tie_app"
+	cp "$ICONS/window_icon.h" "$BUILD/icon-override/tie_app/window_icon.h"
+	ICON_ARGS=(-DTIE_WINDOWS_ICON="$ICONS/tie.ico" -DTIE_ICON_OVERRIDE_DIR="$BUILD/icon-override")
+else
+	echo "WARNING: no release icons in $ICONS: the committed icons are used" >&2
+fi
 cmake -S "$SOURCE" -B "$GAME_BUILD" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+	"${ICON_ARGS[@]}" \
 	-DCMAKE_TOOLCHAIN_FILE="$TIE_TOOLCHAIN_FILE" \
 	-DAERON_FSR3_SHADERGEN_EXECUTABLE="$HOST/bin/aeron_fsr3_shadergen" \
 	-DAERON_SHADERCROSS_EXECUTABLE="$HOST/bin/shadercross" \
