@@ -1,18 +1,18 @@
-# OpenTIE-VR
+# Neitey's OpenTie-VR
 
 *Star Wars: TIE Fighter* in virtual reality, standalone on Meta Quest 3 / 3S
 and Steam Frame (no PC needed while you play), flown from 3D TIE cockpits.
 Pico is supported but not tested yet. A first PC VR build (Windows, OpenXR)
 is available too.
 
-OpenTIE-VR is a fork of [OpenTIE](https://github.com/elyosh/OpenTIE), the
+Neitey's OpenTie-VR is a fork of [OpenTIE](https://github.com/elyosh/OpenTIE), the
 open-source reimplementation of TIE Fighter, with the VR layer of
 [Neitey's XW: Alliance VR](https://github.com/neitey/OpenXWA-Quest) (same
 engine).
 
 > [!IMPORTANT]
 > No content from the original games is included. You need your own
-> *TIE Fighter Special Edition* (Steam or GOG) on a Windows PC; OpenTIE-VR
+> *TIE Fighter Special Edition* (Steam or GOG) on a Windows PC; Neitey's OpenTie-VR
 > uses its 1998 edition and/or its Collector's CD (1995). 3D cockpits for
 > every TIE craft come with the app (from X-Wing Revival, see Credits); with
 > *X-Wing Alliance* (Steam, GOG or CD) on the PC, its own three TIE cockpit
@@ -23,7 +23,7 @@ engine).
 - 3D cockpits with TIE Fighter's instruments live on the cockpit's screens
   (CMD with the target picture, sensors, shields, throttle, clock). VR
   settings -> Cockpit: X-Wing Revival's (included), X-Wing Alliance's (when
-  its files were copied; then the default), OpenTIE-VR's own simple pod, or
+  its files were copied; then the default), its own simple pod, or
   TIE Fighter's original 2D cockpits
 - Precise thumbstick steering (Stick Response), an optional flight stick to
   grab in the cockpit, Swap Thumbsticks, left-handed controls, inverted pitch
@@ -64,7 +64,7 @@ and Pico, a USB-C cable that carries data.
    installs the app, copies the game files (about 1.1 GB) and checks them,
    and asks whether to bring your PC pilots along. Over USB, put the headset
    on once to allow USB debugging ("Always allow from this computer").
-4. In the headset: Library -> "Unknown sources" -> OpenTIE-VR.
+4. In the headset: Library -> "Unknown sources" -> Neitey's OpenTie-VR.
 
 **Steam Frame:** turn on Developer Mode (Steam Settings > System; it asks
 you to set a password) and choose "Steam Frame (into its Steam Library)" in
@@ -134,7 +134,7 @@ submodule is the VR fork of aeron
 
 - **OpenTIE:** elyosh and contributors
 - **VR layer (from Neitey's XW: Alliance VR):** Neitey (AI assisted coding),
-  MarkD (VR design, menu environments & QA)
+  Bummser (VR design, menu environments & QA)
 - **3D cockpits:** [Raptor007](https://www.raptor007.com/x-wing-revival/)
   (X-Wing Revival) and the [X-Wing Alliance Upgrade team](https://xwaupgrade.com/).
   Not part of this repository or of its licence.

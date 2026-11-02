@@ -543,7 +543,7 @@ func (w *webUI) Finish(code int, pause bool) {
 // openWindow opens the page in an app window, or prints the address.
 func (w *webUI) openWindow(exeDir string, noWindow bool) {
 	if noWindow || os.Getenv("OPENTIE_NO_WINDOW") != "" {
-		fmt.Println("OpenTIE-VR Launcher is running at: " + w.url)
+		fmt.Println("Neitey's OpenTie-VR Launcher is running at: " + w.url)
 		logf("not opening a window (--no-window): %s", w.url)
 		return
 	}

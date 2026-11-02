@@ -505,12 +505,13 @@ static void vc_layout(void) {
 			vc_key_row(x, 62.0f, w, 66.0f, 4, l, a, NULL);
 		}
 		{
-			static const char* const l[4] = { "ATTACKING\nMY TARGET", "NEWEST", "IN SIGHTS", "CLEAR" };
-			static const TieInputAction a[4] = { TIE_INPUT_ACTION_TARGET_ATTACKER_CHAIN,
+			static const char* const l[5] = { "ATTACKING\nMY TARGET", "NEWEST", "IN SIGHTS", "INCOMING", "CLEAR" };
+			static const TieInputAction a[5] = { TIE_INPUT_ACTION_TARGET_ATTACKER_CHAIN,
 												 TIE_INPUT_ACTION_TARGET_NEWEST_CRAFT, TIE_INPUT_ACTION_AUTO_TARGET,
-												 TIE_INPUT_ACTION_TARGET_CLEAR };
-			vc_key_row(x, 136.0f, w, 48.0f, 4, l, a, row);
-			row[0]->enabled = row[3]->enabled = st->has_target;
+												 TIE_INPUT_ACTION_TARGET_INCOMING_WARHEAD, TIE_INPUT_ACTION_TARGET_CLEAR };
+			vc_key_row(x, 136.0f, w, 48.0f, 5, l, a, row);
+			row[0]->enabled = row[4]->enabled = st->has_target;
+			row[3]->lit = st->incoming;
 		}
 		{
 			VcButton* prev = vc_key(x, 192.0f, 70.0f, 48.0f, "<", TIE_INPUT_ACTION_TARGET_COMPONENT_PREV);
@@ -1625,6 +1626,8 @@ static void vw_layout(void) {
 			b->enabled = st->has_target;
 			vw_key("IN SIGHTS", TIE_INPUT_ACTION_AUTO_TARGET);
 			vw_key("PREVIOUS\nTARGET", TIE_INPUT_ACTION_TARGET_PREV);
+			b = vw_key("INCOMING\nMISSILE", TIE_INPUT_ACTION_TARGET_INCOMING_WARHEAD);
+			b->lit = st->incoming;
 			break;
 		case 1 + VW_CAT_WINGMEN:
 			b = vw_key("ATTACK\nMY TARGET", TIE_INPUT_ACTION_COMM_ASSIGN_TARGET);
@@ -2151,26 +2154,15 @@ static void vp_draw_tabs(void) {
 
 /* ---- Side panel: tactical map -------------------------------------------- */
 
-/* TIE's IFF colours (the message bar's eventsidecolors[] in the palette:
- * 0x52, 0x4A, 0x46, 0x56), from the snapshot's palette when it has one. */
-static void vp_iff_color(const TieSnapshot* snap, int side, float out[3]) {
-	static const uint8_t k_index[4] = { 0x52, 0x4A, 0x46, 0x56 };
-	static const float k_fallback[4][3] = {
-		{ 0.35f, 1.00f, 0.35f }, { 1.00f, 0.30f, 0.25f }, { 0.40f, 0.60f, 1.00f }, { 1.00f, 0.95f, 0.30f },
-	};
-	const int i = side >= 0 && side < 4 ? side : 2;
-	const uint32_t argb = snap ? snap->palette[k_index[i]] : 0;
-	const float r = (float)((argb >> 16) & 255u) / 255.0f, g = (float)((argb >> 8) & 255u) / 255.0f,
-				b = (float)(argb & 255u) / 255.0f;
-	if (r + g + b > 0.3f) {
-		/* Lift the palette colour to full brightness: readable on the holo. */
-		const float peak = fmaxf(r, fmaxf(g, b));
-		out[0] = r / peak;
-		out[1] = g / peak;
-		out[2] = b / peak;
-	} else {
-		memcpy(out, k_fallback[i], sizeof k_fallback[i]);
-	}
+/* A contact's colour by IFF side: Rebels (side 0) green, Imperials (side 1,
+ * the player's side; create.c playerside) red, every other IFF blue. Fixed
+ * hues rather than the palette's eventsidecolors[], whose Rebel and Imperial
+ * entries look alike once lifted to full brightness on the holo. */
+static void vp_iff_color(int side, float out[3]) {
+	static const float k_rebel[3] = { 0x3C / 255.0f, 0xDC / 255.0f, 0x50 / 255.0f };    /* #3CDC50 */
+	static const float k_imperial[3] = { 0xF0 / 255.0f, 0x40 / 255.0f, 0x40 / 255.0f }; /* #F04040 */
+	static const float k_neutral[3] = { 0x4C / 255.0f, 0x8C / 255.0f, 0xFF / 255.0f };  /* #4C8CFF */
+	memcpy(out, side == 0 ? k_rebel : side == 1 ? k_imperial : k_neutral, sizeof k_rebel);
 }
 
 /* A contact's symbol: 0 craft, 1 freighter / transport, 2 capital ship /
@@ -2402,11 +2394,11 @@ static void vp_map_draw(void) {
 		const float base_y = cy - (float)mz * ry;
 		const float py = base_y - (float)mh * ry * lift;
 		float col[3];
-		vp_iff_color(snap, f->side, col);
+		vp_iff_color(f->side, col);
 		if (kind >= 5) {
-			col[0] = kind == 5 ? 1.0f : 0.35f;
-			col[1] = kind == 5 ? 0.25f : 0.55f;
-			col[2] = kind == 5 ? 0.2f : 1.0f;
+			col[0] = 1.0f; /* missile orange, torpedo / bomb yellow */
+			col[1] = kind == 5 ? 0.55f : 0.92f;
+			col[2] = kind == 5 ? 0.1f : 0.2f;
 		}
 		float cc[4];
 		vc_pma(cc, col[0], col[1], col[2], outside ? 0.45f : 1.0f);
@@ -2460,7 +2452,7 @@ static void vp_map_legend(void) {
 		"You are the arrow in the middle; up is straight ahead.",
 		"The oval is the plane of your wings; rings at 1/3, 2/3, full range.",
 		"A line up or down: the contact is above or below that plane.",
-		"Colours as the targeting computer. Brackets: your target.",
+		"Green: Rebel. Red: Imperial. Blue: other. Brackets: your target.",
 		"Faded at the edge: further away than the range.",
 		"Touch the map to zoom (1 / 3 / 10 km).",
 	};
@@ -2481,11 +2473,11 @@ static void vp_map_legend(void) {
 		const float sx = x + 50.0f + (float)(i % 2) * (w * 0.5f);
 		const float sy = ty + (float)(i / 2) * 40.0f + 10.0f;
 		if (k_syms[i].kind == 5)
-			vc_pma(c, 1.0f, 0.25f, 0.2f, 1.0f);
+			vc_pma(c, 1.0f, 0.55f, 0.1f, 1.0f);
 		else if (k_syms[i].kind == 6)
-			vc_pma(c, 0.35f, 0.55f, 1.0f, 1.0f);
+			vc_pma(c, 1.0f, 0.92f, 0.2f, 1.0f);
 		else
-			vc_pma(c, 0.35f, 1.0f, 0.35f, 1.0f);
+			vc_pma(c, 0.88f, 0.97f, 1.0f, 1.0f); /* shapes only; the side is the colour */
 		vp_symbol(k_syms[i].kind, sx, sy, c);
 		vc_text(sx + 34.0f, sy - 11.0f, k_syms[i].text, 19.0f, 0, 0.88f, 0.97f, 1.0f, 1.0f);
 	}

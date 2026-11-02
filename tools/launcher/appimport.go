@@ -81,11 +81,11 @@ func (a *app) helperCall(timeout time.Duration, method, arg string) (helperResul
 		msg := strings.TrimSpace(out)
 		switch {
 		case strings.Contains(msg, "Result: null"):
-			msg = "the OpenTIE-VR app refused the request"
+			msg = "Neitey's OpenTie-VR refused the request"
 		case msg == "" && err != nil:
 			msg = err.Error()
 		case msg == "":
-			msg = "no answer from the OpenTIE-VR app"
+			msg = "no answer from Neitey's OpenTie-VR"
 		}
 		return nil, errors.New(firstLine(msg))
 	}
@@ -141,7 +141,7 @@ func (a *app) removeShellLeftovers() error {
 	if perr != nil || n == 0 {
 		return nil
 	}
-	say("Removing what was copied over USB earlier (%d files and folders):\nOpenTIE-VR cannot read it. It is copied again.", n)
+	say("Removing what was copied over USB earlier (%d files and folders):\nNeitey's OpenTie-VR cannot read it. It is copied again.", n)
 	if out, err := a.adb.shell(10*time.Minute, find+" -exec rm -rf {} + 2>&1"); err != nil {
 		if err == errClosed {
 			return err

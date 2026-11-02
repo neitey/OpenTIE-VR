@@ -29,6 +29,12 @@ void TieFlightTiming_BeginSession(const TieFlightProfile* profile);
 void TieFlightTiming_EndSession(void);
 
 uint16_t TieFlightTiming_StepTicks(void);
+/* Takes the ticks for one flight frame out of *pending_ticks (0: no frame
+ * yet). At the native rates, or with smooth false, a frame takes everything
+ * once StepTicks have built up. Unlocked and smooth: the step follows the
+ * previous one +-1 tick toward the clock (a tick ahead at most), so jitter in
+ * when the host frame starts does not make uneven steps. */
+uint16_t TieFlightTiming_TakeStep(uint16_t* pending_ticks, bool smooth);
 uint16_t TieFlightTiming_CompatibilityTicks(void);
 bool TieFlightTiming_IsHighRate(void);
 uint32_t TieFlightTiming_RecordFrameLimit(void);

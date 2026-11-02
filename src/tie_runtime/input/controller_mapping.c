@@ -588,15 +588,17 @@ static void SampleAnalog(size_t index, const AeronControllerSnapshot* d, TieInpu
  * The curve works on the full-resolution value and is handed to Landru with
  * its own dead zone (LANDRU_JOYSTICK_DEADZONE) added back and the binding's
  * gate off, so the game sees it continuously from the edge of the one dead
- * zone: before, Landru's 12, the binding's 13 and a curve on the truncated
- * value stacked into a cross-shaped dead zone of 27 % of the throw, a jump to
- * 12 % turn rate past it and 46 % at most on a full diagonal.
+ * zone, starting at the gentlest turn rate the game has (it used to start
+ * at 10 %, 20 % for roll, which made small corrections too coarse).
  *
  * An axis the grabbed flight stick drives (Aeron_XrSetVirtualStick: the
  * engine puts it on the same axes, whichever is pushed further) stays as it
  * was, linear. Desktop pads, joysticks and a configured XR model never come
  * here. */
 enum { TIE_XR_STEER_DEADZONE_PCT = 10, TIE_XR_ROLL_DEADZONE_PCT = 20 };
+/* Past the dead zone the response starts at one and a half of the game's
+ * axis steps (of 115), about 1.3 % of the full turn rate. */
+#define TIE_XR_CURVE_FLOOR (1.5 / (LANDRU_JOYSTICK_AXIS_LIMIT - LANDRU_JOYSTICK_DEADZONE))
 
 static struct {
 	bool held;
@@ -632,7 +634,11 @@ void TieControllerMapping_XrStickRadial(int16_t x, int16_t y, double deadzone, d
 		return;
 	double t = (r - deadzone) / (k_outer - deadzone);
 	t = t > 1.0 ? 1.0 : t;
-	const double m = deadzone + (1.0 - deadzone) * (exponent > 1.0 ? pow(t, exponent) : t);
+	/* From the game's smallest step at the dead zone's edge: TIE takes any
+	 * small value (Landru's own dead zone is added back below), so fine aim is
+	 * not cut off at a minimum turn rate as in XWA, whose game ignores the
+	 * first 10 % (the curve started at 10 % turn rate there too). */
+	const double m = TIE_XR_CURVE_FLOOR + (1.0 - TIE_XR_CURVE_FLOOR) * (exponent > 1.0 ? pow(t, exponent) : t);
 	/* Round gate onto square gate: the axis pushed further gets m, the other
 	 * keeps the direction's ratio. */
 	const double scale = m / major;
@@ -650,7 +656,7 @@ double TieControllerMapping_XrAxisCurve(int16_t value, double deadzone, double e
 		return 0.0;
 	double t = (a - deadzone) / (k_outer - deadzone);
 	t = t > 1.0 ? 1.0 : t;
-	const double m = deadzone + (1.0 - deadzone) * (exponent > 1.0 ? pow(t, exponent) : t);
+	const double m = TIE_XR_CURVE_FLOOR + (1.0 - TIE_XR_CURVE_FLOOR) * (exponent > 1.0 ? pow(t, exponent) : t);
 	return f < 0.0 ? -m : m;
 }
 

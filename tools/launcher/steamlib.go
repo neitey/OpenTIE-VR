@@ -847,7 +847,7 @@ func (a *app) frameCopyGame() error {
 	logf("%d game files, %d skipped", len(files), skipped)
 	say("%d game files (%s).", len(files), humanSize(totalSize(files)))
 	if len(a.cockpits) == 0 {
-		say("No X-Wing Alliance cockpits: OpenTIE-VR uses the included X-Wing Revival 3D cockpits.")
+		say("No X-Wing Alliance cockpits: Neitey's OpenTie-VR uses the included X-Wing Revival 3D cockpits.")
 	}
 	for round := 1; round <= 3; round++ {
 		say("Checking what is already on the headset...")
@@ -921,8 +921,8 @@ func (a *app) frameCopyPilots() error {
 		Kind:  "buttons",
 		Title: "Copy your pilots?",
 		Text: "Pilots found in your game folder: " + strings.Join(pilotNames(files), ", ") + ".\n" +
-			"OpenTIE-VR keeps its own pilots. Copying brings your PC pilots over; they are\n" +
-			"imported the next time OpenTIE-VR starts (a pilot with the same name that is\n" +
+			"Neitey's OpenTie-VR keeps its own pilots. Copying brings your PC pilots over; they are\n" +
+			"imported the next time Neitey's OpenTie-VR starts (a pilot with the same name that is\n" +
 			"already on the headset is kept).",
 		Options: []Option{
 			{ID: "yes", Label: "Copy pilots", Key: "y"},

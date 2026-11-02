@@ -30,6 +30,7 @@
 #include "tie_remaster/flight/xr_stereo.h"
 #include "tie_remaster/gpu_debug.h"
 #include "tie_runtime/flight_assets/source.h"
+#include "tie_runtime/runtime/flight_task.h"
 #include "tie_runtime/species_id.h"
 #include "tie_remaster/vr/vr_gloves.h"
 #include "tie_remaster/vr/vr_hands.h"
@@ -145,6 +146,12 @@ static struct {
 	bool settings_open;	 /* the OpenTIE settings window is on the screen */
 	/* This frame's chrome: the button hints' and the large logo's opacity. */
 	float hints, away_logo_alpha;
+	/* The Imperial fleet stands in for the chosen scene round the startup
+	 * films (and the title crawl) and after a completed mission, until Y or
+	 * the VR settings choose another (TieXrEnv_Shown). */
+	uint32_t fleet_dismissed; /* the completed mission the player moved on from */
+	char last_setting[32];	  /* XWA_XR_ENVIRONMENT as last seen */
+	bool setting_seen;
 } s_env = { .away_level = 1.0f };
 
 #define TIE_XR_ENV_AWAY_S 0.4f
@@ -190,6 +197,29 @@ TieFlightXrEnvMode TieFlightXrEnv_Mode(void) {
 	}
 	/* Unset, "tiefighter" (or anything else): the TIE Fighter box art. */
 	return TIE_FLIGHT_XR_ENV_TIEFIGHTER;
+}
+
+/* The scene shown: the Imperial fleet round the startup films and the title
+ * crawl (the chosen scene, TIE Fighter by default, comes with the first menu
+ * after them), and in the menus after a completed mission until the next
+ * mission, Y or another Menu Scene in the VR settings. Off and Stars Only
+ * stay as chosen. */
+static TieFlightXrEnvMode TieXrEnv_Shown(TieFlightXrEnvMode chosen) {
+	const uint32_t completed = TieFlightRuntime_CompletedMissionSerial();
+	const char* v = getenv("XWA_XR_ENVIRONMENT");
+	char setting[sizeof s_env.last_setting];
+	snprintf(setting, sizeof setting, "%s", v ? v : "");
+	if (s_env.setting_seen && strcmp(setting, s_env.last_setting) != 0)
+		s_env.fleet_dismissed = completed; /* chosen anew: shown from now on */
+	memcpy(s_env.last_setting, setting, sizeof setting);
+	s_env.setting_seen = true;
+	if (chosen == TIE_FLIGHT_XR_ENV_OFF || chosen == TIE_FLIGHT_XR_ENV_STARS)
+		return chosen;
+	if (!s_env.menu_seen)
+		return TIE_FLIGHT_XR_ENV_FLEET;
+	if (completed && completed != s_env.fleet_dismissed)
+		return TIE_FLIGHT_XR_ENV_FLEET;
+	return chosen;
 }
 
 /* The played box arts (xr_env_tieart.c). */
@@ -1138,7 +1168,8 @@ void TieFlightXrEnv_SetSettingsOpen(bool open) { s_env.settings_open = open; }
 
 bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* assets, uint64_t time_us, bool ships,
 						   bool dimmed) {
-	TieFlightXrEnvMode mode = TieFlightXrEnv_Mode();
+	const TieFlightXrEnvMode chosen = TieFlightXrEnv_Mode();
+	TieFlightXrEnvMode mode = TieXrEnv_Shown(chosen);
 	/* The opening title crawl in 3D needs the scene even when it is off
 	 * (the stars only). */
 	if (mode == TIE_FLIGHT_XR_ENV_OFF && TieXrIntroCrawl_TitleUp())
@@ -1152,12 +1183,16 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 		s_env.last_mode = mode;
 	}
 	const bool art = TieXrEnv_IsArt(mode);
-	if (art)
-		TieXrArt_SetScene(mode == TIE_FLIGHT_XR_ENV_DEFENDER  ? TIE_XR_ART_DEFENDER
-						  : mode == TIE_FLIGHT_XR_ENV_BALANCE ? TIE_XR_ART_BALANCE
-						  : mode == TIE_FLIGHT_XR_ENV_XWING	  ? TIE_XR_ART_XWING
-						  : mode == TIE_FLIGHT_XR_ENV_XVT	  ? TIE_XR_ART_XVT
-															  : TIE_XR_ART_TIEFIGHTER);
+	/* The box-art scene: the one shown, or else the chosen one loading behind
+	 * the fleet (round the startup films) so it is ready with the first menu. */
+	const TieFlightXrEnvMode art_mode = art ? mode : chosen;
+	const bool art_preload = !art && TieXrEnv_IsArt(chosen) && !s_env.menu_seen;
+	if (art || art_preload)
+		TieXrArt_SetScene(art_mode == TIE_FLIGHT_XR_ENV_DEFENDER  ? TIE_XR_ART_DEFENDER
+						  : art_mode == TIE_FLIGHT_XR_ENV_BALANCE ? TIE_XR_ART_BALANCE
+						  : art_mode == TIE_FLIGHT_XR_ENV_XWING	  ? TIE_XR_ART_XWING
+						  : art_mode == TIE_FLIGHT_XR_ENV_XVT	  ? TIE_XR_ART_XVT
+																  : TIE_XR_ART_TIEFIGHTER);
 	AeronXrStereoFrame xr;
 	if (mode == TIE_FLIGHT_XR_ENV_OFF || !g || !g->scene || !Aeron_XrStereoBegin(&xr) || xr.width <= 0 ||
 		xr.height <= 0 || !xr.eye_targets[0] || !xr.eye_targets[1]) {
@@ -1190,7 +1225,10 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	TieXrEnv_LoadFrame(cmd);
 	TieXrIntroCrawl_Update(cmd, assets);
 	const bool crawl = TieXrIntroCrawl_Active();
-	s_env.stars_off = crawl && !TieXrIntroCrawl_StarsOn();
+	/* The crawl's opening is black until its logo cuts in with the stars;
+	 * with the fleet round it (the startup default) the fleet is there from
+	 * "A long time ago..." on. */
+	s_env.stars_off = crawl && !TieXrIntroCrawl_StarsOn() && mode != TIE_FLIGHT_XR_ENV_FLEET;
 	/* The first menu after the startup films (the title crawl among them):
 	 * held a moment, so a frame between two films (the shell readying the
 	 * next scene) does not count. */
@@ -1217,6 +1255,8 @@ bool TieFlightXrEnv_Render(TieFlightRenderer* g, const TieFlightAssetSource* ass
 	 * meanwhile, as in OpenXWA-VR) and comes up with the first menu. */
 	if (ok && art)
 		models_done = TieXrArt_Prepare(cmd, assets, ships);
+	else if (ok && art_preload && models_done)
+		(void)TieXrArt_Prepare(cmd, assets, ships); /* after the fleet's own craft */
 	if (models_done && !s_env.ready) {
 		s_env.ready = true;
 		s_env.ready_us = time_us;

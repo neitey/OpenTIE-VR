@@ -3,6 +3,7 @@
 #include "aeron/aeron.h"
 #include "aeron/log.h"
 #include "tie/tie.h"
+#include "tie/user.h"
 #include "tie_runtime/input/actions.h"
 #include "tie_runtime/input/vr_controls.h"
 #include "tie_runtime/snapshot/snapshot.h"
@@ -56,6 +57,7 @@ void TieVrConsoleGame_GetState(TieVrConsoleState* out) {
 					: 100;
 	out->throttle = (int)((uint32_t)craft->throttle_speed * 100u / 65535u);
 	out->has_target = pstate.target_obj_idx != 0xFFFF;
+	out->incoming = user_findincomingwarhead() != 0xFFFF;
 	out->player_slot = pstate.object_idx < NUM_OBJECTS ? (int)pstate.object_idx : -1;
 	out->target_slot = out->has_target && pstate.target_obj_idx < NUM_OBJECTS ? (int)pstate.target_obj_idx : -1;
 	for (int i = 0; i < 3; ++i)

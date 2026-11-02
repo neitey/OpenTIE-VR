@@ -605,7 +605,9 @@ static int16_t* crawl_delt(const uint8_t* d, size_t n, int* x0, int* y0, int* w,
 }
 
 /* "along" as a texture: each colour of it through the inverted tonemap,
- * so it shows in the game's own colours. */
+ * so it shows in the game's own colours, cut out of its black (coverage =
+ * the colour's brightness, premultiplied), so it stands on its own in front
+ * of the menu scene's fleet. */
 static void crawl_load_along(AeronCommandBuffer* cmd, const TieFlightAssetSource* assets) {
 	size_t dn = 0, pn = 0;
 	uint8_t* delt = crawl_read_lfd(assets, "RESOURCE/TITLE.LFD", "DELT", "along", &dn);
@@ -639,9 +641,11 @@ static void crawl_load_along(AeronCommandBuffer* cmd, const TieFlightAssetSource
 					if (c < 0)
 						continue;
 					uint8_t* p = px + ((size_t)(y + 1) * tw + x + 1) * 4;
+					const float cover =
+						crawl_clamp01(fmaxf(hdr[c][0], fmaxf(hdr[c][1], hdr[c][2])) / top);
 					for (int k = 0; k < 3; ++k)
 						p[k] = (uint8_t)(crawl_linear_to_srgb(crawl_clamp01(hdr[c][k] / top)) * 255.0f + 0.5f);
-					p[3] = 255;
+					p[3] = (uint8_t)(cover * 255.0f + 0.5f);
 				}
 			}
 			if (crawl_upload(cmd, &s_crawl.along, px, tw, th, 1, "tie.vr_intro_crawl.along")) {

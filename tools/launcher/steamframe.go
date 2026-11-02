@@ -72,11 +72,11 @@ func (a *app) connectLepton(usb string) error {
 		ans := ui.Ask(Question{
 			Kind:  "buttons",
 			Title: "Steam Frame found",
-			Text: "OpenTIE-VR runs in the Steam Frame's Android layer (Lepton).\n\n" +
+			Text: "Neitey's OpenTie-VR runs in the Steam Frame's Android layer (Lepton).\n\n" +
 				"Once, before starting it: in the Steam Library, open the Properties of\n" +
 				"\"Lepton Development\" and set its Launch Options to:\n" +
 				"    LEPTON_NO_CLEANUP=1 %command%\n\n" +
-				"Without this, closing Lepton Development deletes OpenTIE-VR and the copied\n" +
+				"Without this, closing Lepton Development deletes Neitey's OpenTie-VR and the copied\n" +
 				"game files; with it they should stay. (If it is running already, close it\n" +
 				"first so the setting applies.)\n\n" +
 				"Then start \"Lepton Development\" on the headset (keep it running) and\n" +
@@ -100,7 +100,7 @@ func (a *app) connectLepton(usb string) error {
 		var err error
 		switch ans.ID {
 		case "cancel":
-			return fail("OpenTIE-VR needs the Steam Frame's Android layer. Start \"Lepton Development\"\n" +
+			return fail("Neitey's OpenTie-VR needs the Steam Frame's Android layer. Start \"Lepton Development\"\n" +
 				"on the headset and try again.")
 		case "wifi":
 			err = a.wifiFlow()

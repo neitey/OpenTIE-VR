@@ -1,5 +1,7 @@
 #include "tie_runtime/timing/flight_integration.h"
 
+#include <stdbool.h>
+
 #include "tie/pai.h"
 #include "tie/tie.h"
 #include "tie/trig2.h"
@@ -145,7 +147,80 @@ void TieFlightIntegration_SeparateFriendly(void) {
 	}
 }
 
-void TieFlightIntegration_BeginFrame(void) { ++s_flight_frame; }
+/* Simulated time: the ticks every movement frame integrated, and the last
+ * frame's length. world_*_prev is the state one frame back, world_* now. */
+static uint64_t s_sim_ticks;
+static uint16_t s_last_step_ticks;
+
+void TieFlightIntegration_BeginFrame(void) {
+	++s_flight_frame;
+	s_sim_ticks += frameticks;
+	s_last_step_ticks = frameticks;
+}
+
+/* ---- presentation clock ---------------------------------------------
+ * The simulation moves in whole 4 ms ticks, so a 72 Hz frame shows either
+ * 12 or 16 ms of motion, and a frame that wakes late or early shifts that
+ * further: visible as a fine judder. The presentation clock is a smoothed
+ * copy of simulated time that advances by the average simulated time per
+ * host frame, pulled gently toward "a little behind the newest frame".
+ * The snapshot shows every object at that time, between the state one
+ * frame back (world_*_prev) and the newest one (world_*). */
+enum {
+	TIE_PRESENT_SNAP_US = 30000, /* further off: jump (load, pause, hitch) */
+	TIE_PRESENT_IDLE_FRAMES = 8, /* host frames without a step: restart */
+};
+static bool s_present_valid;
+static double s_present_us;
+static double s_present_rate_us;	/* simulated time per host frame (EMA) */
+static double s_present_step_us; /* simulated time per movement frame (EMA) */
+static uint64_t s_present_last_sim_us;
+static uint32_t s_present_idle_frames;
+
+void TieFlightIntegration_ResetPresentation(void) {
+	s_present_valid = false;
+	s_present_idle_frames = 0;
+}
+
+float TieFlightIntegration_PresentAlpha(void) {
+	const uint64_t sim_us = s_sim_ticks * 4000u;
+	const double step_us = (double)s_last_step_ticks * 4000.0;
+	if (s_last_step_ticks == 0)
+		return 1.0f;
+	if (!s_present_valid || sim_us < s_present_last_sim_us) {
+		s_present_valid = true;
+		s_present_rate_us = step_us;
+		s_present_step_us = step_us;
+		s_present_last_sim_us = sim_us;
+		s_present_idle_frames = 0;
+		s_present_us = (double)sim_us - 0.5 * step_us;
+	} else {
+		const double advance = (double)(sim_us - s_present_last_sim_us);
+		s_present_last_sim_us = sim_us;
+		if (advance > 0.0) {
+			s_present_step_us += (advance - s_present_step_us) / 16.0;
+			if (s_present_idle_frames >= TIE_PRESENT_IDLE_FRAMES)
+				s_present_rate_us = advance; /* resumed: start from this pace */
+			s_present_idle_frames = 0;
+		} else {
+			++s_present_idle_frames;
+		}
+		s_present_rate_us += (advance - s_present_rate_us) / 16.0;
+		const double target = (double)sim_us - 0.5 * s_present_step_us;
+		s_present_us += s_present_rate_us;
+		const double error = target - s_present_us;
+		if (error > TIE_PRESENT_SNAP_US || error < -TIE_PRESENT_SNAP_US)
+			s_present_us = target;
+		else
+			s_present_us += error * 0.1;
+	}
+	double alpha = (s_present_us - ((double)sim_us - step_us)) / step_us;
+	if (alpha < 0.0)
+		alpha = 0.0;
+	else if (alpha > 1.0)
+		alpha = 1.0;
+	return (float)alpha;
+}
 
 int32_t TieFlightIntegration_PushStep(uint16_t obj_idx, unsigned int axis, int32_t accum, int32_t clamped) {
 	TieMoveTimingState* state = TieFlightTimingState_Move(obj_idx, &objects[obj_idx]);

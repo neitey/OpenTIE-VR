@@ -491,12 +491,12 @@ func (a *app) detectStorage() error {
 		if strings.Contains(out, "NOLIST") {
 			logf("Android/data exists but cannot be listed by adb (permission denied)")
 			say("Note: this headset does not let adb list Android/data. The launcher will\n" +
-				"still try to use the OpenTIE-VR folder directly.")
+				"still try to use the game's folder directly.")
 		}
 		return nil
 	}
 	logf("no storage root with Android/data found (EXTERNAL_STORAGE=%q)", env)
-	return &userError{msg: "The headset's shared storage (where OpenTIE-VR keeps its files) was not found.\n" +
+	return &userError{msg: "The headset's shared storage (where Neitey's OpenTie-VR keeps its files) was not found.\n" +
 		"Restart the headset and try again. If it keeps happening, please collect the\n" +
 		"logs and report it, naming your headset model.", restart: true}
 }

@@ -25,7 +25,7 @@ var version = "dev"
 
 // The product name players read (window, texts).
 const (
-	productName  = appName
+	productName  = "Neitey's OpenTie-VR"
 	launcherName = productName + " Launcher"
 )
 
@@ -92,9 +92,9 @@ func fail(format string, args ...any) error {
 }
 
 func usage() string {
-	return `OpenTIE-VR Launcher ` + version + `
+	return `Neitey's OpenTie-VR Launcher ` + version + `
 
-Puts OpenTIE-VR and your own TIE Fighter game files on your VR headset
+Puts Neitey's OpenTie-VR and your own TIE Fighter game files on your VR headset
 (Meta Quest, Pico, Steam Frame) over a USB cable or Wi-Fi (the Steam
 Frame: into its Steam Library). If X-Wing Alliance is installed, its three
 TIE cockpit models are copied too (used instead of the included X-Wing
@@ -111,7 +111,7 @@ You can also drag your TIE Fighter folder onto OpenTIE-VR-Launcher.exe.
 Options:
   --console           use a console window instead of the launcher window
   --no-update-check   do not look for a new launcher version
-  --logs              only collect the OpenTIE-VR logs from the headset
+  --logs              only collect the game's logs from the headset
   --no-window         do not open a window; print the launcher's address
   --version           show the launcher version
   --help              show this help
@@ -166,13 +166,13 @@ func main() {
 		return
 	}
 	if opts.showVersion {
-		fmt.Println("OpenTIE-VR Launcher " + version)
+		fmt.Println("Neitey's OpenTie-VR Launcher " + version)
 		return
 	}
 
 	a := newApp()
 	openLog(a.exeDir)
-	logf("OpenTIE-VR Launcher %s starting; exe dir %s; args %q", version, a.exeDir, os.Args[1:])
+	logf("Neitey's OpenTie-VR Launcher %s starting; exe dir %s; args %q", version, a.exeDir, os.Args[1:])
 
 	var closed <-chan struct{}
 	if !opts.console {
@@ -269,8 +269,8 @@ func (a *app) remotePilots() string { return a.remoteBase() + "/" + pilotsFolder
 
 // run executes the whole flow and returns the process exit code.
 func (a *app) run(opts options) int {
-	say("OpenTIE-VR Launcher %s", version)
-	say("Puts OpenTIE-VR and your own TIE Fighter files on your VR headset.")
+	say("Neitey's OpenTie-VR Launcher %s", version)
+	say("Puts Neitey's OpenTie-VR and your own TIE Fighter files on your VR headset.")
 	err := a.flow(opts)
 	a.cleanupLepton()
 	switch {
@@ -320,8 +320,8 @@ func (a *app) flow(opts options) error {
 		{"Finding your TIE Fighter folder", func() error { return a.chooseGame(opts.gameArg) }},
 		{"Finding X-Wing Alliance (optional cockpits)", a.chooseXWA},
 		{"Connecting to the headset", a.connect},
-		{"Installing the OpenTIE-VR app", a.either(a.frameInstall, a.installApp)},
-		{"Preparing the OpenTIE-VR folders on the headset", a.either(func() error { return nil }, a.prepareAppFolder)},
+		{"Installing Neitey's OpenTie-VR", a.either(a.frameInstall, a.installApp)},
+		{"Preparing the game's folders on the headset", a.either(func() error { return nil }, a.prepareAppFolder)},
 		{"Pilots", a.either(a.frameCopyPilots, a.copyPilots)},
 		{"Copying the game files", a.either(a.frameCopyGame, a.copyGame)},
 		{"Done", func() error { a.doneMenu(true); return nil }},

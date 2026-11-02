@@ -31,6 +31,11 @@ typedef struct TieSimulatorTask {
 	LandruTaskStepResult next_step;
 } TieSimulatorTask;
 void TieFlightRuntime_ResetTiming(void);
+/* The last mission ended with its primary goals complete (noted when the
+ * flight ends, cleared when the next one is prepared): a number that grows
+ * with every completed mission, 0 when the last one was not completed. */
+void TieFlightRuntime_NoteMissionEnd(bool primary_complete);
+uint32_t TieFlightRuntime_CompletedMissionSerial(void);
 bool TieFlightRuntime_PrepareSimulator(int replay_mode);
 void TieFlightRuntime_BeginHyperspace(void);
 

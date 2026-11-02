@@ -142,7 +142,7 @@ static void cr_handler(int sig, siginfo_t* info, void* uctx) {
 	}
 	s_in_handler = 1;
 	b.n = 0;
-	cr_str(&b, "OpenTIE-VR " TIE_VERSION_STRING " crashed: ");
+	cr_str(&b, "Neitey's OpenTie-VR " TIE_VERSION_STRING " crashed: ");
 	cr_str(&b, cr_signame(sig));
 	cr_str(&b, " (signal ");
 	cr_dec(&b, sig);

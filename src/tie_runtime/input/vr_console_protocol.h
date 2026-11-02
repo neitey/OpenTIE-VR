@@ -40,6 +40,7 @@ typedef struct TieVrConsoleState {
 	int hull;                      /* 0..100 % hull left */
 	int throttle;                  /* 0..100 % */
 	int has_target;
+	int incoming; /* a warhead is homing on the player */
 	int preset_set[3]; /* the F5..F7 target memories hold a craft */
 	int confirm_offered; /* the game waits for Space (dock, end mission, ...) */
 	int player_slot;     /* the player's craft in TieSnapshot.flights[].slot, -1 none */

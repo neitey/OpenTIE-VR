@@ -114,8 +114,8 @@ func (a *app) copyPilots() error {
 		Kind:  "buttons",
 		Title: "Copy your pilots?",
 		Text: "Pilots found in your game folder: " + strings.Join(pilotNames(files), ", ") + ".\n" +
-			"OpenTIE-VR keeps its own pilots. Copying brings your PC pilots over; they are\n" +
-			"imported the next time OpenTIE-VR starts (a pilot with the same name that is\n" +
+			"Neitey's OpenTie-VR keeps its own pilots. Copying brings your PC pilots over; they are\n" +
+			"imported the next time Neitey's OpenTie-VR starts (a pilot with the same name that is\n" +
 			"already on the headset is kept).",
 		Options: []Option{
 			{ID: "yes", Label: "Copy pilots", Key: "y"},
@@ -179,10 +179,10 @@ func (a *app) pilotsDone() error {
 	if o, ok := m[a.remotePilots()]; ok && a.foreign(o) {
 		logf("pilot-import belongs to %v; removing it", o)
 		a.adb.shell(60*time.Second, "rm -rf "+shQuote(a.remotePilots()))
-		say("WARNING: the pilots could not be copied in a way OpenTIE-VR can read on this\n" +
+		say("WARNING: the pilots could not be copied in a way Neitey's OpenTie-VR can read on this\n" +
 			"headset, so they were removed again. The game files are copied anyway.")
 		return nil
 	}
-	say("Pilots copied. OpenTIE-VR brings them in the next time it starts.")
+	say("Pilots copied. Neitey's OpenTie-VR brings them in the next time it starts.")
 	return nil
 }

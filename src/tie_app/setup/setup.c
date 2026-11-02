@@ -414,7 +414,7 @@ static void TieSetup_DrawSummary(AeronUiContext* ui, const TieSetupDialog* setup
 static TieSetupFrameResult TieSetup_DrawWindow(TieSetupDialog* setup, AeronUiContext* ui) {
 	TieSetupFrameResult result = TIE_SETUP_FRAME_PENDING;
 	const AeronUiWindowDesc window = { .width_ref = 920.0f, .height_ref = 940.0f, .centered = 1 };
-	if (!AeronUi_BeginWindow(ui, "Welcome to OpenTIE", &window))
+	if (!AeronUi_BeginWindow(ui, "Welcome to Neitey's OpenTie-VR", &window))
 		return result;
 	AeronUi_Help(ui, "Select one or both original installations. For the best experience, select both.");
 	AeronUi_Spacer(ui, 8.0f);

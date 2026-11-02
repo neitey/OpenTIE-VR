@@ -17,5 +17,11 @@ void TieFlightIntegration_SeparateFriendly(void);
 /* Logical movement frames, independent of host ticks. */
 void TieFlightIntegration_BeginFrame(void);
 uint32_t TieFlightIntegration_Frame(void);
+/* Where between the previous movement frame (0, world_*_prev) and the newest
+ * (1, world_*) this host frame shows the world: a smoothed presentation
+ * clock, so motion advances evenly per displayed frame instead of in whole
+ * 4 ms simulation ticks. Call once per host tick. */
+float TieFlightIntegration_PresentAlpha(void);
+void TieFlightIntegration_ResetPresentation(void);
 
 #endif

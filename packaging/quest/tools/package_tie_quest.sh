@@ -61,6 +61,9 @@ REVIVAL_COOK=${REVIVAL_COOK:-$SP/vrassets/revival_tie/tools/aeron_gltf_cook}
 
 cmake -DTIE_VERSION=$VER "$BUILD" > /dev/null
 ninja -C "$BUILD" -j2 tie > "$WORK.build.log" 2>&1 || { mkdir -p "$(dirname "$WORK")"; tail -30 "$WORK.build.log"; exit 1; }
+# The build stages resources/ only when the game relinks: copy it anyway, so
+# a resource-only change (config.yaml defaults, ...) reaches the APK.
+cmake -E copy_directory "$HERE/../../../resources" "$BUILD/resources"
 
 rm -rf "$WORK"; mkdir -p "$WORK/stage" /root/out/symbols
 cp "$BUILD/libmain.so" /root/out/symbols/libmain-tie$CODE.so
@@ -113,7 +116,7 @@ python3 "$HERE/manifest_add_feature.py" m2.xml m3.xml com.oculus.feature.RENDER_
 python3 "$HERE/manifest_add_metadata.py" m3.xml m4.xml com.oculus.ossplash=true pvr.app.type=vr com.yvr.intent.category.VR=vr_only
 # Launcher helper (SetupProvider): its own authority, so OpenXWA-VR can stay installed.
 python3 "$HERE/manifest_add_provider.py" m4.xml m5.xml org.openxwa.quest.SetupProvider org.opentie.quest.setup
-python3 "$HERE/manifest_rename.py" m5.xml AndroidManifest.xml org.opentie.quest "OpenTIE-VR"
+python3 "$HERE/manifest_rename.py" m5.xml AndroidManifest.xml org.opentie.quest "Neitey's OpenTie-VR"
 python3 "$HERE/dexgen_setup_provider.py" classes2.dex
 EXTRA="$EXTRA classes2.dex=classes2.dex"
 # Steam Frame: SDL's clipboard handler made safe for a missing clipboard

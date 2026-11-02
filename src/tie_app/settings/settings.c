@@ -1047,7 +1047,7 @@ static void TieSettings_BriefingPage(AeronUiContext* ui) {
 static void TieSettings_DrawExitConfirmation(AeronUiContext* ui) {
 	if (!AeronUi_BeginModal(ui, "EXIT GAME", &g_settings.exit_confirmation_open, NULL))
 		return;
-	AeronUi_Help(ui, "Exit OpenTIE and return to the desktop?");
+	AeronUi_Help(ui, "Exit Neitey's OpenTie-VR and return to the desktop?");
 	AeronUi_BeginColumns(ui, 2, NULL);
 	if (AeronUi_Button(ui, "Cancel"))
 		g_settings.exit_confirmation_open = 0;
@@ -1111,7 +1111,7 @@ void TieSettings_Frame(const AeronInputSnapshot* input, float dt_seconds) {
 	TieControllerSettings_Discover(&g_settings.controller, g_settings.ui, input,
 								   &g_settings.config->gamepad_defaults);
 	AeronUiWindowDesc window = { .width_ref = window_w_ref, .height_ref = window_h_ref, .centered = 1 };
-	if (AeronUi_BeginWindow(g_settings.ui, "OpenTIE Settings - v" TIE_VERSION_STRING, &window)) {
+	if (AeronUi_BeginWindow(g_settings.ui, "Neitey's OpenTie-VR Settings - v" TIE_VERSION_STRING, &window)) {
 		const int previous_page = g_settings.page;
 		AeronUi_BeginTabBar(g_settings.ui, "pages", pages, page_count, &g_settings.page);
 		if (previous_page != g_settings.page) {

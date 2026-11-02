@@ -93,7 +93,7 @@ static AeronConfig TieApplication_AeronConfig(const TieLaunchOptions* launch) {
 	config.resource_root = launch->resource_root;
 	config.resource_path = "resources";
 	config.shader_path = TIE_SHADER_RELATIVE_DIR;
-	config.window_title = "OpenTIE";
+	config.window_title = "Neitey's OpenTie-VR";
 	config.window_icon_bmp = tie_window_icon_bmp;
 	config.window_icon_bmp_size = sizeof tie_window_icon_bmp;
 	config.logical_width = TIE_PRESENTATION_INITIAL_WIDTH;
