@@ -195,6 +195,17 @@ static bool TieVrOptions_IsCockpit(const TieVrOptionRow* row) {
 static int TieVrOptions_DefaultIndex(const TieVrOptionRow* row) {
 	if (TieVrOptions_IsCockpit(row))
 		return TieXwaCockpit_XwaFilesPresent() ? TIE_VR_COCKPIT_XWA : TIE_VR_COCKPIT_REVIVAL;
+	{
+		/* A Quest 2 class headset (the tier TieXrTier_ApplyDefaults found)
+		 * starts with foveation High and direct output on. */
+		const char* tier = SDL_getenv("XWA_XR_TIER_ACTIVE");
+		if (tier && strcmp(tier, "low") == 0) {
+			if (strcmp(row->key, "XWA_XR_FOVEATION") == 0)
+				return 3; /* High */
+			if (strcmp(row->key, "XWA_XR_DIRECT_OUTPUT") == 0)
+				return 1; /* On */
+		}
+	}
 	return row->default_index;
 }
 
@@ -286,7 +297,7 @@ void TieVrOptions_Draw(AeronUiContext* ui) {
 				TieQuest_SaveSetting(k_rows[i].key, "");
 				continue;
 			}
-			TieVrOptions_Set(&k_rows[i], k_rows[i].default_index);
+			TieVrOptions_Set(&k_rows[i], TieVrOptions_DefaultIndex(&k_rows[i]));
 		}
 		SDL_setenv_unsafe("XWA_XR_CONSOLE_POSE", "", 1);
 		TieQuest_SaveSetting("XWA_XR_CONSOLE_POSE", "");

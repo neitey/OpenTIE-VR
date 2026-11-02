@@ -1,6 +1,7 @@
 #include "xr_tier.h"
 
 #include "aeron/log.h"
+#include "tie_app/quest/quest_app.h"
 
 #include <SDL3/SDL_stdinc.h>
 
@@ -63,9 +64,11 @@ long TieXrTier_EyePixels(TieXrTier tier) {
 	 * reference; the others follow their GPU's power relative to it. */
 	switch (tier) {
 	case TIE_XR_TIER_LOW:
-		/* Adreno 650, about 60 % of Quest 3's GPU: Quest 2's recommended
-		 * size (1440 x 1584); a Pico 4 renders about 1520 x 1520. */
-		return 2300000;
+		/* Adreno 650, about 60 % of Quest 3's GPU. Quest 2's recommended
+		 * size (1440 x 1584, 2.3 MP) was too much for a steady frame rate
+		 * in OpenXWA-VR's flights: 1.9 MP (about 1310 x 1440, 91 % per
+		 * axis) instead, as there; a Pico 4 renders about 1380 x 1380. */
+		return 1900000;
 	case TIE_XR_TIER_HIGH:
 		/* Adreno 750, about 25 % more. */
 		return 4600000;
@@ -184,8 +187,28 @@ TieXrTier TieXrTier_ApplyDefaults(void) {
 		/* The most time per frame, and coarser shading at the view's edges
 		 * (where the XR2 Gen 1 headsets' lenses blur anyway). */
 		set_default("AERON_XR_REFRESH_RATE", "72");
-		set_default("XWA_XR_FOVEATION", "medium");
+		set_default("XWA_XR_FOVEATION", "high");
+		/* The cockpit HUD images at 75 % of the recommended eye size (0.9
+		 * elsewhere): textures redrawn and sampled every frame. */
+		set_default("AERON_XR_HUD_RESOLUTION", "0.75");
+		/* Once per install: the flight view straight into the headset
+		 * images (no HDR intermediate, tonemap pass or bloom chain: the
+		 * biggest single saving of memory traffic on the Adreno 650). Saved
+		 * like a VR settings change, so the VR settings can turn bloom
+		 * back on and that choice stays. */
+		{
+			const char* done = SDL_getenv("TIE_XR_LOWTIER_DEFAULTS");
+			if (!(done && done[0] == '1')) {
+				SDL_setenv_unsafe("XWA_XR_DIRECT_OUTPUT", "1", 1);
+				TieQuest_SaveSetting("XWA_XR_DIRECT_OUTPUT", "1");
+				SDL_setenv_unsafe("TIE_XR_LOWTIER_DEFAULTS", "1", 1);
+				TieQuest_SaveSetting("TIE_XR_LOWTIER_DEFAULTS", "1");
+				Aeron_LogInfo("xwa.config", "low-tier headset: direct output on (no bloom) once, for frame rate");
+			}
+		}
 	}
+	/* For the VR settings' "Restore VR Defaults", which differ per tier. */
+	SDL_setenv_unsafe("XWA_XR_TIER_ACTIVE", TieXrTier_Name(tier), 1);
 	Aeron_LogInfo("xwa.config", "device tier %s%s (GPU '%s', RAM %d MB): eye budget %s pixels, refresh %s Hz, "
 								"foveation %s",
 				  TieXrTier_Name(tier), forced && forced[0] ? " (XWA_XR_TIER)" : "", gpu[0] ? gpu : "?", ram_mb,
