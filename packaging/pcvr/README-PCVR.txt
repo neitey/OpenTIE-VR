@@ -1,5 +1,5 @@
-OpenTIE-VR (PCVR) @VERSION@ - TIE Fighter in PC VR
-====================================================
+Neitey's OpenTie-VR (PCVR) @VERSION@ - TIE Fighter in PC VR
+===========================================================
 
 Play your own copy of Star Wars: TIE Fighter in VR on a Windows PC with a PC
 VR headset: SteamVR headsets (Valve Index, HTC Vive, ...), Meta Quest
@@ -7,7 +7,7 @@ through Quest Link / Air Link (or Virtual Desktop / Steam Link), Windows
 Mixed Reality and other OpenXR headsets. The same program also runs as the
 normal flat-screen game.
 
-OpenTIE-VR is based on OpenTIE (https://github.com/elyosh/OpenTIE), the
+Neitey's OpenTie-VR is based on OpenTIE (https://github.com/elyosh/OpenTIE), the
 open-source reimplementation of TIE Fighter, and shares its VR code with
 Neitey's XW: Alliance VR.
 
@@ -16,7 +16,7 @@ it has not been tested on a real PC headset yet. Please report what works and
 what does not (see "Problems?" below).
 
 No game files are included. You need your own TIE Fighter Special Edition
-(Steam or GOG); OpenTIE-VR uses its 1998 edition and/or its Collector's CD
+(Steam or GOG); Neitey's OpenTie-VR uses its 1998 edition and/or its Collector's CD
 (1995). 3D cockpits for every TIE craft are included, from X-Wing Revival
 (credits under Licence below).
 
