@@ -238,7 +238,19 @@ if(WIN32)
         set(TIE_VERSION_MINOR 0)
         set(TIE_VERSION_PATCH 0)
     endif()
-    set(TIE_WINDOWS_ICON "${CMAKE_SOURCE_DIR}/cmake/windows/tie.ico")
+    # A release build can bring its own icons without committing them
+    # (packaging/pcvr/build.sh): TIE_WINDOWS_ICON for OpenTIE.exe, and
+    # TIE_ICON_OVERRIDE_DIR holding tie_app/window_icon.h (the window and
+    # taskbar icon, made by packaging/icons/icon_tools.py).
+    set(TIE_WINDOWS_ICON "" CACHE FILEPATH "OpenTIE.exe icon (empty: cmake/windows/tie.ico)")
+    set(TIE_ICON_OVERRIDE_DIR "" CACHE PATH "Folder with tie_app/window_icon.h replacing the committed one")
+    set(TIE_WINDOWS_ICON_FILE "${TIE_WINDOWS_ICON}")
+    if(NOT TIE_WINDOWS_ICON_FILE)
+        set(TIE_WINDOWS_ICON_FILE "${CMAKE_SOURCE_DIR}/cmake/windows/tie.ico")
+    endif()
+    if(TIE_ICON_OVERRIDE_DIR)
+        target_include_directories(tie BEFORE PRIVATE "${TIE_ICON_OVERRIDE_DIR}")
+    endif()
     configure_file("${CMAKE_SOURCE_DIR}/cmake/windows/tie.rc.in"
                    "${CMAKE_CURRENT_BINARY_DIR}/tie.rc" @ONLY)
     target_sources(tie PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/tie.rc")
