@@ -10,6 +10,8 @@ open-source reimplementation of TIE Fighter, with the VR layer of
 [Neitey's XW: Alliance VR](https://github.com/neitey/OpenXWA-Quest) (same
 engine).
 
+![In the TIE cockpit, with the lap console and the targeting screen](assets/vr/cockpit_console.jpg)
+
 > [!IMPORTANT]
 > No content from the original games is included. You need your own
 > *TIE Fighter Special Edition* (Steam or GOG) on a Windows PC; Neitey's OpenTie-VR
@@ -47,6 +49,19 @@ engine).
 - Laser pointer and VR keyboard for the menus, a VR settings page, a launch
   prompt after loading, a briefing page in flight, pause when the headset is
   off
+
+## Screenshots
+
+| | |
+|---|---|
+| ![The radial menu, opened with a grip](assets/vr/radial_menu.jpg) | ![The tactical map on the side panel](assets/vr/tactical_map.jpg) |
+| Radial menu: hold a grip, point, pull the trigger | Side panel with the tactical map |
+| ![Controller labels showing each button](assets/vr/controller_labels.jpg) | ![The TIE Fighter box art menu scene](assets/vr/menu_environment.jpg) |
+| Every button labelled on the controller | The TIE Fighter box art as a 3D menu scene |
+| ![A mission briefing on the screen in the menu scene](assets/vr/briefing.jpg) | ![A film on the screen in the menu scene](assets/vr/menu_film.jpg) |
+| Briefings on a screen inside the 3D scene | Films and cutscenes on the same screen |
+
+![The hangar film inside the menu scene](assets/vr/film_hangar.jpg)
 
 ## Install
 
